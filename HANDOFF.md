@@ -1,26 +1,33 @@
-# Continue Orbit Clock setup
+# Orbit Clock handoff
 
-User wants a personal Android phone + Galaxy Watch 4 Classic clock app inspired by Google Clock, with reliable shared alarms and rotary-bezel snooze/dismiss. Long-term goal: request code changes from a phone and receive installable debug APKs, without keeping a Mac running.
+## Goal and authorization
 
-## Authorized work
-Create private repository vish9731-agentic/orbit-clock, outside Bytebeam. Upload this project, run cloud builds, fix failures, and deliver downloadable phone/watch debug APKs. User will personally complete login/authorization when necessary. Never use bytebeamio/syncup for this project.
+The user wants a personal Android phone + Galaxy Watch 4 Classic clock app inspired by Google Clock, with shared alarms and rotary-bezel snooze/dismiss. They want to request changes from their phone and receive downloadable debug APKs without keeping a Mac running.
 
-## Existing work
-Native Kotlin Android project: core, phone and wear modules. Alarm CRUD, local scheduling, Wear Data Layer sync, ringing service, rotary gesture controls, world clocks, timers, stopwatch and basic bedtime UI. This is a prototype, not full Google Clock parity. No integration into Google Clock's private alarm database.
+The user authorized creating the private personal repository, uploading this project, fixing build failures, running tests and publishing debug APK downloads. Login and account authorization are completed by the user. Do not use Bytebeam repositories for this project.
 
-30 standalone checks of the production Java timing and rotary policies passed with tools/test-core.sh. Saved results are in verification/. Android/Kotlin compilation, lint, app launch and device tests have NOT run. No APK has been produced.
+## Current state
 
-.github/workflows/android-debug.yml prepares builds, tests, lint and debug-latest prerelease APK publication. It has NOT run. debug.keystore is a deliberately shared DEVELOPMENT key, with standard android passwords, for repeatable update signing; never use for production.
+- Private repository exists: https://github.com/vish9731-agentic/orbit-clock. Personal-account access and admin/push permissions were confirmed.
+- Source lives at `/workspace/orbit-clock`. Modules: `core`, `phone`, `wear`. JDK 17, SDK 35, AGP 8.7.3, Kotlin 2.0.21, Gradle 8.9; Gradle wrapper is included.
+- Local build succeeded for `:core:testDebugUnitTest :phone:assembleDebug :wear:assembleDebug :phone:lintDebug :wear:lintDebug`.
+- 7 Kotlin/JUnit tests and 34 production Java policy checks passed. Lint: zero errors, 2 phone warnings and 3 wear warnings.
+- Both debug APKs exist under their modules' `build/outputs/apk/debug/` directories. APK v2 signature verification passed for both with matching certificate SHA-256 `d3c6b53474417ca21c9e094ffa4a1eefd021af614f6267a2c882b993397e4f4a`.
+- No device/emulator launch, Android instrumentation, Bluetooth delivery or physical-bezel test has been performed.
+- Repository upload, the first Actions build and `debug-latest` release publication still require verification. Check live status rather than assuming they completed from this document.
 
-## Confirmed blockers in previous session
-No browser-control tool was exposed. GitHub connector identity was vish9731-agentic, but its only visible installation was bytebeamio. Personal repository returned 404 (could mean absent or inaccessible). Ordinary shell networking was sandbox-denied. Requests for additional network permissions repeatedly stalled before execution. One require_escalated CLI request executed and GitHub rejected repository creation with HTTP 403 Resource not accessible by integration. User authorization to act is already explicit; do not keep asking for it. Missing service capabilities still require setup.
+## Implementation and limits
 
-## Next steps
-1. Inspect the actual tools and permissions in this new session. Do not assume browser control or personal-repository administration is available. Read applicable skills and AGENTS.md.
-2. Use Mac local terminal and existing Android SDK/Gradle if accessible to compile, run tests and fix errors now. User says their Mac already has Android tooling.
-3. With a supported browser-control tool, open GitHub and let the user sign in personally, then create the private personal repository. Alternatively use a properly authenticated local gh CLI. Never ask for credentials in chat.
-4. Upload this project; validate and fix CI until both APKs build successfully. Verify stable signing and increasing version codes. Provide actual successful download links, not URL templates.
-5. Verify that phone-accessible sessions can edit this repository, push changes, inspect CI and deliver artifacts. A shared chat history alone does not connect Mac tools. Explain the verified mobile workflow and its limits. GitHub Actions is the intended build service.
-6. Android requires user installation approval. Watch APK installation needs separate Wear OS tooling/wireless ADB. Do not promise silent installation or physical-device tests without connected devices.
+Native Kotlin platform-view prototype: alarm CRUD, independent local scheduling, Wear Data Layer records, ringing service, touch/rotary controls, world clocks, timers, stopwatch and basic bedtime UI. It owns its alarms and does not access Google Clock's private alarm database. Full Google Clock parity and polished watch editing are unfinished. Synchronization is eventually consistent; disconnected devices cannot immediately silence each other.
 
-Keep attempts bounded and provide timely updates. Do not repeat stalled approval requests. Report actual results clearly.
+Both variants deliberately use application ID `dev.orbit.clock` and the same checked-in development-only `debug.keystore`. Never replace the key casually or use it for production. Keep CI version codes increasing. A downloaded debug APK enables debugging but does not automatically attach a debugger. Watch APK installation is a separate Wear OS/ADB step.
+
+## Continue
+
+1. Inspect current repository/Actions state. Upload any remaining project changes and verify the default-branch build; fix failures until both APKs and reports are available.
+2. Confirm the `debug-latest` release assets exist before returning their links. Planned names: `orbit-clock-phone-debug.apk` and `orbit-clock-watch-debug.apk`.
+3. Update README and verification status with the actual successful cloud run/release links.
+4. Verify future phone-accessible coding sessions can edit/push this repository, inspect CI and return APK links. Shared chat history alone is not repository write access.
+5. Install on the user's phone/watch and test locked-screen ringing, Doze, reboot, concurrent alarms, offline/reconnect sync, snooze/dismiss and physical bezel behavior.
+
+Read actual tool availability and environment permissions before acting. Previous connection blockers are historical; do not repeat obsolete instructions to reconnect or create a repository that now exists. Keep network/build attempts bounded and give timely progress updates. Never ask for credentials in chat or claim hardware validation without devices.
