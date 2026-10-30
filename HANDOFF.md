@@ -14,7 +14,7 @@ The user authorized creating the private personal repository, uploading this pro
 - 7 Kotlin/JUnit tests and 34 production Java policy checks passed. Lint: zero errors, 2 phone warnings and 3 wear warnings.
 - Both debug APKs exist under their modules' `build/outputs/apk/debug/` directories. APK v2 signature verification passed for both with matching certificate SHA-256 `d3c6b53474417ca21c9e094ffa4a1eefd021af614f6267a2c882b993397e4f4a`.
 - No device/emulator launch, Android instrumentation, Bluetooth delivery or physical-bezel test has been performed.
-- Repository upload, the first Actions build and `debug-latest` release publication still require verification. Check live status rather than assuming they completed from this document.
+- Repository upload is complete. Cloud build/tests/lint/publication passed: https://github.com/vish9731-agentic/orbit-clock/actions/runs/41104668417. Release: https://github.com/vish9731-agentic/orbit-clock/releases/tag/debug-latest. Downloaded both cloud artifacts and release APKs, confirmed byte-for-byte matches, matching debug certificates, version code 3 and debuggable manifest. The first attempt failed on retired SDK package `tools`; the workflow now installs explicit supported packages.
 
 ## Implementation and limits
 
@@ -24,9 +24,9 @@ Both variants deliberately use application ID `dev.orbit.clock` and the same che
 
 ## Continue
 
-1. Inspect current repository/Actions state. Upload any remaining project changes and verify the default-branch build; fix failures until both APKs and reports are available.
-2. Confirm the `debug-latest` release assets exist before returning their links. Planned names: `orbit-clock-phone-debug.apk` and `orbit-clock-watch-debug.apk`.
-3. Update README and verification status with the actual successful cloud run/release links.
+1. Continue user-requested changes in this repository, test, push and inspect the new Actions run. Existing default-branch build and APK delivery have been verified.
+2. Verify each future build before returning its links. Existing release assets: `orbit-clock-phone-debug.apk` and `orbit-clock-watch-debug.apk`.
+3. Keep README and verification status current after material changes.
 4. Verify future phone-accessible coding sessions can edit/push this repository, inspect CI and return APK links. Shared chat history alone is not repository write access.
 5. Install on the user's phone/watch and test locked-screen ringing, Doze, reboot, concurrent alarms, offline/reconnect sync, snooze/dismiss and physical bezel behavior.
 

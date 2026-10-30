@@ -39,9 +39,9 @@ Pair the watch using Galaxy Wearable, open both apps, and grant precise-alarm an
 
 The intended flow is: request a change → a coding session with access updates this repository → GitHub Actions builds/tests it → download the successful APKs. Your Mac does not need to remain running for GitHub-hosted builds. The coding session must have repository write access and the ability to inspect Actions results; signing into ChatGPT alone does not provide those capabilities.
 
-The [Android debug workflow](.github/workflows/android-debug.yml) runs on push, pull request or manual dispatch. After a successful default-branch build, it is configured to publish individual APKs to the `debug-latest` prerelease as well as Actions artifacts. **The first cloud run and release publication are not yet verified.**
+The [Android debug workflow](.github/workflows/android-debug.yml) runs on push, pull request or manual dispatch. After a successful default-branch build, it is configured to publish individual APKs to the `debug-latest` prerelease as well as Actions artifacts. **Verified:** [cloud build, tests, lint and publication succeeded](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41104668417). Both release APKs were downloaded and matched the cloud artifacts byte for byte; their signing certificates match the local development key.
 
-Once publication succeeds, the planned download links are:
+Verified download links (version `0.1.2`, version code `3` for this build):
 
 - [Phone debug APK](https://github.com/vish9731-agentic/orbit-clock/releases/download/debug-latest/orbit-clock-phone-debug.apk)
 - [Watch debug APK](https://github.com/vish9731-agentic/orbit-clock/releases/download/debug-latest/orbit-clock-watch-debug.apk)

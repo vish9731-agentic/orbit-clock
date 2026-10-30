@@ -29,7 +29,13 @@ The build command was `:core:testDebugUnitTest :phone:assembleDebug :wear:assemb
 
 ## Cloud delivery
 
-Private repository `vish9731-agentic/orbit-clock` exists and personal admin/push access was confirmed. The workflow is configured for tests, lint, both debug APKs and `debug-latest` prerelease publication. The first cloud run, uploaded artifacts and release assets have not yet been verified; update this section once confirmed.
+Private repository `vish9731-agentic/orbit-clock` exists; personal push access was exercised successfully.
+
+- [Cloud workflow](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41104668417): **success**, including build, tests, lint, APK/report artifact upload and publish job.
+- [Debug release](https://github.com/vish9731-agentic/orbit-clock/releases/tag/debug-latest): both APK assets present and downloaded successfully.
+- Both release APKs match the downloaded cloud artifacts byte for byte and have the same signing certificate as the local build. The cloud phone APK manifest is debuggable, version `0.1.2`, version code `3`.
+- The first cloud attempt failed because Android setup requested the retired `tools` package. Fixed by specifying `platform-tools`, `platforms;android-35` and `build-tools;34.0.0`; the corrected workflow passed.
+- Repository editing, push, CI status/log inspection, artifact retrieval and authenticated release downloads have all been exercised from this cloud session. Browser control and on-device installation have not.
 
 ## Not yet tested
 
