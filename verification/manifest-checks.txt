@@ -1,0 +1,3 @@
+PASS XML parses: core/src/main/AndroidManifest.xml
+PASS XML parses: phone/src/main/AndroidManifest.xml
+PASS XML parses: wear/src/main/AndroidManifest.xml

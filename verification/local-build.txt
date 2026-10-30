@@ -1,0 +1,216 @@
+Picked up JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts -Dhttp.proxyHost=proxy -Dhttp.proxyPort=8080 -Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080
+
+Welcome to Gradle 8.9!
+
+Here are the highlights of this release:
+ - Enhanced Error and Warning Messages
+ - IDE Integration Improvements
+ - Daemon JVM Information
+
+For more details see https://docs.gradle.org/8.9/release-notes.html
+
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.9/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+Checking the license for package Android SDK Build-Tools 34 in /workspace/toolchain/android-sdk/licenses
+License for package Android SDK Build-Tools 34 accepted.
+Preparing "Install Android SDK Build-Tools 34 v.34.0.0".
+"Install Android SDK Build-Tools 34 v.34.0.0" ready.
+Installing Android SDK Build-Tools 34 in /workspace/toolchain/android-sdk/build-tools/34.0.0
+"Install Android SDK Build-Tools 34 v.34.0.0" complete.
+"Install Android SDK Build-Tools 34 v.34.0.0" finished.
+> Task :core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :core:preBuild UP-TO-DATE
+> Task :core:preDebugBuild UP-TO-DATE
+> Task :core:generateDebugResValues
+> Task :core:generateDebugResources
+> Task :core:packageDebugResources
+> Task :core:preDebugUnitTestBuild UP-TO-DATE
+> Task :phone:preBuild UP-TO-DATE
+> Task :phone:preDebugBuild UP-TO-DATE
+> Task :core:javaPreCompileDebug
+> Task :core:javaPreCompileDebugUnitTest
+> Task :phone:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :phone:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :core:parseDebugLocalResources
+> Task :core:compileDebugLibraryResources
+> Task :phone:generateDebugResValues
+> Task :core:generateDebugRFile
+> Task :core:writeDebugAarMetadata
+> Task :phone:mapDebugSourceSetPaths
+> Task :phone:generateDebugResources
+> Task :phone:checkDebugAarMetadata
+> Task :core:generateDebugUnitTestStubRFile
+> Task :phone:packageDebugResources
+> Task :phone:parseDebugLocalResources
+> Task :phone:createDebugCompatibleScreenManifests
+> Task :core:extractDeepLinksDebug
+> Task :phone:extractDeepLinksDebug
+> Task :phone:javaPreCompileDebug
+> Task :phone:mergeDebugResources
+> Task :core:mergeDebugShaders
+> Task :core:compileDebugShaders NO-SOURCE
+> Task :core:generateDebugAssets UP-TO-DATE
+> Task :core:packageDebugAssets
+> Task :phone:mergeDebugShaders
+> Task :phone:compileDebugShaders NO-SOURCE
+> Task :phone:generateDebugAssets UP-TO-DATE
+> Task :phone:mergeDebugAssets
+> Task :core:processDebugManifest
+> Task :phone:compressDebugAssets
+> Task :phone:processDebugMainManifest
+> Task :phone:processDebugManifest
+> Task :phone:desugarDebugFileDependencies
+> Task :core:mergeDebugJniLibFolders
+> Task :core:mergeDebugNativeLibs NO-SOURCE
+> Task :phone:checkDebugDuplicateClasses
+> Task :phone:processDebugManifestForPackage
+> Task :core:copyDebugJniLibsProjectOnly
+> Task :phone:processDebugResources
+
+> Task :core:compileDebugKotlin
+e: The daemon has terminated unexpectedly on startup attempt #1 with error code: 0. The daemon process output:
+    1. Picked up JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts -Dhttp.proxyHost=proxy -Dhttp.proxyPort=8080 -Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080
+    2. Kotlin compile daemon is ready
+
+> Task :phone:mergeDebugJniLibFolders
+> Task :phone:mergeDebugNativeLibs NO-SOURCE
+> Task :phone:stripDebugDebugSymbols NO-SOURCE
+> Task :phone:validateSigningDebug
+> Task :phone:writeDebugAppMetadata
+> Task :phone:writeDebugSigningConfigVersions
+> Task :wear:preBuild UP-TO-DATE
+> Task :wear:preDebugBuild UP-TO-DATE
+> Task :wear:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :wear:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :wear:checkDebugAarMetadata
+> Task :wear:generateDebugResValues
+> Task :wear:mapDebugSourceSetPaths
+> Task :wear:generateDebugResources
+> Task :wear:packageDebugResources
+> Task :wear:parseDebugLocalResources
+> Task :wear:createDebugCompatibleScreenManifests
+> Task :wear:extractDeepLinksDebug
+> Task :wear:mergeDebugResources
+> Task :wear:processDebugMainManifest
+> Task :wear:processDebugManifest
+> Task :wear:javaPreCompileDebug
+> Task :wear:processDebugManifestForPackage
+> Task :wear:mergeDebugShaders
+> Task :wear:compileDebugShaders NO-SOURCE
+> Task :wear:generateDebugAssets UP-TO-DATE
+> Task :wear:mergeDebugAssets
+> Task :wear:compressDebugAssets
+> Task :wear:desugarDebugFileDependencies
+> Task :wear:processDebugResources
+> Task :wear:mergeDebugJniLibFolders
+> Task :wear:checkDebugDuplicateClasses
+> Task :wear:mergeDebugNativeLibs NO-SOURCE
+> Task :wear:stripDebugDebugSymbols NO-SOURCE
+> Task :wear:validateSigningDebug
+> Task :wear:writeDebugAppMetadata
+> Task :wear:writeDebugSigningConfigVersions
+> Task :core:stripDebugDebugSymbols NO-SOURCE
+> Task :core:copyDebugJniLibsProjectAndLocalJars
+> Task :core:extractDeepLinksForAarDebug
+> Task :core:prepareDebugArtProfile
+> Task :phone:mergeExtDexDebug
+> Task :core:preDebugAndroidTestBuild UP-TO-DATE
+> Task :core:generateDebugAndroidTestResValues
+> Task :core:prepareLintJarForPublish
+> Task :core:writeDebugLintModelMetadata
+> Task :core:extractProguardFiles
+> Task :phone:preDebugAndroidTestBuild SKIPPED
+> Task :phone:generateDebugAndroidTestResValues
+> Task :phone:extractProguardFiles
+> Task :phone:preDebugUnitTestBuild UP-TO-DATE
+> Task :wear:preDebugAndroidTestBuild SKIPPED
+> Task :wear:generateDebugAndroidTestResValues
+> Task :wear:extractProguardFiles
+> Task :wear:preDebugUnitTestBuild UP-TO-DATE
+> Task :wear:mergeExtDexDebug
+
+> Task :core:compileDebugKotlin
+w: file:///workspace/orbit-clock/core/src/main/java/dev/orbit/clock/core/ClockActivity.kt:35:16 'var statusBarColor: Int' is deprecated. Deprecated in Java.
+w: file:///workspace/orbit-clock/core/src/main/java/dev/orbit/clock/core/ClockActivity.kt:35:42 'var navigationBarColor: Int' is deprecated. Deprecated in Java.
+
+> Task :core:compileDebugJavaWithJavac
+Picked up JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts -Dhttp.proxyHost=proxy -Dhttp.proxyPort=8080 -Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080
+
+Picked up JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts -Dhttp.proxyHost=proxy -Dhttp.proxyPort=8080 -Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080
+
+Picked up JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts -Dhttp.proxyHost=proxy -Dhttp.proxyPort=8080 -Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080
+
+
+> Task :core:bundleLibRuntimeToJarDebug
+> Task :core:bundleLibCompileToJarDebug
+> Task :core:processDebugJavaRes
+> Task :core:bundleLibRuntimeToDirDebug
+> Task :core:compileDebugUnitTestKotlin
+> Task :core:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :core:processDebugUnitTestJavaRes
+> Task :phone:mergeLibDexDebug
+> Task :wear:compileDebugKotlin
+> Task :phone:compileDebugKotlin
+
+> Task :core:testDebugUnitTest
+Picked up JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts -Dhttp.proxyHost=proxy -Dhttp.proxyPort=8080 -Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080
+
+> Task :phone:compileDebugJavaWithJavac NO-SOURCE
+> Task :phone:dexBuilderDebug
+> Task :phone:mergeDebugGlobalSynthetics
+> Task :phone:processDebugJavaRes
+> Task :wear:compileDebugJavaWithJavac NO-SOURCE
+> Task :phone:mergeProjectDexDebug
+> Task :wear:dexBuilderDebug
+> Task :wear:mergeDebugGlobalSynthetics
+> Task :wear:processDebugJavaRes
+> Task :wear:mergeLibDexDebug
+> Task :wear:mergeProjectDexDebug
+> Task :phone:mergeDebugJavaResource
+> Task :wear:mergeDebugJavaResource
+> Task :core:extractDebugAnnotations
+> Task :core:mergeDebugGeneratedProguardFiles
+> Task :core:mergeDebugConsumerProguardFiles
+> Task :core:mergeDebugJavaResource
+> Task :core:createFullJarDebug
+> Task :core:syncDebugLibJars
+> Task :core:bundleDebugLocalLintAar
+> Task :core:generateDebugAndroidTestLintModel
+> Task :core:generateDebugLintModel
+> Task :phone:packageDebug
+> Task :phone:createDebugApkListingFileRedirect
+> Task :phone:assembleDebug
+> Task :core:generateDebugUnitTestLintModel
+> Task :wear:packageDebug
+> Task :wear:createDebugApkListingFileRedirect
+> Task :wear:assembleDebug
+> Task :phone:bundleDebugClassesToCompileJar
+> Task :phone:generateDebugAndroidTestLintModel
+> Task :phone:generateDebugLintReportModel
+> Task :phone:generateDebugUnitTestLintModel
+> Task :wear:bundleDebugClassesToCompileJar
+> Task :wear:generateDebugAndroidTestLintModel
+> Task :wear:generateDebugLintReportModel
+> Task :wear:generateDebugUnitTestLintModel
+> Task :core:lintAnalyzeDebugAndroidTest
+> Task :phone:lintAnalyzeDebugAndroidTest
+> Task :phone:lintAnalyzeDebugUnitTest
+> Task :wear:lintAnalyzeDebugAndroidTest
+> Task :wear:lintAnalyzeDebugUnitTest
+> Task :core:lintAnalyzeDebugUnitTest
+> Task :core:lintAnalyzeDebug
+> Task :wear:lintAnalyzeDebug
+> Task :phone:lintAnalyzeDebug
+
+> Task :phone:lintReportDebug
+Wrote HTML report to file:///workspace/orbit-clock/phone/build/reports/lint-results-debug.html
+
+> Task :phone:lintDebug
+
+> Task :wear:lintReportDebug
+Wrote HTML report to file:///workspace/orbit-clock/wear/build/reports/lint-results-debug.html
+
+> Task :wear:lintDebug
+
+BUILD SUCCESSFUL in 2m 46s
+133 actionable tasks: 133 executed

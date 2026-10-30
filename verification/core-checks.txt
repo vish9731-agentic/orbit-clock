@@ -1,0 +1,36 @@
+PASS one-shot today
+PASS one-shot tomorrow
+PASS weekend skipped
+PASS weekly repeat
+PASS midnight rolls date
+PASS exactly now is not rescheduled
+PASS snooze overrides wall time
+PASS dismissed snooze ignored
+PASS expired snooze ignored
+PASS dismissed occurrence skipped
+PASS disabled
+PASS deleted
+PASS spring DST gap
+PASS fall DST first occurrence
+PASS fall DST no second ring
+PASS local timezone followed
+PASS invalid weekdays rejected
+PASS future timer
+PASS expired timer never becomes wall-clock alarm
+PASS disabled timer
+PASS dismissed timer
+PASS accidental detent does not snooze
+PASS snooze progress
+PASS second detent insufficient
+PASS third detent snoozes
+PASS gesture fires once
+PASS dismiss needs more movement
+PASS dismiss at six units
+PASS pause resets accumulation
+PASS pause resets progress
+PASS reverse direction resets
+PASS reverse progress
+PASS invalid axis ignored
+PASS zero movement ignored
+
+34 production-policy checks passed.
