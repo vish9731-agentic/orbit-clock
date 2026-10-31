@@ -107,7 +107,12 @@ open class ClockActivity : AppCompatActivity() {
         setContentView(root)
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            v.setPadding(bars.left, bars.top, bars.right, bars.bottom); insets
+            val bottom = maxOf(bars.bottom, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom)
+            v.setPadding(bars.left, bars.top, bars.right, bottom); WindowInsetsCompat.CONSUMED
+        }
+        WindowCompat.getInsetsController(window, root).apply {
+            isAppearanceLightStatusBars = com.google.android.material.color.MaterialColors.isColorLight(colors.surface)
+            isAppearanceLightNavigationBars = com.google.android.material.color.MaterialColors.isColorLight(colors.surface)
         }
         ViewCompat.requestApplyInsets(root)
         val header = row().apply { setPadding(dp(if (watch) 26 else 24), dp(if (watch) 16 else 22), dp(if (watch) 26 else 16), dp(20)) }
@@ -166,10 +171,10 @@ open class ClockActivity : AppCompatActivity() {
         val all = Store(this).all().filterNot { it.deleted || it.timer }.sortedWith(compareBy({ it.hour }, { it.minute }))
         val next = all.mapNotNull { it.next() }.minOrNull()
         if (!Scheduler.allowed(this) || notificationsMissing() || fullScreenMissing()) {
-            card(color = colors.secondaryContainer, padding = 16).apply {
-                addView(text("Finish alarm setup", 16f, colors.onSecondaryContainer)); space(this, 6)
-                addView(text("Allow alarms and notifications to ring reliably.", 13f, colors.onSecondaryContainer)); space(this, 12)
-                addView(button("Review permissions", tonal = true) { permissions() })
+            card(color = colors.container, padding = 20).apply {
+                addView(text("Finish alarm setup", 16f, colors.onSurface)); space(this, 6)
+                addView(text("Allow alarms and notifications to ring reliably.", 13f, colors.muted)); space(this, 12)
+                addView(button("Review permissions") { permissions() })
             }
         }
         if (next != null) {
@@ -243,7 +248,7 @@ open class ClockActivity : AppCompatActivity() {
                 .setTitleText("Set alarm time").build()
             picker.addOnPositiveButtonClickListener { hour = picker.hour; minute = picker.minute; body.findViewWithTag<MaterialButton>("alarm_time").text = "${time(hour, minute)} ${period(hour)}" }
             picker.show(supportFragmentManager, "alarm_time")
-        }.apply { tag = "alarm_time"; textSize = if (watch) 28f else 42f; contentDescription = "Set alarm time"; minimumHeight = dp(96) }
+        }.apply { tag = "alarm_time"; backgroundTintList = ColorStateList.valueOf(colors.containerHigh); setTextColor(colors.primary); textSize = if (watch) 28f else 42f; contentDescription = "Set alarm time"; minimumHeight = dp(96) }
         body.addView(pickerButton, LinearLayout.LayoutParams(-1, dp(104))); space(body, 24)
         val label = input(body, "Label", original.label)
         body.addView(text("Repeat", 14f, colors.muted)); space(body, 8)

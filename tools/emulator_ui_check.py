@@ -27,11 +27,13 @@ def tree():
             time.sleep(.5)
 
 def find(value=None, desc=None, edit=False, optional=False):
-    for node in tree().iter('node'):
-        a = node.attrib
-        match = (value is not None and a.get('text', '').casefold() == value.casefold()) or (desc is not None and a.get('content-desc') == desc) or (edit and 'EditText' in a.get('class', ''))
-        bounds = re.findall(r'\d+', a.get('bounds', ''))
-        if match and len(bounds) == 4 and int(bounds[2]) > int(bounds[0]) and int(bounds[3]) > int(bounds[1]): return node
+    for attempt in range(1 if optional else 4):
+        for node in tree().iter('node'):
+            a = node.attrib
+            match = (value is not None and a.get('text', '').casefold() == value.casefold()) or (desc is not None and a.get('content-desc') == desc) or (edit and 'EditText' in a.get('class', ''))
+            bounds = re.findall(r'\d+', a.get('bounds', ''))
+            if match and len(bounds) == 4 and int(bounds[2]) > int(bounds[0]) and int(bounds[3]) > int(bounds[1]): return node
+        if not optional: time.sleep(.4)
     if optional: return None
     raise AssertionError(f'UI element not found: {value or desc or "editable field"}')
 
