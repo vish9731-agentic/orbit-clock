@@ -7,7 +7,7 @@
 | `:phone:assembleDebug` | Passed; `phone/build/outputs/apk/debug/phone-debug.apk` produced |
 | `:wear:assembleDebug` | Passed; `wear/build/outputs/apk/debug/wear-debug.apk` produced |
 | `:core:testDebugUnitTest` | 7 tests, 0 failures, 0 errors, 0 skipped |
-| `bash tools/test-core.sh` | 34 production timing/timer/rotary-policy checks passed |
+| `bash tools/test-core.sh` | 44 production timing/timer/rotary/snooze-policy checks passed |
 | `:phone:lintDebug` | Passed; no errors |
 | `:wear:lintDebug` | Passed; no errors |
 | APK signatures | Both verified with APK Signature Scheme v2; matching signing certificate |
@@ -56,3 +56,11 @@ When shell networking is restricted, use the GitHub connector: fetch https://api
 - Light/dark layouts across all five phone tabs were visually inspected. Fixed issues found during review: navigation icon/label overlap, status-bar contrast, stopwatch contrast, and keyboard/large-text window panning. Test transitions now use bounded waits.
 - Release 0.1.12 (version code 13) contains both uploaded APKs for the verified source. Development signing key and application ID are unchanged.
 - Watch layout compiled successfully but was not run on a Wear OS emulator or physical watch. Actual alarm delivery, cross-device sync and bezel hardware still need target-device tests.
+
+## Ringing snooze duration — release 0.1.14
+
+- Source: 39e100f92e06b05c8806c66be94dcdf7533d6594; version code 15.
+- [Build, 7 Kotlin tests, 44 standalone policy checks, phone/watch APKs, lint and publication](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41196995849): **passed**.
+- [Android 15 emulator suite](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41196995861): **24 scenario checks passed** with no app crashes.
+- Real timer delivery exercised the ringing screen. Verified minus to 5 and disabled lower control; five-minute additions through 60 and disabled upper control; selection unchanged after activity recreation; no model/schedule edits while adjusting; actual selected 25-minute snooze deadline persisted and scheduled; saved default unchanged; separate Dismiss did not snooze or disturb the earlier snoozed timer.
+- Minimal ringing controls were visually inspected internally. Both release assets are uploaded. Watch APK compiles, but physical bezel and cross-device operation have not been hardware-tested.

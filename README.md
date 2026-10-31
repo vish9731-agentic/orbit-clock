@@ -2,7 +2,7 @@
 
 Native Android phone and Wear OS clock apps with a Material You / Material 3 interface, shared alarms, and rotating-bezel controls for Galaxy Watch 4 Classic.
 
-Both debug APKs now compile successfully. The project passes 7 Kotlin/JUnit tests and 34 standalone checks of the production timing and gesture policies. Android lint reports no errors. The redesigned phone UI also passes 17 Android 15 emulator interaction checks. **The [Material UI interaction suite](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41176288860) passes alarm editing/persistence, city search, timers, stopwatch, bedtime settings, dark mode, and 130% text size. Physical-device testing remains.** This is a working build of an initial prototype, not full Google Clock feature parity or a validated alarm replacement.
+Both debug APKs now compile successfully. The project passes 7 Kotlin/JUnit tests and 44 standalone checks of the production timing and gesture policies. Android lint reports no errors. The redesigned phone UI also passes 24 Android 15 emulator interaction checks. **The [Material UI interaction suite](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41176288860) passes alarm editing/persistence, city search, timers, stopwatch, bedtime settings, dark mode, and 130% text size. Physical-device testing remains.** This is a working build of an initial prototype, not full Google Clock feature parity or a validated alarm replacement.
 
 Private repository: [vish9731-agentic/orbit-clock](https://github.com/vish9731-agentic/orbit-clock).
 
@@ -24,6 +24,12 @@ Private repository: [vish9731-agentic/orbit-clock](https://github.com/vish9731-a
 - Native platform views with a compact watch layout. Both apps use application ID `dev.orbit.clock` and the same development signing key.
 
 This app owns its alarms. It does not read or modify Google Clock's private alarm database. Music-service integrations, Assistant routines, sleep tracking, bedtime reminders, watch hardware validation and further accessibility tuning remain unfinished. World-clock choices, stopwatch state and sleep goals are local to each device. Offline dismissal cannot immediately stop the other device, and synchronization is eventually consistent.
+
+## Ringing snooze adjustment
+
+The ringing screen has a minimal **− / minutes / +** control above Snooze. Each tap changes the duration by five minutes, with a five-minute minimum and sixty-minute maximum; the corresponding button disables at each limit. Selection survives screen recreation and applies to this ringing occurrence, without editing the alarm's saved default. Touch Snooze and rotary snooze use the same selection. Dismiss is unchanged.
+
+[Build/tests/lint/publication](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41196995849) and [24 emulator UI checks](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41196995861) passed for release 0.1.14. Real one-minute timers were delivered, then the selected 25-minute snooze deadline and separate dismissal were verified.
 
 ## Build and test
 
@@ -47,9 +53,9 @@ Pair the watch using Galaxy Wearable, open both apps, and grant precise-alarm an
 
 The intended flow is: request a change → a coding session with access updates this repository → GitHub Actions builds/tests it → download the successful APKs. Your Mac does not need to remain running for GitHub-hosted builds. The coding session must have repository write access and the ability to inspect Actions results; signing into ChatGPT alone does not provide those capabilities.
 
-The [Android debug workflow](.github/workflows/android-debug.yml) runs on push, pull request or manual dispatch. After a successful default-branch build, it is configured to publish individual APKs to the `debug-latest` prerelease as well as Actions artifacts. **Verified:** [cloud build, tests, lint and publication succeeded](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41104668417). Both release APKs were downloaded and matched the cloud artifacts byte for byte; their signing certificates match the local development key.
+The [Android debug workflow](.github/workflows/android-debug.yml) runs on push, pull request or manual dispatch. After a successful default-branch build, it is configured to publish individual APKs to the `debug-latest` prerelease as well as Actions artifacts. **Verified:** [cloud build, tests, lint and publication succeeded](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41104668417). Both phone and watch debug APKs are built and uploaded from the verified revision; the development signing key is unchanged.
 
-Verified download links (version `0.1.2`, version code `3` for this build):
+Verified download links (version `0.1.14`, version code `15` for this build):
 
 - [Phone debug APK](https://github.com/vish9731-agentic/orbit-clock/releases/download/debug-latest/orbit-clock-phone-debug.apk)
 - [Watch debug APK](https://github.com/vish9731-agentic/orbit-clock/releases/download/debug-latest/orbit-clock-watch-debug.apk)
