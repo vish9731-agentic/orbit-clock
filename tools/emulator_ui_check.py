@@ -66,6 +66,7 @@ def fill(value, desc=None):
 
 def passed(name):
     checks.append(name); print('UI PASS: ' + name, flush=True)
+    print('::notice title=Orbit UI check::' + name, flush=True)
 
 def screenshot(name):
     path = OUT / f'{name}.png'; path.write_bytes(adb('exec-out', 'screencap', '-p', binary=True))
@@ -120,6 +121,7 @@ try:
     click('Reset'); find('00:00.00'); passed('Stopwatch reset')
     click('Bedtime'); click('8 hours'); click('9 hours'); find('9 hours of sleep')
     passed('Sleep-goal dialog and updated summary')
+    screenshot('bedtime-light')
     tap_xy(xy(scroll_find('Set wake-up alarm'))); tap_xy(xy(scroll_find('Save alarm')))
     passed('Wake-up schedule uses redesigned editor')
     click('Alarm'); find('Morning routine')
@@ -129,6 +131,9 @@ try:
     adb('shell', 'settings', 'put', 'system', 'font_scale', '1.3'); time.sleep(2)
     click(desc='Add alarm'); find('New alarm'); tap_xy(xy(scroll_find('Cancel')))
     passed('Alarm editor usable at 130 percent font scale')
+    time.sleep(1.2)
+    find('Alarms'); find('Stopwatch')
+    passed('Header and navigation remain visible with large text')
     screenshot('alarms-large-type-dark')
     pid = adb('shell', 'pidof', PKG).strip(); assert pid
     crashes = adb('logcat', '-d', '-b', 'crash'); (OUT / 'crashes.txt').write_text(crashes)

@@ -182,7 +182,12 @@ open class ClockActivity : AppCompatActivity() {
             card(color = colors.primaryContainer, padding = 20).apply {
                 addView(text("NEXT ALARM", 11f, colors.onPrimaryContainer).apply { letterSpacing = .12f }); space(this, 8)
                 val duration = Duration.between(Instant.now(), next).toMinutes().coerceAtLeast(1)
-                val remaining = if (duration >= 60) "${duration / 60} hr ${duration % 60} min" else "$duration min"
+                val remaining = buildList {
+                    val days = duration / 1440; val hours = duration % 1440 / 60; val minutes = duration % 60
+                    if (days > 0) add("$days ${if (days == 1L) "day" else "days"}")
+                    if (hours > 0) add("$hours hr")
+                    if (minutes > 0) add("$minutes min")
+                }.joinToString(" ")
                 addView(text("In $remaining", if (watch) 24f else 30f, colors.onPrimaryContainer)); space(this, 6)
                 addView(text(next.atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("EEEE, d MMM · HH:mm", Locale.getDefault())), 13f, colors.onPrimaryContainer))
             }
@@ -393,7 +398,7 @@ open class ClockActivity : AppCompatActivity() {
         val face = FrameLayout(this)
         val dial = OrbitDial(this, colors).apply { progress = 0f }
         face.addView(dial, FrameLayout.LayoutParams(-1, -1))
-        val display = text("", if (watch) 28f else 46f).apply { gravity = Gravity.CENTER; typeface = Typeface.create("sans-serif-light", Typeface.NORMAL); contentDescription = "Stopwatch elapsed time" }
+        val display = text("", if (watch) 28f else 46f, colors.onPrimaryContainer).apply { gravity = Gravity.CENTER; typeface = Typeface.create("sans-serif-light", Typeface.NORMAL); contentDescription = "Stopwatch elapsed time" }
         face.addView(display, FrameLayout.LayoutParams(-1, -1))
         content.addView(face, LinearLayout.LayoutParams(dialSize, dialSize).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(16); bottomMargin = dp(32) })
         ticker = { val ms = elapsed(); display.text = String.format(Locale.getDefault(), "%02d:%02d.%02d", ms / 60_000, ms / 1000 % 60, ms / 10 % 100); dial.progress = (ms % 60_000) / 60_000f; dial.invalidate() }; ticker?.invoke()
