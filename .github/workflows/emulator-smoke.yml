@@ -5,6 +5,13 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/emulator-smoke.yml'
+      - 'core/**'
+      - 'phone/**'
+      - 'wear/**'
+      - 'tools/**'
+      - 'gradle/**'
+      - '*.gradle.kts'
+      - 'gradle.properties'
 permissions:
   contents: read
 jobs:
