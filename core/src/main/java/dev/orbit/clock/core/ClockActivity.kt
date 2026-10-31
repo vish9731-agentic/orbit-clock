@@ -54,7 +54,8 @@ open class ClockActivity : AppCompatActivity() {
         }
     }
     override fun onCreate(state: Bundle?) {
-        if (!watch) DynamicColors.applyToActivityIfAvailable(this)
+        if (watch) setTheme(R.style.Theme_OrbitClock_Ringing)
+        else DynamicColors.applyToActivityIfAvailable(this)
         super.onCreate(state)
         colors = OrbitPalette(this)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -243,26 +244,33 @@ open class ClockActivity : AppCompatActivity() {
         val body = column().apply { setPadding(dp(if (watch) 20 else 24), dp(24), dp(if (watch) 20 else 24), dp(32)) }
         body.addView(text(if (exists) "Edit alarm" else "New alarm", 24f)); space(body, 16)
         val pickerButton = button("${time(hour, minute)} ${period(hour)}", tonal = true) {
+            if (watch) chooseWatchTime(hour, minute) { h, m ->
+                hour = h; minute = m
+                body.findViewWithTag<MaterialButton>("alarm_time").text = "${time(hour, minute)} ${period(hour)}"
+            } else {
             val picker = MaterialTimePicker.Builder().setHour(hour).setMinute(minute)
                 .setTimeFormat(if (DateFormat.is24HourFormat(this)) TimeFormat.CLOCK_24H else TimeFormat.CLOCK_12H)
                 .setTitleText("Set alarm time").build()
             picker.addOnPositiveButtonClickListener { hour = picker.hour; minute = picker.minute; body.findViewWithTag<MaterialButton>("alarm_time").text = "${time(hour, minute)} ${period(hour)}" }
             picker.show(supportFragmentManager, "alarm_time")
+            }
         }.apply { tag = "alarm_time"; backgroundTintList = ColorStateList.valueOf(colors.containerHigh); setTextColor(colors.primary); textSize = if (watch) 28f else 42f; contentDescription = "Set alarm time"; minimumHeight = dp(96) }
         body.addView(pickerButton, LinearLayout.LayoutParams(-1, dp(104))); space(body, 24)
         val label = input(body, "Label", original.label)
         body.addView(text("Repeat", 14f, colors.muted)); space(body, 8)
         val selected = original.days.toMutableSet()
-        val days = row()
+        val days = if (watch) column() else row()
+        var dayRow = days
         (1..7).forEach { day ->
-            val name = DayOfWeek.of(day).getDisplayName(java.time.format.TextStyle.NARROW, Locale.getDefault())
+            if (watch && (day - 1) % 3 == 0) { dayRow = row(); days.addView(dayRow) }
+            val name = DayOfWeek.of(day).getDisplayName(if (watch) java.time.format.TextStyle.SHORT else java.time.format.TextStyle.NARROW, Locale.getDefault())
             val b = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
                 text = name; contentDescription = DayOfWeek.of(day).name.lowercase().replaceFirstChar(Char::uppercaseChar)
                 minimumWidth = 0; minWidth = 0; setPadding(0, 0, 0, 0); cornerRadius = dp(24)
                 fun update() { isSelected = day in selected; backgroundTintList = ColorStateList.valueOf(if (isSelected) colors.primary else colors.surface); setTextColor(if (isSelected) colors.onPrimary else colors.onSurface) }
                 update(); setOnClickListener { if (!selected.add(day)) selected.remove(day); update() }
             }
-            days.addView(b, LinearLayout.LayoutParams(0, dp(48), 1f))
+            dayRow.addView(b, LinearLayout.LayoutParams(0, dp(48), 1f))
         }
         body.addView(days); space(body, 20)
         fun option(title: String, checked: Boolean): MaterialSwitch {
@@ -287,6 +295,25 @@ open class ClockActivity : AppCompatActivity() {
         }) }
         sheet.setContentView(ScrollView(this).apply { addView(body) }); sheet.show()
         sheet.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+    }
+    private fun chooseWatchTime(hour: Int, minute: Int, onPicked: (Int, Int) -> Unit) {
+        val sheet = BottomSheetDialog(this)
+        val body = column().apply { setPadding(dp(18), dp(20), dp(18), dp(28)) }
+        body.addView(text("Set time", 22f)); space(body, 8)
+        fun picker(max: Int, value: Int, label: String) = NumberPicker(this).apply {
+            minValue = 0; maxValue = max; this.value = value
+            setFormatter { String.format(Locale.getDefault(), "%02d", it) }
+            contentDescription = label; descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
+        }
+        val hours = picker(23, hour, "Hour, 24-hour time")
+        val minutes = picker(59, minute, "Minute")
+        val pickers = row()
+        pickers.addView(hours, LinearLayout.LayoutParams(0, dp(100), 1f))
+        pickers.addView(text(":", 24f))
+        pickers.addView(minutes, LinearLayout.LayoutParams(0, dp(100), 1f))
+        body.addView(pickers); space(body, 12)
+        body.addView(button("Set time") { onPicked(hours.value, minutes.value); sheet.dismiss() }, LinearLayout.LayoutParams(-1, dp(48)))
+        sheet.setContentView(ScrollView(this).apply { addView(body) }); sheet.show()
     }
     private fun clocks() {
         val hero = card(color = colors.container)
