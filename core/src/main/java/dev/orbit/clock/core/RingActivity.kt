@@ -98,7 +98,7 @@ class RingActivity : AppCompatActivity() {
         body.addView(indicator, LinearLayout.LayoutParams(-1, dp(4)).apply { topMargin = dp(8) })
         val scroller = ScrollView(this).apply {
             isFillViewport = true; setBackgroundColor(colors.surface)
-            addView(body, ScrollView.LayoutParams(-1, -2))
+            addView(body, FrameLayout.LayoutParams(-1, -2))
         }
         setContentView(scroller)
         ViewCompat.setOnApplyWindowInsetsListener(scroller) { v, insets ->
