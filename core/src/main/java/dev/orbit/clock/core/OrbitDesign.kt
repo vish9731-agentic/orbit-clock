@@ -7,7 +7,7 @@ import com.google.android.material.color.MaterialColors
 import kotlin.math.*
 
 /** Material color roles, including wallpaper colors supplied by DynamicColors. */
-class OrbitPalette(context: Context) {
+class OrbitPalette(private val context: Context) {
     private fun role(attr: Int, fallback: Long) = MaterialColors.getColor(context, attr, fallback.toInt())
     val surface = role(com.google.android.material.R.attr.colorSurface, 0xfffffbfe)
     val onSurface = role(com.google.android.material.R.attr.colorOnSurface, 0xff1c1b1f)
