@@ -1,10 +1,18 @@
 # Orbit Clock
 
-Native Android phone and Wear OS clock apps, inspired by Google Clock, with shared alarms and rotating-bezel controls for Galaxy Watch 4 Classic.
+Native Android phone and Wear OS clock apps with a Material You / Material 3 interface, shared alarms, and rotating-bezel controls for Galaxy Watch 4 Classic.
 
-Both debug APKs now compile successfully. The project passes 7 Kotlin/JUnit tests and 34 standalone checks of the production timing and gesture policies. Android lint reports no errors. **The phone app has now passed an [Android 15 cloud-emulator startup test](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41171287946), with a [screenshot and launch logs](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41171287946/artifacts/13030569550). Physical-device tests remain.** This is a working build of an initial prototype, not full Google Clock feature parity or a validated alarm replacement.
+Both debug APKs now compile successfully. The project passes 7 Kotlin/JUnit tests and 34 standalone checks of the production timing and gesture policies. Android lint reports no errors. The redesigned phone UI also passes 17 Android 15 emulator interaction checks. **The [Material UI interaction suite](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41176288860) passes alarm editing/persistence, city search, timers, stopwatch, bedtime settings, dark mode, and 130% text size. Physical-device testing remains.** This is a working build of an initial prototype, not full Google Clock feature parity or a validated alarm replacement.
 
 Private repository: [vish9731-agentic/orbit-clock](https://github.com/vish9731-agentic/orbit-clock).
+
+## Material You design
+
+- Genuine Material 3 components with wallpaper-derived dynamic colors on supported Android 12+ devices and light/dark fallback themes.
+- Icon navigation, a floating add action, spacious alarm cards, large time typography and a quieter permission panel.
+- Bottom-sheet alarm editor, Material time picker, outlined fields, weekday selection and Material switches.
+- Redesigned clock, timer, stopwatch, bedtime and dark ringing screens; compact watch time controls and weekday rows.
+- System-bar and keyboard insets handled explicitly; header/navigation checked at 130% font scale.
 
 ## What is implemented
 
@@ -15,7 +23,7 @@ Private repository: [vish9731-agentic/orbit-clock](https://github.com/vish9731-a
 - World clocks, minute-based timers, stopwatch with laps, and a basic bedtime sleep goal/wake-up schedule.
 - Native platform views with a compact watch layout. Both apps use application ID `dev.orbit.clock` and the same development signing key.
 
-This app owns its alarms. It does not read or modify Google Clock's private alarm database. Music-service integrations, Assistant routines, sleep tracking, bedtime reminders, polished round-screen editing and full accessibility tuning remain unfinished. World-clock choices, stopwatch state and sleep goals are local to each device. Offline dismissal cannot immediately stop the other device, and synchronization is eventually consistent.
+This app owns its alarms. It does not read or modify Google Clock's private alarm database. Music-service integrations, Assistant routines, sleep tracking, bedtime reminders, watch hardware validation and further accessibility tuning remain unfinished. World-clock choices, stopwatch state and sleep goals are local to each device. Offline dismissal cannot immediately stop the other device, and synchronization is eventually consistent.
 
 ## Build and test
 

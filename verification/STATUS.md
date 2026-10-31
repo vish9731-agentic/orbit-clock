@@ -8,8 +8,8 @@
 | `:wear:assembleDebug` | Passed; `wear/build/outputs/apk/debug/wear-debug.apk` produced |
 | `:core:testDebugUnitTest` | 7 tests, 0 failures, 0 errors, 0 skipped |
 | `bash tools/test-core.sh` | 34 production timing/timer/rotary-policy checks passed |
-| `:phone:lintDebug` | 0 errors, 2 warnings |
-| `:wear:lintDebug` | 0 errors, 3 warnings |
+| `:phone:lintDebug` | Passed; no errors |
+| `:wear:lintDebug` | Passed; no errors |
 | APK signatures | Both verified with APK Signature Scheme v2; matching signing certificate |
 
 Signing-certificate SHA-256:
@@ -48,3 +48,11 @@ The phone app has now passed a real Android 15 emulator installation/startup smo
 The previous emulator run failed before boot because the hosted runner lacked disk space. The workflow now removes unused SDKs from the disposable runner before boot and limits boot waiting to six minutes.
 
 When shell networking is restricted, use the GitHub connector: fetch https://api.github.com/repos/vish9731-agentic/orbit-clock/actions/runs for run discovery, then fetch_workflow_run_jobs, fetch_workflow_job_logs and fetch_workflow_run_artifacts. Workflow-specific discovery URLs may be rejected; the actions/runs collection works. Do not repeat stalled shell-network approval requests.
+
+## Material UI verification
+
+- [Build, 7 Kotlin tests, 34 production-policy checks, both APKs and lint](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41176289239): **passed** on ce6db7d172217b6c0f9faf7aae2624eb36a1ed70.
+- [Android 15 / Pixel 6 emulator interaction suite](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41176288860): **17 scenario checks passed**, including Material editor, alarm persistence/toggle, city search, timer create/cancel, stopwatch controls, bedtime settings, dark mode, 130% font size and persistent header/navigation. No app crash recorded.
+- Light/dark layouts across all five phone tabs were visually inspected. Fixed issues found during review: navigation icon/label overlap, status-bar contrast, stopwatch contrast, and keyboard/large-text window panning. Test transitions now use bounded waits.
+- Release 0.1.12 (version code 13) contains both uploaded APKs for the verified source. Development signing key and application ID are unchanged.
+- Watch layout compiled successfully but was not run on a Wear OS emulator or physical watch. Actual alarm delivery, cross-device sync and bezel hardware still need target-device tests.

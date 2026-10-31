@@ -47,3 +47,13 @@ The user will request changes from their phone. Implement the change, then use a
 Use screenshots, logs and test artifacts as internal feedback when useful. Do not routinely send the user downloadable screenshots, test reports or artifact links; summarize what was verified and any remaining limitation. Provide those materials when requested. Existing APK delivery remains available.
 
 Use a Wear OS emulator for watch-specific runtime behavior where feasible. A phone emulator cannot establish watch sync, physical bezel behavior or real-device alarm reliability. State any untested requirement explicitly rather than claiming all requested behavior works.
+
+## Material You redesign — current verified revision
+
+Source ce6db7d172217b6c0f9faf7aae2624eb36a1ed70; release version 0.1.12, version code 13. [Build/test/lint/publication](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41176289239) and [17 emulator UI scenarios](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41176288860) passed. Material Components 1.12.0, AppCompat API dependency 1.7.0 and Core KTX 1.13.1 back the shared native UI. Themes are Material3 DayNight; supported Android12+ phones use DynamicColors. Watch activity forces a dark theme and compact number pickers/weekdays. Physical Wear OS runtime remains unverified.
+
+ClockActivity contains the redesigned five tabs and Material editor; OrbitDesign.kt provides shared color roles and scalable clock artwork. RingActivity uses a dark Material layout while retaining touch and rotary actions. No alarm schema or signing identity changed.
+
+Emulator scenarios exercise empty state, time picker, labeled weekday alarm creation/toggle/restart persistence, city search/add, timer start/cancel, stopwatch start/lap/pause/reset, bedtime goal/wake-up schedule, dark mode and large-text editor/header/navigation, plus no-crash checks. Internal visual captures were inspected and used to fix navigation overlap, status-bar contrast, stopwatch text contrast and keyboard panning. Keep adjustResize in the activity manifests and avoid double-applying system-bar insets to the Material navigation bar. CI disables the Google SDK setup package on the disposable emulator to prevent unrelated setup ANR dialogs from blocking tests.
+
+The user wants emulator feedback for verification, not routine downloadable screenshots or test-report links. The test script emits internal thumbnail feedback in CI logs and stores short-lived artifacts for diagnosis. Summarize results and provide APKs; share visual evidence only when requested.
