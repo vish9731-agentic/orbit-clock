@@ -2,7 +2,7 @@
 
 Native Android phone and Wear OS clock apps, inspired by Google Clock, with shared alarms and rotating-bezel controls for Galaxy Watch 4 Classic.
 
-Both debug APKs now compile successfully. The project passes 7 Kotlin/JUnit tests and 34 standalone checks of the production timing and gesture policies. Android lint reports no errors. **The apps have not been launched on a device or emulator yet.** This is a working build of an initial prototype, not full Google Clock feature parity or a validated alarm replacement.
+Both debug APKs now compile successfully. The project passes 7 Kotlin/JUnit tests and 34 standalone checks of the production timing and gesture policies. Android lint reports no errors. **The phone app has now passed an [Android 15 cloud-emulator startup test](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41171287946), with a [screenshot and launch logs](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41171287946/artifacts/13030569550). Physical-device tests remain.** This is a working build of an initial prototype, not full Google Clock feature parity or a validated alarm replacement.
 
 Private repository: [vish9731-agentic/orbit-clock](https://github.com/vish9731-agentic/orbit-clock).
 
