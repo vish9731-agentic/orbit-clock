@@ -24,6 +24,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Build phone APK
         run: ./gradlew --no-daemon :phone:assembleDebug
+      - name: Free disk space for emulator userdata
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android/sdk/ndk
+          df -h /
       - name: Enable emulator acceleration
         run: sudo chmod 666 /dev/kvm
       - name: Install and launch on Android
@@ -34,6 +38,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
+          emulator-boot-timeout: 360
           script: |
             mkdir -p emulator-results
             adb install phone/build/outputs/apk/debug/phone-debug.apk
