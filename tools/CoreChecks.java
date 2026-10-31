@@ -1,5 +1,6 @@
 import dev.orbit.clock.core.AlarmTiming;
 import dev.orbit.clock.core.RotaryGesture;
+import dev.orbit.clock.core.SnoozeDuration;
 import java.time.*;
 import java.util.*;
 
@@ -58,6 +59,16 @@ public class CoreChecks {
         eq("reverse progress",16,g.progress());
         eq("invalid axis ignored",RotaryGesture.Action.NONE,g.turn(Float.NaN,300));
         eq("zero movement ignored",RotaryGesture.Action.NONE,g.turn(0,400));
+        eq("snooze minimum",5,SnoozeDuration.clamp(0));
+        eq("snooze maximum",60,SnoozeDuration.clamp(90));
+        eq("snooze adds five minutes",15,SnoozeDuration.increase(10));
+        eq("snooze subtracts five minutes",5,SnoozeDuration.decrease(10));
+        eq("snooze stays at minimum",5,SnoozeDuration.decrease(5));
+        eq("snooze stays at maximum",60,SnoozeDuration.increase(60));
+        eq("existing custom snooze retained",12,SnoozeDuration.clamp(12));
+        eq("custom snooze moves by five",17,SnoozeDuration.increase(12));
+        eq("snooze overflow protected",60,SnoozeDuration.increase(Integer.MAX_VALUE));
+        eq("snooze underflow protected",5,SnoozeDuration.decrease(Integer.MIN_VALUE));
         System.out.println("\n"+count+" production-policy checks passed.");
     }
 }

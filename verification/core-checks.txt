@@ -32,5 +32,15 @@ PASS reverse direction resets
 PASS reverse progress
 PASS invalid axis ignored
 PASS zero movement ignored
+PASS snooze minimum
+PASS snooze maximum
+PASS snooze adds five minutes
+PASS snooze subtracts five minutes
+PASS snooze stays at minimum
+PASS snooze stays at maximum
+PASS existing custom snooze retained
+PASS custom snooze moves by five
+PASS snooze overflow protected
+PASS snooze underflow protected
 
-34 production-policy checks passed.
+44 production-policy checks passed.

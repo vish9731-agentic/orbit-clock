@@ -57,13 +57,14 @@ object Scheduler {
         install(c, a, next)
         return true
     }
-    fun act(c: Context, id: String, occurrence: Long, snooze: Boolean) {
+    fun act(c: Context, id: String, occurrence: Long, snooze: Boolean, snoozeMinutesOverride: Int? = null) {
         val store = Store(c)
         val a = store.get(id) ?: return
         if (!isActive(c, a, occurrence)) return
-        val changed = if (snooze) a.copy(snoozeUntil=System.currentTimeMillis()+a.snoozeMinutes*60_000L,
-            skipThrough=occurrence)
-        else a.copy(snoozeUntil=0, skipThrough=occurrence, enabled=a.days.isNotEmpty())
+        val changed = if (snooze) {
+            val minutes = snoozeMinutesOverride?.let { SnoozeDuration.clamp(it) } ?: a.snoozeMinutes
+            a.copy(snoozeUntil = System.currentTimeMillis() + minutes * 60_000L, skipThrough = occurrence)
+        } else a.copy(snoozeUntil=0, skipThrough=occurrence, enabled=a.days.isNotEmpty())
         store.save(changed)
         RingingService.reconcile(c, changed)
     }

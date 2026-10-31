@@ -1,5 +1,6 @@
 """Exercise the actual Material UI on a fresh phone emulator; screenshots are internal feedback."""
 import base64
+import json
 import re
 import subprocess
 import time
@@ -77,6 +78,84 @@ def screenshot(name):
     for start in range(0, len(encoded), 100): print(encoded[start:start+100], flush=True)
     print('ORBIT_SCREENSHOT_END ' + name, flush=True)
 
+def preferences(name):
+    xml = adb('exec-out', 'run-as', PKG, 'cat', 'shared_prefs/' + name + '.xml')
+    return {n.attrib['name']: n.attrib.get('value', n.text or '') for n in ET.fromstring(xml)}
+
+def records(): return json.loads(preferences('alarms')['records'])
+
+def record(alarm_id): return next(a for a in records() if a['id'] == alarm_id)
+
+def open_real_ringing_timer():
+    # Use the app UI and the real AlarmManager/notification path; no exported test backdoor.
+    adb('shell', 'am', 'start', '-W', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
+    click('Timer'); click('1'); click('Start timer')
+    candidates = [a for a in records() if a.get('timer') and a['enabled'] and not a['deleted']]
+    alarm = max(candidates, key=lambda a: a['revision'])
+    adb('shell', 'input', 'keyevent', '3')
+    until = time.monotonic() + 95
+    while time.monotonic() < until:
+        active = int(preferences('scheduled_occurrences').get(alarm['id'] + '.active', 0))
+        if active == alarm['snoozeUntil']: break
+        time.sleep(1)
+    else: raise AssertionError('Real timer was not delivered to the ringing service')
+    time.sleep(.5)
+    adb('shell', 'input', 'keyevent', '224')
+    adb('shell', 'wm', 'dismiss-keyguard')
+    if find(desc='Snooze duration: 10 minutes', optional=True) is None:
+        adb('shell', 'cmd', 'statusbar', 'expand-notifications')
+        click('Timer · 1 min')
+    find(desc='Snooze duration: 10 minutes')
+    return alarm
+
+def ringing_snooze_checks():
+    adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
+    adb('shell', 'appops', 'set', PKG, 'USE_FULL_SCREEN_INTENT', 'allow')
+    first = open_real_ringing_timer()
+    passed('Real alarm delivery opens the ringing snooze controls')
+    minus = xy(find(desc='Decrease snooze by 5 minutes'))
+    plus = xy(find(desc='Increase snooze by 5 minutes'))
+    tap_xy(minus); find(desc='Snooze duration: 5 minutes')
+    assert find(desc='Decrease snooze by 5 minutes').attrib.get('enabled') == 'false'
+    tap_xy(minus); find(desc='Snooze duration: 5 minutes')
+    passed('Ringing snooze minimum is five with minus disabled')
+    for _ in range(11): tap_xy(plus)
+    find(desc='Snooze duration: 60 minutes')
+    assert find(desc='Increase snooze by 5 minutes').attrib.get('enabled') == 'false'
+    tap_xy(plus); find(desc='Snooze duration: 60 minutes')
+    passed('Five-minute increases stop at sixty with plus disabled')
+    screenshot('ringing-snooze-max')
+    for _ in range(7): tap_xy(minus)
+    find(desc='Snooze duration: 25 minutes')
+    current = record(first['id'])
+    assert current['snoozeUntil'] == first['snoozeUntil'] and current['skipThrough'] == 0
+    assert current['snoozeMinutes'] == first['snoozeMinutes']
+    passed('Changing ringing duration does not edit or reschedule the alarm')
+    adb('shell', 'settings', 'put', 'system', 'font_scale', '1.1'); time.sleep(1)
+    find(desc='Snooze duration: 25 minutes')
+    adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0'); time.sleep(1)
+    find(desc='Snooze duration: 25 minutes')
+    passed('Selected snooze duration survives activity recreation')
+    screenshot('ringing-snooze-selected')
+    before = int(adb('shell', 'date', '+%s').strip()) * 1000
+    click('Snooze')
+    after = int(adb('shell', 'date', '+%s').strip()) * 1000
+    snoozed = record(first['id'])
+    assert before + 25 * 60000 <= snoozed['snoozeUntil'] <= after + 25 * 60000 + 1000
+    assert snoozed['snoozeMinutes'] == first['snoozeMinutes']
+    assert int(preferences('scheduled_occurrences')[first['id'] + '.scheduled']) == snoozed['snoozeUntil']
+    passed('Snooze actually schedules the selected twenty-five minutes')
+    second = open_real_ringing_timer()
+    click(desc='Increase snooze by 5 minutes'); find(desc='Snooze duration: 15 minutes')
+    click('Dismiss')
+    dismissed = record(second['id'])
+    assert not dismissed['enabled'] and dismissed['snoozeUntil'] == 0
+    assert second['id'] + '.scheduled' not in preferences('scheduled_occurrences')
+    assert int(preferences('scheduled_occurrences')[first['id'] + '.scheduled']) == snoozed['snoozeUntil']
+    passed('Dismiss ignores duration and leaves another snoozed alarm intact')
+    adb('shell', 'am', 'start', '-W', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
+    click('Timer'); tap_xy(xy(scroll_find('Cancel timer')))
+
 try:
     adb('shell', 'cmd', 'uimode', 'night', 'no')
     adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
@@ -135,6 +214,7 @@ try:
     find('Alarms'); find('Stopwatch')
     passed('Header and navigation remain visible with large text')
     screenshot('alarms-large-type-dark')
+    ringing_snooze_checks()
     pid = adb('shell', 'pidof', PKG).strip(); assert pid
     crashes = adb('logcat', '-d', '-b', 'crash'); (OUT / 'crashes.txt').write_text(crashes)
     assert not crashes.strip(), crashes
