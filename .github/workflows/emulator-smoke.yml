@@ -37,6 +37,8 @@ jobs:
           df -h /
       - name: Enable emulator acceleration
         run: sudo chmod 666 /dev/kvm
+      - name: Install UI inspection dependency
+        run: python -m pip install pillow
       - name: Install and launch on Android
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -53,7 +55,8 @@ jobs:
             adb shell appops set dev.orbit.clock SCHEDULE_EXACT_ALARM allow
             adb logcat -c
             adb shell am start -W -n dev.orbit.clock/dev.orbit.clock.phone.MainActivity > emulator-results/launch.txt
-            sleep 10
+            python tools/emulator_ui_check.py
+            sleep 2
             adb shell pidof dev.orbit.clock > emulator-results/pid.txt
             adb logcat -d -b crash > emulator-results/crashes.txt
             adb shell screencap -p /sdcard/orbit.png
@@ -65,4 +68,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: emulator-results
+          retention-days: 3
           path: emulator-results/
