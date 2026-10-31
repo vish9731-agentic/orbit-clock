@@ -307,7 +307,7 @@ open class ClockActivity : AppCompatActivity() {
             dial.hour = current.hour; dial.minute = current.minute; dial.second = current.second; dial.invalidate()
             displays.forEach { (id, value, info) ->
                 val city = ZonedDateTime.now(ZoneId.of(id)); value.text = "${time(city.hour, city.minute)} ${period(city.hour)}".trim()
-                val diff = Duration.between(current.toLocalDateTime(), city.toLocalDateTime()).toMinutes()
+                val diff = (city.offset.totalSeconds - current.offset.totalSeconds) / 60L
                 info.text = if (diff == 0L) "Same time" else "${if (diff > 0) "+" else "−"}${kotlin.math.abs(diff) / 60}h${if (kotlin.math.abs(diff) % 60 != 0L) " ${kotlin.math.abs(diff) % 60}m" else ""} · ${city.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale.getDefault())}"
             }
         }; ticker?.invoke()
