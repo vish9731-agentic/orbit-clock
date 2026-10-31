@@ -138,7 +138,9 @@ try:
     print(f'UI RESULT: {len(checks)} scenario checks passed', flush=True)
 except Exception:
     try:
-        (OUT / 'failure-hierarchy.xml').write_text(ET.tostring(tree(), encoding='unicode'))
+        hierarchy = ET.tostring(tree(), encoding='unicode')
+        (OUT / 'failure-hierarchy.xml').write_text(hierarchy)
+        print('UI_FAILURE_HIERARCHY ' + hierarchy, flush=True)
         (OUT / 'failure-logcat.txt').write_text(adb('logcat', '-d', '-t', '600'))
         screenshot('failure')
     except Exception as error: print('Evidence capture issue:', str(error), flush=True)
