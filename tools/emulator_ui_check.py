@@ -1,5 +1,6 @@
 """Exercise the actual Material UI on a fresh phone emulator; screenshots are internal feedback."""
 import base64
+import argparse
 import json
 import re
 import subprocess
@@ -8,6 +9,10 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from PIL import Image, ImageChops, ImageStat
 import imageio_ffmpeg
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--scope', choices=['full', 'ringing-motion'], default='full')
+ARGS = parser.parse_args()
 
 OUT = Path('emulator-results')
 OUT.mkdir(exist_ok=True)
@@ -96,6 +101,17 @@ def records(): return json.loads(preferences('alarms')['records'])
 
 def record(alarm_id): return next(a for a in records() if a['id'] == alarm_id)
 
+def assert_scheduled(alarm_id, expected):
+    # Returning to the main activity reinstalls alarms: its remove/install pair is transient.
+    # Wait for the authoritative result; a permanently absent or wrong deadline still fails.
+    until = time.monotonic() + 5
+    last = None
+    while time.monotonic() < until:
+        last = preferences('scheduled_occurrences').get(alarm_id + '.scheduled')
+        if last is not None and int(last) == expected: return
+        time.sleep(.1)
+    raise AssertionError(f'Expected scheduled deadline {expected}, got {last} for {alarm_id}')
+
 def open_real_ringing_timer():
     # Use the app UI and the real AlarmManager/notification path; no exported test backdoor.
     # Bring the launcher screen itself forward instead of merely restoring its task.
@@ -162,7 +178,7 @@ def motion_checks():
     print('ORBIT_SCREENSHOT_END motion-strip', flush=True)
     passed('Enabled animations produce multiple intermediate content frames and settle')
     # Rapid tab changes must leave the last selected tool usable, with no stale callbacks.
-    positions = {name: xy(find(name)) for name in ['Alarm', 'Clock', 'Timer', 'Stopwatch', 'Bedtime']}
+    positions = {name: xy(find(desc=name)) for name in ['Alarm', 'Clock', 'Timer', 'Stopwatch', 'Bedtime']}
     for name in ['Alarm', 'Bedtime', 'Clock', 'Timer', 'Stopwatch', 'Timer']:
         adb('shell', 'input', 'tap', *map(str, positions[name]))
     find('Start timer'); find(desc='Timer minutes')
@@ -255,7 +271,7 @@ def ringing_snooze_checks():
     snoozed = record(first['id'])
     assert before + 25 * 60000 <= snoozed['snoozeUntil'] <= after + 25 * 60000 + 1000
     assert snoozed['snoozeMinutes'] == first['snoozeMinutes']
-    assert int(preferences('scheduled_occurrences')[first['id'] + '.scheduled']) == snoozed['snoozeUntil']
+    assert_scheduled(first['id'], snoozed['snoozeUntil'])
     passed('Snooze actually schedules the selected twenty-five minutes')
     second = open_real_ringing_timer()
     click(desc='Increase snooze by 5 minutes'); find(desc='Snooze duration: 15 minutes')
@@ -263,7 +279,7 @@ def ringing_snooze_checks():
     dismissed = record(second['id'])
     assert not dismissed['enabled'] and dismissed['snoozeUntil'] == 0
     assert second['id'] + '.scheduled' not in preferences('scheduled_occurrences')
-    assert int(preferences('scheduled_occurrences')[first['id'] + '.scheduled']) == snoozed['snoozeUntil']
+    assert_scheduled(first['id'], snoozed['snoozeUntil'])
     passed('Dismiss ignores duration and leaves another snoozed alarm intact')
     # Multiple out-of-phase countdowns can prevent UiAutomator from reaching idle.
     # Remove the already verified fixture before inspecting the next occurrence.
@@ -283,7 +299,7 @@ def ringing_snooze_checks():
         assert before + target * 60000 <= snoozed_by_key['snoozeUntil'] <= after + target * 60000 + 1000
         assert snoozed_by_key['enabled'] and snoozed_by_key['skipThrough'] == volume_alarm['snoozeUntil']
         assert snoozed_by_key['snoozeMinutes'] == volume_alarm['snoozeMinutes']
-        assert int(preferences('scheduled_occurrences')[volume_alarm['id'] + '.scheduled']) == snoozed_by_key['snoozeUntil']
+        assert_scheduled(volume_alarm['id'], snoozed_by_key['snoozeUntil'])
         time.sleep(1)
         assert find(desc=f'Snooze duration: {target} minutes', optional=True) is None, 'Volume snooze did not close ringing screen'
         passed(('Held volume up' if key == 24 else 'Volume down with animations off') + ' snoozes for the selected duration')
@@ -300,67 +316,68 @@ try:
     adb('shell', 'settings', 'put', 'secure', 'show_ime_with_hard_keyboard', '1')
     adb('logcat', '-c')
     adb('shell', 'am', 'start', '-W', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
-    find('No alarms yet'); passed('Material alarm empty state')
-    screenshot('alarms-empty-light')
-    click(desc='Add alarm'); find('New alarm')
-    click(desc='Set alarm time'); find('Set alarm time'); click('OK')
-    passed('Material time picker opens and confirms')
-    fill('Morning routine')
-    for day in ['Monday', 'Wednesday', 'Friday']: click(desc=day)
-    screenshot('alarm-editor-light')
-    tap_xy(xy(scroll_find('Save alarm'))); time.sleep(.5)
-    find('Morning routine'); passed('Create labeled repeating alarm')
-    switch = find(desc='Morning routine enabled')
-    assert switch.attrib.get('checked') == 'true'
-    tap_xy(xy(switch)); assert find(desc='Morning routine enabled').attrib.get('checked') == 'false'
-    click(desc='Morning routine enabled'); passed('Alarm switch updates enabled state')
-    adb('shell', 'am', 'force-stop', PKG)
-    adb('shell', 'am', 'start', '-W', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
-    find('Morning routine'); assert find(desc='Morning routine enabled').attrib.get('checked') == 'true'
-    passed('Alarm survives process restart')
-    screenshot('alarms-light')
-    click('Clock'); find('London'); passed('World clocks navigation')
-    click(desc='Add city'); fill('Paris'); click('Europe · Paris')
-    scroll_find('Paris'); passed('Search and add a world clock')
-    screenshot('clocks-light')
-    click('Timer'); click('25'); assert find(desc='Timer preset: 25 min').attrib['selected'] == 'true'
-    click('1'); assert find(desc='Timer preset: 1 min').attrib['selected'] == 'true'
-    passed('Timer preset selection follows the animated value change')
-    fill('0', desc='Timer minutes'); click('Start timer')
-    assert not any(a.get('timer') and a['enabled'] and not a['deleted'] for a in records())
-    assert find(desc='Timer minutes').attrib['text'] == '0'
-    screenshot('timer-validation-motion')
-    click('1'); assert find(desc='Timer minutes').attrib['text'] == '1'
-    passed('Invalid timer feedback leaves input editable and recovers with a preset')
-    click('Start timer'); time.sleep(.4)
-    scroll_find('Timer · 1 min'); passed('Create a timer through Material controls')
-    screenshot('timer-light')
-    tap_xy(xy(scroll_find('Cancel timer')))
-    assert find('Timer · 1 min', optional=True) is None
-    passed('Cancel timer removes it')
-    click('Stopwatch'); start = xy(find('Start')); lap = xy(find('Reset'))
-    tap_xy(start); time.sleep(.6); tap_xy(lap); tap_xy(start)
-    find('Start'); find('Lap 1')
-    assert not any(n.attrib.get('text') == '00:00.00' for n in tree().iter('node'))
-    passed('Stopwatch start, lap and pause')
-    screenshot('stopwatch-light')
-    click('Reset'); find('00:00.00'); passed('Stopwatch reset')
-    click('Bedtime'); click('8 hours'); click('9 hours'); find('9 hours of sleep')
-    passed('Sleep-goal dialog and updated summary')
-    screenshot('bedtime-light')
-    tap_xy(xy(scroll_find('Set wake-up alarm'))); tap_xy(xy(scroll_find('Save alarm')))
-    passed('Wake-up schedule uses redesigned editor')
-    click('Alarm'); find('Morning routine')
-    adb('shell', 'cmd', 'uimode', 'night', 'yes'); time.sleep(2)
-    find('Morning routine'); passed('Dark theme preserves alarm state')
-    screenshot('alarms-dark')
-    adb('shell', 'settings', 'put', 'system', 'font_scale', '1.3'); time.sleep(2)
-    click(desc='Add alarm'); find('New alarm'); tap_xy(xy(scroll_find('Cancel')))
-    passed('Alarm editor usable at 130 percent font scale')
-    time.sleep(1.2)
-    find('Alarms'); find('Stopwatch')
-    passed('Header and navigation remain visible with large text')
-    screenshot('alarms-large-type-dark')
+    if ARGS.scope == 'full':
+        find('No alarms yet'); passed('Material alarm empty state')
+        screenshot('alarms-empty-light')
+        click(desc='Add alarm'); find('New alarm')
+        click(desc='Set alarm time'); find('Set alarm time'); click('OK')
+        passed('Material time picker opens and confirms')
+        fill('Morning routine')
+        for day in ['Monday', 'Wednesday', 'Friday']: click(desc=day)
+        screenshot('alarm-editor-light')
+        tap_xy(xy(scroll_find('Save alarm'))); time.sleep(.5)
+        find('Morning routine'); passed('Create labeled repeating alarm')
+        switch = find(desc='Morning routine enabled')
+        assert switch.attrib.get('checked') == 'true'
+        tap_xy(xy(switch)); assert find(desc='Morning routine enabled').attrib.get('checked') == 'false'
+        click(desc='Morning routine enabled'); passed('Alarm switch updates enabled state')
+        adb('shell', 'am', 'force-stop', PKG)
+        adb('shell', 'am', 'start', '-W', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
+        find('Morning routine'); assert find(desc='Morning routine enabled').attrib.get('checked') == 'true'
+        passed('Alarm survives process restart')
+        screenshot('alarms-light')
+        click('Clock'); find('London'); passed('World clocks navigation')
+        click(desc='Add city'); fill('Paris'); click('Europe · Paris')
+        scroll_find('Paris'); passed('Search and add a world clock')
+        screenshot('clocks-light')
+        click('Timer'); click('25'); assert find(desc='Timer preset: 25 min').attrib['selected'] == 'true'
+        click('1'); assert find(desc='Timer preset: 1 min').attrib['selected'] == 'true'
+        passed('Timer preset selection follows the animated value change')
+        fill('0', desc='Timer minutes'); click('Start timer')
+        assert not any(a.get('timer') and a['enabled'] and not a['deleted'] for a in records())
+        assert find(desc='Timer minutes').attrib['text'] == '0'
+        screenshot('timer-validation-motion')
+        click('1'); assert find(desc='Timer minutes').attrib['text'] == '1'
+        passed('Invalid timer feedback leaves input editable and recovers with a preset')
+        click('Start timer'); time.sleep(.4)
+        scroll_find('Timer · 1 min'); passed('Create a timer through Material controls')
+        screenshot('timer-light')
+        tap_xy(xy(scroll_find('Cancel timer')))
+        assert find('Timer · 1 min', optional=True) is None
+        passed('Cancel timer removes it')
+        click('Stopwatch'); start = xy(find('Start')); lap = xy(find('Reset'))
+        tap_xy(start); time.sleep(.6); tap_xy(lap); tap_xy(start)
+        find('Start'); find('Lap 1')
+        assert not any(n.attrib.get('text') == '00:00.00' for n in tree().iter('node'))
+        passed('Stopwatch start, lap and pause')
+        screenshot('stopwatch-light')
+        click('Reset'); find('00:00.00'); passed('Stopwatch reset')
+        click('Bedtime'); click('8 hours'); click('9 hours'); find('9 hours of sleep')
+        passed('Sleep-goal dialog and updated summary')
+        screenshot('bedtime-light')
+        tap_xy(xy(scroll_find('Set wake-up alarm'))); tap_xy(xy(scroll_find('Save alarm')))
+        passed('Wake-up schedule uses redesigned editor')
+        click('Alarm'); find('Morning routine')
+        adb('shell', 'cmd', 'uimode', 'night', 'yes'); time.sleep(2)
+        find('Morning routine'); passed('Dark theme preserves alarm state')
+        screenshot('alarms-dark')
+        adb('shell', 'settings', 'put', 'system', 'font_scale', '1.3'); time.sleep(2)
+        click(desc='Add alarm'); find('New alarm'); tap_xy(xy(scroll_find('Cancel')))
+        passed('Alarm editor usable at 130 percent font scale')
+        time.sleep(1.2)
+        find('Alarms'); find('Stopwatch')
+        passed('Header and navigation remain visible with large text')
+        screenshot('alarms-large-type-dark')
     ringing_snooze_checks()
     motion_checks()
     pid = adb('shell', 'pidof', PKG).strip(); assert pid

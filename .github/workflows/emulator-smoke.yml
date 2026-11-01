@@ -1,6 +1,14 @@
 name: Android emulator smoke test
 on:
   workflow_dispatch:
+    inputs:
+      scope:
+        description: UI verification scope
+        type: choice
+        default: full
+        options:
+          - full
+          - ringing-motion
   push:
     branches: [main]
     paths:
@@ -16,6 +24,8 @@ permissions:
   contents: read
 jobs:
   emulator:
+    env:
+      ORBIT_UI_SCOPE: ${{ inputs.scope || (contains(github.event.head_commit.message, '[ui:ringing-motion]') && 'ringing-motion') || 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -59,7 +69,7 @@ jobs:
             adb shell appops set dev.orbit.clock SCHEDULE_EXACT_ALARM allow
             adb logcat -c
             adb shell am start -W -n dev.orbit.clock/dev.orbit.clock.phone.MainActivity > emulator-results/launch.txt
-            python tools/emulator_ui_check.py
+            python tools/emulator_ui_check.py --scope "$ORBIT_UI_SCOPE"
             sleep 2
             adb shell pidof dev.orbit.clock > emulator-results/pid.txt
             adb logcat -d -b crash > emulator-results/crashes.txt
