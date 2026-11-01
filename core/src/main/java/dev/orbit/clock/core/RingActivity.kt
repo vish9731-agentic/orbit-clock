@@ -117,7 +117,7 @@ class RingActivity : AppCompatActivity() {
         if (watch) {
             val actions = AlarmSlideControl(this, { act(true) }, { act(false) }, compact = true)
             watchActions = actions
-            body.addView(actions, LinearLayout.LayoutParams(-1, dp(64)))
+            body.addView(actions, LinearLayout.LayoutParams(dp((watchWidth * .80f).toInt().coerceAtMost(240)), dp(64)).apply { gravity = Gravity.CENTER_HORIZONTAL })
         } else {
             body.addView(AlarmSlideControl(this,
                 { VisualHints.learn(this, "ring_controls"); act(true) },
@@ -211,12 +211,13 @@ class RingActivity : AppCompatActivity() {
     }
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         if (event.action == MotionEvent.ACTION_SCROLL && event.isFromSource(InputDevice.SOURCE_ROTARY_ENCODER)) {
+            if (watch && watchActions?.touchActive == true) return true
             val rawTurn = event.getAxisValue(MotionEvent.AXIS_SCROLL)
             // Wear's positive raw axis is anticlockwise. Keep the existing
             // three/six-unit amounts while mapping anticlockwise to Snooze.
             val action = gesture.turn(if (watch) -rawTurn else rawTurn, SystemClock.elapsedRealtime())
             if (watch) {
-                watchActions?.setBezelProgress(gesture.isSnoozing, gesture.progress() / 100f)
+                watchActions?.setBezelProgress(gesture.isSnoozing, gesture.fraction())
                 bezelHandler.removeCallbacks(resetBezelFeedback)
                 bezelHandler.postDelayed(resetBezelFeedback, 1501)
             } else {

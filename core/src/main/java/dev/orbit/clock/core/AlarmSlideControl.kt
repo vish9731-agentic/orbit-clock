@@ -27,6 +27,8 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
     private var lastBezelTime = 0L
     private var lastBezelTarget = 0f
     private var bezelVelocity = 0f
+    private var visualVelocity = 0f
+    val touchActive: Boolean get() = dragging
     /** Physical progress is authoritative; spring inertia cannot fire an action. */
     fun setBezelProgress(snoozing: Boolean, fraction: Float) {
         if (fired || dragging) return
@@ -37,34 +39,42 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
         lastBezelTime = now; lastBezelTarget = target
         returnSpring?.cancel()
         if (!OrbitMotion.enabled()) {
-            bezelSpring?.cancel(); thumb.translationX = target; feedback(target); return
+            bezelSpring?.cancel(); visualVelocity = 0f; thumb.translationX = target; feedback(target); return
         }
         val spring = bezelSpring ?: SpringAnimation(thumb, DynamicAnimation.TRANSLATION_X).apply {
             this.spring = SpringForce(0f).apply { dampingRatio = .78f; stiffness = 420f }
             setMinValue(-travel()); setMaxValue(travel()); setMinimumVisibleChange(.15f)
-            addUpdateListener { _, value, _ -> feedback(value) }
+            addUpdateListener { _, value, velocity -> visualVelocity = velocity; feedback(value) }
         }.also { bezelSpring = it }
-        if (!spring.isRunning) spring.setStartVelocity(bezelVelocity * .18f)
+        if (!spring.isRunning) spring.setStartVelocity(visualVelocity + bezelVelocity * .18f)
         spring.animateToFinalPosition(target)
     }
     fun releaseBezel() {
+        if (dragging) return
         bezelSpring?.cancel(); lastBezelTarget = 0f
-        settle(velocity = bezelVelocity * .12f); bezelVelocity = 0f
+        settle(immediate = !hasWindowFocus(), velocity = visualVelocity); bezelVelocity = 0f
     }
     private lateinit var snoozeLabel: MaterialButton
     private lateinit var stopLabel: MaterialButton
     private val thumb: MaterialButton
     init {
+        if (compact) tag = "watch_ring_slider"
         background = GradientDrawable().apply { setColor(0xff103a35.toInt()); cornerRadius = dp(48).toFloat() }
         fun action(text: String, gravity: Int, callback: () -> Unit) {
             val button = MaterialButton(context).apply {
                 this.text = text; isAllCaps = false; textSize = if (compact) 13f else 22f; typeface = android.graphics.Typeface.create(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL), 450, false); setTextColor(0xffd3e3df.toInt())
                 backgroundTintList = ColorStateList.valueOf(android.graphics.Color.TRANSPARENT)
                 minWidth = 0; minimumWidth = 0; setPadding(0, 0, 0, 0); insetTop = 0; insetBottom = 0
+                if (compact) {
+                    contentDescription = if (text == "Stop") "Dismiss" else "Snooze"
+                    maxLines = 1
+                    setPadding(if (gravity == Gravity.END) dp(14) else 0, 0, if (gravity == Gravity.START) dp(14) else 0, 0)
+                    setAutoSizeTextTypeUniformWithConfiguration(9, 13, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+                }
                 setOnClickListener { if (!fired) { fired = true; performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM); callback() } }
             }
             if (text == "Snooze") snoozeLabel = button else stopLabel = button
-            addView(button, LayoutParams(dp(if (compact) 64 else 132), -1, gravity))
+            addView(button, LayoutParams(dp(if (compact) 56 else 132), -1, gravity))
         }
         action("Snooze", Gravity.START, snooze)
         action("Stop", Gravity.END, stop)
@@ -112,11 +122,11 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
                 }
             }
         }
-        addView(thumb, LayoutParams(dp(if (compact) 48 else 96), dp(if (compact) 48 else 64), Gravity.CENTER))
+        addView(thumb, LayoutParams(dp(if (compact) 72 else 96), dp(if (compact) 48 else 64), Gravity.CENTER))
         VisualHints.bind(this, "ring_controls", directional = true)
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
     }
-    private fun travel() = ((width - dp(if (compact) 48 else 96)) / 2f - dp(10)).coerceAtLeast(0f)
+    private fun travel() = ((width - dp(if (compact) 72 else 96)) / 2f - dp(10)).coerceAtLeast(0f)
     private fun track(event: MotionEvent) {
         val raw = MotionEvent.obtain(event)
         raw.offsetLocation(event.rawX - event.x, event.rawY - event.y)
@@ -131,14 +141,14 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
     private fun settle(immediate: Boolean = false, velocity: Float = 0f) {
         returnSpring?.cancel(); thumb.animate().cancel()
         if (immediate || !OrbitMotion.enabled()) {
-            thumb.translationX = 0f; thumb.rotation = 0f; thumb.scaleX = 1f; thumb.scaleY = 1f
+            visualVelocity = 0f; thumb.translationX = 0f; thumb.rotation = 0f; thumb.scaleX = 1f; thumb.scaleY = 1f
             feedback(0f)
         } else {
             thumb.animate().scaleX(1f).scaleY(1f).setStartDelay(0).setDuration(180).start()
             returnSpring = SpringAnimation(thumb, DynamicAnimation.TRANSLATION_X).apply {
-                spring = SpringForce(0f).apply { dampingRatio = .82f; stiffness = 700f }
-                setStartVelocity(velocity); setMinValue(-travel()); setMaxValue(travel()); setMinimumVisibleChange(.5f)
-                addUpdateListener { _, value, _ -> feedback(value) }
+                spring = SpringForce(0f).apply { dampingRatio = if (compact) .84f else .82f; stiffness = if (compact) 400f else 700f }
+                setStartVelocity(if (compact) velocity.coerceIn(-dp(240).toFloat(), dp(240).toFloat()) * .45f else velocity); setMinValue(-travel()); setMaxValue(travel()); setMinimumVisibleChange(.5f)
+                addUpdateListener { _, value, velocity -> visualVelocity = velocity; feedback(value) }
                 addEndListener { _, canceled, _, _ -> if (!canceled) { thumb.translationX = 0f; feedback(0f) } }
                 start()
             }
@@ -147,6 +157,6 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
     override fun onDetachedFromWindow() { bezelSpring?.cancel(); tracker?.recycle(); tracker = null; dragging = false; settle(true); super.onDetachedFromWindow() }
     override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
         super.onWindowFocusChanged(hasWindowFocus)
-        if (!hasWindowFocus) { tracker?.recycle(); tracker = null; dragging = false; settle(true) }
+        if (!hasWindowFocus) { bezelSpring?.cancel(); tracker?.recycle(); tracker = null; dragging = false; settle(true) }
     }
 }

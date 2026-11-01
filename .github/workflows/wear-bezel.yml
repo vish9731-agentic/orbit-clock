@@ -4,7 +4,8 @@ on:
   pull_request:
     paths:
       - 'core/src/main/java/dev/orbit/clock/core/RingActivity.kt'
-      - 'core/src/main/java/dev/orbit/clock/core/WatchRingActions.kt'
+      - 'core/src/main/java/dev/orbit/clock/core/AlarmSlideControl.kt'
+      - 'core/src/main/java/dev/orbit/clock/core/RotaryGesture.java'
       - 'core/src/main/java/dev/orbit/clock/core/RingingService.kt'
       - 'core/src/main/java/dev/orbit/clock/core/Scheduler.kt'
       - 'core/src/main/java/dev/orbit/clock/core/RingControls.kt'
@@ -14,7 +15,8 @@ on:
     branches: [main]
     paths:
       - 'core/src/main/java/dev/orbit/clock/core/RingActivity.kt'
-      - 'core/src/main/java/dev/orbit/clock/core/WatchRingActions.kt'
+      - 'core/src/main/java/dev/orbit/clock/core/AlarmSlideControl.kt'
+      - 'core/src/main/java/dev/orbit/clock/core/RotaryGesture.java'
       - 'core/src/main/java/dev/orbit/clock/core/RingingService.kt'
       - 'core/src/main/java/dev/orbit/clock/core/Scheduler.kt'
       - 'core/src/main/java/dev/orbit/clock/core/RingControls.kt'
@@ -61,7 +63,7 @@ jobs:
           target: android-wear
           arch: x86_64
           profile: wearos_large_round
-          disable-animations: true
+          disable-animations: false
           emulator-boot-timeout: 600
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -memory 2048
           script: |
@@ -74,6 +76,9 @@ jobs:
             adb shell dumpsys battery set level 80
             adb shell settings put system screen_off_timeout 1800000
             if [ "${{ matrix.density }}" != "default" ]; then adb shell wm density "${{ matrix.density }}"; fi
+            adb shell settings put global window_animation_scale 1
+            adb shell settings put global transition_animation_scale 1
+            adb shell settings put global animator_duration_scale 1
             adb shell input keyevent 224
             adb install wear/build/outputs/apk/debug/wear-debug.apk
             adb install build/wear-bezel-probe/probe.apk

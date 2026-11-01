@@ -16,5 +16,6 @@ public final class RotaryGesture {
         return Action.NONE;
     }
     public boolean isSnoozing() { return rotation < 0; }
+    public float fraction() { return Math.min(1f, Math.abs(rotation) / (rotation < 0 ? 3f : 6f)); }
     public int progress() { return Math.min(100, (int)(Math.abs(rotation) / (rotation < 0 ? 3 : 6) * 100)); }
 }
