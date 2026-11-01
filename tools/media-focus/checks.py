@@ -75,7 +75,7 @@ def run(ui):
     adb('shell','am','start','-W','-a','android.settings.SETTINGS')
     advancing('music')
     # A second real timer follows while music stays in a foreground playback service.
-    main();time.sleep(.7);before={a['id'] for a in records()};tap(one);tap(start)
+    main();click('Timer');time.sleep(.7);before={a['id'] for a in records()};tap(one);tap(start)
     second=next(a for a in records() if a['id'] not in before and a.get('timer') and a['enabled'])
     assert 0<second['snoozeUntil']-first['snoozeUntil']<45000,(first,second)
     adb('shell','am','start','-W','-a','android.settings.SETTINGS')
