@@ -70,7 +70,14 @@ def fill(value, desc=None):
     node = find(desc=desc) if desc else find(edit=True)
     tap_xy(xy(node)); adb('shell', 'input', 'keyevent', '123')
     for _ in range(len(node.attrib.get('text', '')) + 2): adb('shell', 'input', 'keyevent', '67')
-    adb('shell', 'input', 'text', value.replace(' ', '%s')); time.sleep(.3)
+    # Pace hardware-style injection on busy hosted emulators; do not retry edits.
+    for character in value:
+        if character == ' ': adb('shell', 'input', 'keyevent', '62')
+        else: adb('shell', 'input', 'text', character)
+        time.sleep(.06)
+    entered = find(desc=desc) if desc else find(edit=True)
+    assert entered.attrib.get('text', '') == value, ('Injected text mismatch', value, entered.attrib.get('text'))
+
     for attempt in range(3):
         try:
             ime = adb('shell', 'dumpsys', 'input_method'); break
