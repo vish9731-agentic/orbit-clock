@@ -50,7 +50,7 @@ open class ClockActivity : AppCompatActivity() {
     private var foreground = false
     private val refresh = Runnable { if (foreground && !isFinishing && !isDestroyed) render() }
     private val tick = object : Runnable {
-        override fun run() { ticker?.invoke(); handler.postDelayed(this, if (tab == "Stopwatch") 50 else 1000) }
+        override fun run() { ticker?.invoke(); handler.postDelayed(this, if (tab == "Stopwatch" && prefs.getBoolean("running", false)) 16 else 1000) }
     }
     private val prefs by lazy { getSharedPreferences("tools", MODE_PRIVATE) }
     private val changes = object : BroadcastReceiver() {
@@ -196,6 +196,7 @@ open class ClockActivity : AppCompatActivity() {
             }
         }
         scroll.requestFocus()
+        handler.removeCallbacks(tick); if (foreground) handler.post(tick)
     }
     private fun chooseWatchTool(anchor: View) {
         PopupMenu(this, anchor).apply {
@@ -446,7 +447,8 @@ open class ClockActivity : AppCompatActivity() {
         }
         ticker = { labels.forEach { (alarm, view) ->
             val seconds = ((alarm.snoozeUntil - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
-            view.text = String.format(Locale.getDefault(), "%02d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
+            val value = String.format(Locale.getDefault(), "%02d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
+            if (view.text.toString() != value) view.text = value
         } }; ticker?.invoke()
     }
     private fun stopwatch() {
@@ -461,7 +463,13 @@ open class ClockActivity : AppCompatActivity() {
         val display = text("", if (watch) 28f else 46f, colors.onPrimaryContainer).apply { gravity = Gravity.CENTER; typeface = Typeface.create("sans-serif-light", Typeface.NORMAL); contentDescription = "Stopwatch elapsed time" }
         face.addView(display, FrameLayout.LayoutParams(-1, -1))
         content.addView(face, LinearLayout.LayoutParams(dialSize, dialSize).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(16); bottomMargin = dp(32) })
-        ticker = { val ms = elapsed(); display.text = String.format(Locale.getDefault(), "%02d:%02d.%02d", ms / 60_000, ms / 1000 % 60, ms / 10 % 100); dial.progress = (ms % 60_000) / 60_000f; dial.invalidate() }; ticker?.invoke()
+        ticker = {
+            val ms = elapsed()
+            val value = String.format(Locale.getDefault(), "%02d:%02d.%02d", ms / 60_000, ms / 1000 % 60, ms / 10 % 100)
+            if (display.text.toString() != value) display.text = value
+            val fraction = (ms % 60_000) / 60_000f
+            if (dial.progress != fraction) { dial.progress = fraction; dial.invalidate() }
+        }; ticker?.invoke()
         val running = prefs.getBoolean("running", false)
         content.addView(button(if (running) "Pause" else "Start", icon = if (running) R.drawable.ic_pause else R.drawable.ic_play) {
             if (running) prefs.edit().putLong("elapsed", elapsed()).putBoolean("running", false).apply()
