@@ -110,30 +110,39 @@ def open_real_ringing_timer():
     find(desc='Snooze duration: 10 minutes')
     return alarm
 
+def slide_alarm(direction, short=False):
+    thumb = find(desc='Alarm slider: swipe left to snooze, right to stop')
+    x, y = xy(thumb)
+    w = int(re.search(r'(\d+)x(\d+)', adb('shell', 'wm', 'size')).group(1))
+    distance = int(w * (.04 if short else .36))
+    adb('shell', 'input', 'swipe', str(x), str(y), str(x + direction * distance), str(y), '450')
+    time.sleep(.5)
+
 def ringing_snooze_checks():
     adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
     adb('shell', 'appops', 'set', PKG, 'USE_FULL_SCREEN_INTENT', 'allow')
     first = open_real_ringing_timer()
     passed('Real alarm delivery opens the ringing snooze controls')
+    find(desc='Alarm label: Timer · 1 min')
+    find(desc='Alarm slider: swipe left to snooze, right to stop')
     adb('shell', 'cmd', 'uimode', 'night', 'no'); time.sleep(1)
-    find('Snooze for'); find('Snooze'); find('Dismiss')
-    screenshot('ringing-material-light')
-    light = Image.open(OUT / 'ringing-material-light.png').convert('RGB').getpixel((10, 200))
+    find('Snooze'); find('Stop'); screenshot('ringing-reference-light-setting')
+    light = Image.open(OUT / 'ringing-reference-light-setting.png').convert('RGB').getpixel((10, 200))
     adb('shell', 'cmd', 'uimode', 'night', 'yes'); time.sleep(1)
-    find('Snooze for'); screenshot('ringing-material-dark')
-    dark = Image.open(OUT / 'ringing-material-dark.png').convert('RGB').getpixel((10, 200))
-    assert sum(light) > sum(dark) + 150, (light, dark)
-    passed('Ringing Material You surface follows light and dark themes')
+    screenshot('ringing-reference-dark-setting')
+    dark = Image.open(OUT / 'ringing-reference-dark-setting.png').convert('RGB').getpixel((10, 200))
+    assert light == dark and sum(dark) < 150, (light, dark)
+    passed('Reference ringing screen keeps its dark green background in both system themes')
     adb('shell', 'settings', 'put', 'system', 'font_scale', '1.3'); time.sleep(1)
-    nodes = [find('Snooze'), find('Dismiss'), find(desc='Decrease snooze by 5 minutes'), find(desc='Increase snooze by 5 minutes')]
+    nodes = [find('Snooze'), find('Stop'), find(desc='Decrease snooze by 5 minutes'), find(desc='Increase snooze by 5 minutes')]
     w, h = map(int, re.search(r'(\d+)x(\d+)', adb('shell', 'wm', 'size')).groups())
     for node in nodes:
         l, t, r, b = map(int, re.findall(r'\d+', node.attrib['bounds']))
         assert 0 <= l < r <= w and 0 <= t < b <= h, node.attrib
         assert node.attrib['clickable'] == 'true'
     snooze_bounds, dismiss_bounds = [list(map(int, re.findall(r'\d+', n.attrib['bounds']))) for n in nodes[:2]]
-    assert snooze_bounds[3] <= dismiss_bounds[1]
-    screenshot('ringing-material-large-type')
+    assert snooze_bounds[2] <= dismiss_bounds[0]
+    screenshot('ringing-reference-large-type')
     passed('Ringing actions remain visible and separate at 130 percent font scale')
     adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0'); time.sleep(1)
     minus = xy(find(desc='Decrease snooze by 5 minutes'))
@@ -160,8 +169,12 @@ def ringing_snooze_checks():
     find(desc='Snooze duration: 25 minutes')
     passed('Selected snooze duration survives activity recreation')
     screenshot('ringing-snooze-selected')
+    slide_alarm(-1, short=True)
+    assert record(first['id'])['snoozeUntil'] == first['snoozeUntil']
+    find(desc='Snooze duration: 25 minutes')
+    passed('Short slider drag resets without snoozing or stopping')
     before = int(adb('shell', 'date', '+%s').strip()) * 1000
-    click('Snooze')
+    slide_alarm(-1)
     after = int(adb('shell', 'date', '+%s').strip()) * 1000
     snoozed = record(first['id'])
     assert before + 25 * 60000 <= snoozed['snoozeUntil'] <= after + 25 * 60000 + 1000
@@ -170,7 +183,7 @@ def ringing_snooze_checks():
     passed('Snooze actually schedules the selected twenty-five minutes')
     second = open_real_ringing_timer()
     click(desc='Increase snooze by 5 minutes'); find(desc='Snooze duration: 15 minutes')
-    click('Dismiss')
+    slide_alarm(1)
     dismissed = record(second['id'])
     assert not dismissed['enabled'] and dismissed['snoozeUntil'] == 0
     assert second['id'] + '.scheduled' not in preferences('scheduled_occurrences')

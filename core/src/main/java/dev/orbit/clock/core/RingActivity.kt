@@ -11,9 +11,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
-import com.google.android.material.color.DynamicColors
-import com.google.android.material.color.MaterialColors
-import com.google.android.material.card.MaterialCardView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import java.time.LocalTime
@@ -39,8 +36,7 @@ class RingActivity : AppCompatActivity() {
     }
     override fun onCreate(state: Bundle?) {
         watch = packageManager.hasSystemFeature("android.hardware.type.watch")
-        setTheme(if (watch) R.style.Theme_OrbitClock_Ringing else R.style.Theme_OrbitClock)
-        if (!watch) DynamicColors.applyToActivityIfAvailable(this)
+        setTheme(R.style.Theme_OrbitClock_Ringing)
         super.onCreate(state)
         setShowWhenLocked(true); setTurnScreenOn(true)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -53,92 +49,68 @@ class RingActivity : AppCompatActivity() {
         val sameOccurrence = state != null && state.getString("ring.id") == id && state.getLong("ring.at") == at
         selectedMinutes = SnoozeDuration.clamp(if (sameOccurrence) state!!.getInt("ring.minutes", alarm.snoozeMinutes) else alarm.snoozeMinutes)
         val colors = OrbitPalette(this)
-        watch = packageManager.hasSystemFeature("android.hardware.type.watch")
+        val background = if (watch) colors.surface else 0xff111f1c.toInt()
+        val foreground = if (watch) colors.onSurface else 0xffd3e3df.toInt()
+        val accent = if (watch) colors.primary else 0xff74e8d7.toInt()
+        val name = alarm.label.trim().ifBlank { "Alarm" }
         fun dp(n: Int) = (resources.displayMetrics.density * n).toInt()
+        fun label(value: String, size: Float) = TextView(this).apply {
+            text = value; textSize = size; gravity = Gravity.CENTER; setTextColor(foreground); includeFontPadding = false
+        }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(if (watch) 28 else 24), dp(if (watch) 8 else 20), dp(if (watch) 28 else 24), dp(if (watch) 8 else 12))
+            setPadding(dp(if (watch) 28 else 16), dp(8), dp(if (watch) 28 else 16), dp(8))
             isFocusableInTouchMode = true
         }
-        fun label(value: String, size: Float, color: Int = colors.onSurface) = TextView(this).apply {
-            text = value; textSize = size; gravity = Gravity.CENTER; setTextColor(color); includeFontPadding = false
-        }
         val now = LocalTime.now()
-        val twentyFour = android.text.format.DateFormat.is24HourFormat(this)
-        val time = now.format(DateTimeFormatter.ofPattern(if (twentyFour) "HH:mm" else "h:mm"))
+        val time = now.format(DateTimeFormatter.ofPattern(if (android.text.format.DateFormat.is24HourFormat(this)) "HH:mm" else "h:mm"))
         if (watch) {
             body.gravity = Gravity.CENTER
-            progress = label("$time · ${alarm.label}", 16f).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
-            body.addView(progress, LinearLayout.LayoutParams(dp(128), -2).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(10) })
+            progress = label("$time · $name", 16f).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+            body.addView(progress, LinearLayout.LayoutParams(dp(128), -2).apply { bottomMargin = dp(10) })
         } else {
-            val hero = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(0, dp(12), 0, dp(24)) }
-            val badge = label(if (alarm.timer) "Timer" else "Alarm", 14f, colors.primary).apply {
-                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-                setCompoundDrawablesRelativeWithIntrinsicBounds(if (alarm.timer) R.drawable.ic_timer else R.drawable.ic_alarm, 0, 0, 0)
-                compoundDrawableTintList = ColorStateList.valueOf(colors.primary); compoundDrawablePadding = dp(8)
-            }
-            hero.addView(badge, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(24) })
-            val faceSize = minOf(280, resources.configuration.screenWidthDp - 48,
-                if (resources.configuration.screenHeightDp < 640) 220 else 280)
-            val face = FrameLayout(this)
-            face.addView(RingingFace(this, colors), FrameLayout.LayoutParams(-1, -1))
-            val digits = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(24), 0, dp(24), 0) }
-            digits.addView(label(time, 76f, colors.onPrimaryContainer).apply {
-                typeface = Typeface.create("sans-serif", Typeface.NORMAL); letterSpacing = -.045f
-                maxLines = 1; setAutoSizeTextTypeUniformWithConfiguration(32, 76, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
-            }, LinearLayout.LayoutParams(-1, dp(104)))
-            if (!twentyFour) digits.addView(label(now.format(DateTimeFormatter.ofPattern("a")), 16f, colors.onPrimaryContainer))
-            face.addView(digits, FrameLayout.LayoutParams(-1, -1))
-            hero.addView(face, LinearLayout.LayoutParams(dp(faceSize), dp(faceSize)))
-            hero.addView(label(alarm.label, 24f).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END },
-                LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(24) })
-            body.addView(hero, LinearLayout.LayoutParams(-1, -2, 1f))
+            body.addView(Space(this), LinearLayout.LayoutParams(1, 0, 3.3f))
+            body.addView(label(time, 144f).apply {
+                typeface = Typeface.create("sans-serif", Typeface.NORMAL); letterSpacing = -.035f
+                contentDescription = "Alarm time: $time"; maxLines = 1
+                setAutoSizeTextTypeUniformWithConfiguration(56, 144, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            }, LinearLayout.LayoutParams(-1, dp(156)))
+            body.addView(label(name, 32f).apply {
+                contentDescription = "Alarm label: $name"; maxLines = 2; ellipsize = TextUtils.TruncateAt.END
+            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16); bottomMargin = dp(48) })
         }
-        fun control(value: String, tonal: Boolean, callback: () -> Unit) = MaterialButton(this).apply {
-            text = value; isAllCaps = false; textSize = if (watch) 16f else 20f; cornerRadius = dp(40); insetTop = 0; insetBottom = 0
-            backgroundTintList = ColorStateList.valueOf(if (tonal) colors.secondaryContainer else colors.primary)
-            setTextColor(if (tonal) colors.onSecondaryContainer else colors.onPrimary)
-            setOnClickListener { callback() }
-        }
-        val actions = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
-        if (!watch) {
-            actions.setPadding(dp(16), dp(20), dp(16), dp(16))
-            actions.addView(label("Snooze for", 14f, colors.muted), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+        fun control(value: String, callback: () -> Unit) = MaterialButton(this).apply {
+            text = value; isAllCaps = false; textSize = 24f; minWidth = 0; minimumWidth = 0
+            setPadding(0, 0, 0, 0); cornerRadius = dp(28); insetTop = 0; insetBottom = 0
+            backgroundTintList = ColorStateList.valueOf(if (watch) colors.containerHigh else android.graphics.Color.TRANSPARENT)
+            setTextColor(foreground); setOnClickListener { callback() }
         }
         val stepper = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-        fun step(value: String, description: String, callback: () -> Unit) = control(value, true, callback).apply {
-            contentDescription = description; textSize = 24f; minWidth = 0; minimumWidth = 0
-            setPadding(0, 0, 0, 0); cornerRadius = dp(28)
-            backgroundTintList = ColorStateList.valueOf(colors.containerHigh); setTextColor(colors.onSurface)
-        }
-        decrease = step("−", "Decrease snooze by 5 minutes") { selectedMinutes = SnoozeDuration.decrease(selectedMinutes); updateDuration() }
-        increase = step("+", "Increase snooze by 5 minutes") { selectedMinutes = SnoozeDuration.increase(selectedMinutes); updateDuration() }
-        duration = label("", if (watch) 18f else 24f).apply { accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
+        decrease = control("−") { selectedMinutes = SnoozeDuration.decrease(selectedMinutes); updateDuration() }.apply { contentDescription = "Decrease snooze by 5 minutes" }
+        increase = control("+") { selectedMinutes = SnoozeDuration.increase(selectedMinutes); updateDuration() }.apply { contentDescription = "Increase snooze by 5 minutes" }
+        duration = label("", if (watch) 18f else 18f).apply { accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
         val size = dp(if (watch) 40 else 48)
         stepper.addView(decrease, LinearLayout.LayoutParams(size, size))
-        stepper.addView(duration, LinearLayout.LayoutParams(dp(if (watch) 68 else 112), size))
+        stepper.addView(duration, LinearLayout.LayoutParams(dp(if (watch) 68 else 96), size))
         stepper.addView(increase, LinearLayout.LayoutParams(size, size))
-        actions.addView(stepper, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(if (watch) 8 else 20) })
+        body.addView(stepper, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(if (watch) 8 else 16) })
         updateDuration()
-        actions.addView(control("Snooze", false) { act(true) }.apply {
-            if (!watch) { setIconResource(R.drawable.ic_bedtime); iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START; iconTint = ColorStateList.valueOf(colors.onPrimary); iconPadding = dp(12) }
-        }, LinearLayout.LayoutParams(-1, dp(if (watch) 44 else 64)))
-        if (watch) body.addView(actions, LinearLayout.LayoutParams(-1, -2))
-        else body.addView(MaterialCardView(this).apply {
-            radius = dp(32).toFloat(); cardElevation = 0f; strokeWidth = 0; setCardBackgroundColor(colors.container)
-            addView(actions)
-        }, LinearLayout.LayoutParams(-1, -2))
-        body.addView(control("Dismiss", true) { act(false) }.apply {
-            if (!watch) { backgroundTintList = ColorStateList.valueOf(android.graphics.Color.TRANSPARENT); setTextColor(colors.primary); textSize = 18f }
-        }, LinearLayout.LayoutParams(-1, dp(if (watch) 44 else 56)).apply { topMargin = dp(if (watch) 8 else 8) })
-        if (!watch) {
-            progress = label("", 12f, colors.muted).apply { visibility = View.GONE }
-            body.addView(progress, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        if (watch) {
+            body.addView(control("Snooze") { act(true) }.apply {
+                textSize = 16f; backgroundTintList = ColorStateList.valueOf(colors.primary); setTextColor(colors.onPrimary)
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            body.addView(control("Stop") { act(false) }.apply { textSize = 16f },
+                LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(8) })
+        } else {
+            body.addView(AlarmSlideControl(this, { act(true) }, { act(false) }), LinearLayout.LayoutParams(-1, dp(88)))
+            body.addView(Space(this), LinearLayout.LayoutParams(1, 0, 1.15f))
+            progress = label("", 12f).apply { visibility = View.GONE }
+            body.addView(progress, LinearLayout.LayoutParams(-1, -2))
         }
-        indicator = LinearProgressIndicator(this).apply { max = 100; visibility = View.GONE; trackCornerRadius = dp(3) }
-        body.addView(indicator, LinearLayout.LayoutParams(-1, dp(4)).apply { topMargin = dp(8) })
+        indicator = LinearProgressIndicator(this).apply { max = 100; visibility = View.GONE; trackCornerRadius = dp(3); setIndicatorColor(accent) }
+        body.addView(indicator, LinearLayout.LayoutParams(-1, dp(4)))
         val scroller = ScrollView(this).apply {
-            isFillViewport = true; setBackgroundColor(colors.surface)
+            isFillViewport = true; setBackgroundColor(background)
             addView(body, FrameLayout.LayoutParams(-1, -2))
         }
         setContentView(scroller)
@@ -146,7 +118,13 @@ class RingActivity : AppCompatActivity() {
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             v.setPadding(bars.left, bars.top, bars.right, bars.bottom); WindowInsetsCompat.CONSUMED
         }
-        WindowCompat.getInsetsController(window, scroller).apply { isAppearanceLightStatusBars = !MaterialColors.isColorLight(colors.onSurface); isAppearanceLightNavigationBars = !MaterialColors.isColorLight(colors.onSurface) }
+        WindowCompat.getInsetsController(window, scroller).apply {
+            isAppearanceLightStatusBars = false; isAppearanceLightNavigationBars = false
+            if (!watch) {
+                systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                hide(WindowInsetsCompat.Type.systemBars())
+            }
+        }
         ViewCompat.requestApplyInsets(scroller); body.requestFocus()
     }
     private fun updateDuration() {
