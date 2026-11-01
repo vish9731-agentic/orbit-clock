@@ -184,14 +184,41 @@ public final class BezelUiProbe extends Instrumentation {
         return bounded(detail.toString(),50000);
     }
     private Activity delivered(String id) throws Exception {
-        resumed=null;
-        long at=System.currentTimeMillis()+12000;
-        fixtureId=id; fixtureAt=at;
-        JSONObject alarm=new JSONObject().put("id",id).put("hour",7).put("minute",0).put("label","Watch alarm").put("timer",true)
-            .put("days",new JSONArray()).put("enabled",true).put("vibrate",true).put("sound",true).put("snoozeMinutes",10)
-            .put("snoozeUntil",at).put("skipThrough",0).put("deleted",false).put("revision",System.currentTimeMillis()).put("writer","bezel-ui-probe");
-        JSONArray all=records(); all.put(alarm); require(prefs("alarms").edit().putString("records",all.toString()).commit(),"Cannot seed alarm");
-        ui(() -> { target.startActivity(new Intent().setClassName(PKG,MAIN).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK)); return null; });
+        // Complete cold-start/configuration work before choosing a short deadline.
+        // Scheduling through production Store.save is the same path used by the editor.
+        ui(() -> {
+            if(resumed==null || !resumed.getClass().getName().equals(MAIN) || resumed.isFinishing() || !resumed.hasWindowFocus())
+                target.startActivity(new Intent().setClassName(PKG,MAIN).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP));
+            return null;
+        });
+        waitUntil(() -> ui(() -> resumed!=null && resumed.getClass().getName().equals(MAIN) && !resumed.isFinishing() && resumed.hasWindowFocus() && resumed.getWindow().getDecorView().isLaidOut()),15000,"MainActivity did not become ready for timer creation");
+        waitForIdleSync();
+        long stableSince=SystemClock.elapsedRealtime();
+        String stableConfiguration="";
+        long until=SystemClock.elapsedRealtime()+10000;
+        while(SystemClock.elapsedRealtime()<until) {
+            String configuration=ui(() -> resumed!=null && resumed.getClass().getName().equals(MAIN) && !resumed.isFinishing() && resumed.hasWindowFocus()
+                ? System.identityHashCode(resumed)+":"+resumed.getResources().getConfiguration().toString() : "");
+            if(configuration.isEmpty() || !configuration.equals(stableConfiguration)) { stableConfiguration=configuration; stableSince=SystemClock.elapsedRealtime(); }
+            else if(SystemClock.elapsedRealtime()-stableSince>=500) break;
+            SystemClock.sleep(25);
+        }
+        require(!stableConfiguration.isEmpty() && SystemClock.elapsedRealtime()-stableSince>=500,"MainActivity configuration did not settle");
+        long at=ui(() -> {
+            long deadline=System.currentTimeMillis()+12000;
+            fixtureId=id; fixtureAt=deadline;
+            JSONObject alarm=new JSONObject().put("id",id).put("hour",7).put("minute",0).put("label","Watch alarm").put("timer",true)
+                .put("days",new JSONArray()).put("enabled",true).put("vibrate",true).put("sound",true).put("snoozeMinutes",10)
+                .put("snoozeUntil",deadline).put("skipThrough",0).put("deleted",false).put("revision",System.currentTimeMillis()).put("writer","bezel-ui-probe");
+            ClassLoader loader=target.getClassLoader();
+            Class<?> storeClass=Class.forName("dev.orbit.clock.core.Store",true,loader);
+            Class<?> alarmClass=Class.forName("dev.orbit.clock.core.Alarm",true,loader);
+            Object companion=storeClass.getField("Companion").get(null);
+            Object decoded=companion.getClass().getMethod("decode",JSONObject.class).invoke(companion,alarm);
+            Object store=storeClass.getConstructor(Context.class).newInstance(target);
+            storeClass.getMethod("save",alarmClass).invoke(store,decoded);
+            return deadline;
+        });
         waitUntil(() -> prefs("scheduled_occurrences").getLong(id+".scheduled",0)==at,10000,"Real timer was not scheduled");
         waitUntil(() -> prefs("scheduled_occurrences").getLong(id+".active",0)==at,30000,"Real AlarmReceiver did not accept timer");
         ui(() -> { target.startActivity(new Intent().setClassName(PKG,RING).putExtra("id",id).putExtra("at",at).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP)); return null; });
