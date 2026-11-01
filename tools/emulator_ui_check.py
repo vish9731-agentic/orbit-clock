@@ -11,7 +11,7 @@ from PIL import Image, ImageChops, ImageStat
 import imageio_ffmpeg
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--scope', choices=['full', 'ringing-motion', 'motion', 'guidance', 'visual-cue'], default='full')
+parser.add_argument('--scope', choices=['full', 'ringing-motion', 'motion', 'guidance', 'visual-cue', 'notifications'], default='full')
 ARGS = parser.parse_args()
 
 OUT = Path('emulator-results')
@@ -258,7 +258,7 @@ def guidance_checks():
     assert find(city, optional=True) is None
     passed('Visible city remove icon supports cancel and confirmed deletion')
     click('Timer'); click(desc='Timer preset: 25 min')
-    assert preferences('visual_hints').get('timer_presets.learned') == 'true'
+    assert find(desc='Timer minutes').attrib['text'] == '25'
     passed('Visual preset guidance retains immediate selection and learning')
     # Status reports connection/request state, never invents a delivery acknowledgement.
     click(desc='Sync devices')
@@ -285,6 +285,78 @@ def guidance_checks():
     assert find('New alarm', optional=True) is None
     assert {a['id'] for a in records()} == before
     passed('Native back closes the editor without saving a draft')
+
+def ringing_only_shimmer_checks():
+    for tab in ['Alarm', 'Clock', 'Timer', 'Stopwatch', 'Bedtime']:
+        click(tab)
+    impressions = preferences('visual_hints')
+    assert not any(k.endswith('.shown') and k != 'ring_controls.shown' for k in impressions), impressions
+    passed('No shimmer is registered on any of the five main tools')
+
+def heads_up_bounds(name):
+    # Read actual banner pixels quickly; UiAutomator can outwait heads-up presentation.
+    until = time.monotonic() + 8
+    while time.monotonic() < until:
+        path = OUT / (name + '.png')
+        path.write_bytes(adb('exec-out', 'screencap', '-p', binary=True))
+        im = Image.open(path).convert('RGB')
+        # The dark green action rail must be in the upper part of another app.
+        mask = im.point(lambda v: v)
+        points = []
+        for y in range(60, im.height // 2, 3):
+            matches = [x for x in range(0, im.width, 3) if sum(abs(a-b) for a,b in zip(im.getpixel((x,y)), (16,58,53))) < 12]
+            if len(matches) > im.width / 9: points.extend((x,y) for x in matches)
+        if points:
+            xs, ys = zip(*points)
+            return min(xs), min(ys), max(xs), max(ys)
+        time.sleep(.15)
+    raise AssertionError('No actionable alarm rail appeared over the other app')
+
+def open_heads_up_timer():
+    adb('shell', 'am', 'start', '-W', '-f', '0x14000000', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
+    click('Timer'); click('1'); click('Start timer')
+    alarm = max([a for a in records() if a.get('timer') and a['enabled'] and not a['deleted']], key=lambda a:a['revision'])
+    adb('shell', 'input', 'keyevent', '224'); adb('shell', 'wm', 'dismiss-keyguard')
+    adb('shell', 'am', 'start', '-W', '-a', 'android.settings.SETTINGS')
+    until = time.monotonic() + 95
+    while time.monotonic() < until:
+        if int(preferences('scheduled_occurrences').get(alarm['id'] + '.active', 0)) == alarm['snoozeUntil']: break
+        time.sleep(.5)
+    else: raise AssertionError('Timer was not delivered while another app was open')
+    return alarm
+
+def notification_checks():
+    adb('shell', 'appops', 'set', PKG, 'USE_FULL_SCREEN_INTENT', 'ignore')
+    first = open_heads_up_timer()
+    l,t,r,b = heads_up_bounds('heads-up-other-app')
+    activity = adb('shell', 'dumpsys', 'activity', 'activities')
+    assert any('com.android.settings' in line for line in activity.splitlines() if 'ResumedActivity' in line or 'topResumedActivity' in line), activity[-3000:]
+    passed('Custom heads-up action rail appears while Settings remains open')
+    density = float(re.search(r'(\d+)', adb('shell', 'wm', 'density')).group(1)) / 160
+    # Plus is 18dp from the rail end; its row is directly above the action rail.
+    tap_xy((int(r - 18*density), int(t - 18*density)))
+    until = time.monotonic() + 4
+    while preferences('ring_selection').get(first['id'] + '.minutes') != '15':
+        assert time.monotonic() < until, preferences('ring_selection')
+        time.sleep(.1)
+    passed('Heads-up plus adjusts occurrence snooze by five minutes without opening the app')
+    before = int(adb('shell', 'date', '+%s').strip()) * 1000
+    tap_xy((int(l + (r-l)*.24), int((t+b)/2)))
+    after = int(adb('shell', 'date', '+%s').strip()) * 1000
+    snoozed = record(first['id'])
+    assert before + 15*60000 <= snoozed['snoozeUntil'] <= after + 15*60000 + 1000
+    assert snoozed['snoozeMinutes'] == first['snoozeMinutes']
+    assert_scheduled(first['id'], snoozed['snoozeUntil'])
+    passed('Heads-up Snooze schedules the selected fifteen minutes and preserves the saved default')
+    adb('shell', 'am', 'start', '-W', '-f', '0x14000000', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
+    click('Timer'); tap_xy(xy(scroll_find('Cancel timer')))
+    second = open_heads_up_timer()
+    l,t,r,b = heads_up_bounds('heads-up-stop-other-app')
+    tap_xy((int(l + (r-l)*.76), int((t+b)/2)))
+    stopped = record(second['id'])
+    assert not stopped['enabled'] and stopped['snoozeUntil'] == 0
+    assert second['id'] + '.scheduled' not in preferences('scheduled_occurrences')
+    passed('Heads-up Stop dismisses the ringing occurrence directly over another app')
 
 def ringing_snooze_checks():
     adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
@@ -484,13 +556,16 @@ try:
         passed('Header and navigation remain visible with large text')
         screenshot('alarms-large-type-dark')
     if ARGS.scope in ['full', 'guidance']: guidance_checks()
-    if ARGS.scope in ['full', 'ringing-motion']: ringing_snooze_checks()
+    if ARGS.scope in ['full', 'ringing-motion']:
+        ringing_only_shimmer_checks()
+        ringing_snooze_checks()
+    if ARGS.scope in ['full', 'ringing-motion', 'notifications']: notification_checks()
     if ARGS.scope == 'visual-cue':
         alarm = open_real_ringing_timer(capture=True)
         assert find('Slide left to snooze · right to stop', optional=True) is None
         click('Stop'); assert not record(alarm['id'])['enabled']
         passed('Visual-only ringing cue leaves Stop immediately functional')
-    if ARGS.scope not in ['guidance', 'visual-cue']: motion_checks()
+    if ARGS.scope not in ['guidance', 'visual-cue', 'notifications']: motion_checks()
     pid = adb('shell', 'pidof', PKG).strip(); assert pid
     crashes = adb('logcat', '-d', '-b', 'crash'); (OUT / 'crashes.txt').write_text(crashes)
     assert not crashes.strip(), crashes

@@ -17,6 +17,7 @@ object VisualHints {
     fun learn(c: Context, key: String) { prefs(c).edit().putBoolean("$key.learned", true).apply() }
     fun cancel(view: View) { active.remove(view)?.cancel() }
     fun bind(view: View, key: String, directional: Boolean = false) {
+        if (key != "ring_controls") return
         val p = prefs(view.context)
         if (p.getBoolean("$key.learned", false) || key in sessions || p.getInt("$key.shown", 0) >= 3) return
         val light = Sweep(directional)

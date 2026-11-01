@@ -30,7 +30,7 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
         background = GradientDrawable().apply { setColor(0xff103a35.toInt()); cornerRadius = dp(48).toFloat() }
         fun action(text: String, gravity: Int, callback: () -> Unit) {
             val button = MaterialButton(context).apply {
-                this.text = text; isAllCaps = false; textSize = 24f; typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL); setTextColor(0xffd3e3df.toInt())
+                this.text = text; isAllCaps = false; textSize = 22f; typeface = android.graphics.Typeface.create(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL), 450, false); setTextColor(0xffd3e3df.toInt())
                 backgroundTintList = ColorStateList.valueOf(android.graphics.Color.TRANSPARENT)
                 minWidth = 0; minimumWidth = 0; setPadding(0, 0, 0, 0); insetTop = 0; insetBottom = 0
                 setOnClickListener { if (!fired) { fired = true; performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM); callback() } }

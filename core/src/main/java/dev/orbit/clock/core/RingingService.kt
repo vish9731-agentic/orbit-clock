@@ -23,8 +23,8 @@ class RingingService : Service() {
     }
     override fun onCreate() {
         super.onCreate()
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(changes, IntentFilter(Store.CHANGED), RECEIVER_NOT_EXPORTED)
-        else registerReceiver(changes, IntentFilter(Store.CHANGED))
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(changes, IntentFilter(Store.CHANGED).apply { addAction(RingControls.CHANGED) }, RECEIVER_NOT_EXPORTED)
+        else registerReceiver(changes, IntentFilter(Store.CHANGED).apply { addAction(RingControls.CHANGED) })
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel("ringing", "Ringing alarms", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Time-sensitive alarm controls"; setSound(null, null); enableVibration(false)
@@ -61,9 +61,40 @@ class RingingService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val notification = Notification.Builder(this, "ringing")
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm).setContentTitle(a.label)
-            .setContentText(if (active.size > 1) "${active.size} alarms ringing • tap for controls" else "Alarm • tap for snooze or dismiss")
+            .setContentText(if (active.size > 1) "${active.size} alarms ringing" else "Alarm")
+            .setOnlyAlertOnce(!fullScreen)
             .setCategory(Notification.CATEGORY_ALARM).setVisibility(Notification.VISIBILITY_PUBLIC)
             .setOngoing(true).setContentIntent(screen)
+        val minutes = RingControls.minutes(this, a, entry.value)
+        val snooze = RingControls.pending(this, a, entry.value, "snooze")
+        val stop = RingControls.pending(this, a, entry.value, "stop")
+        if (packageManager.hasSystemFeature("android.hardware.type.watch")) {
+            notification.addAction(Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_alarm), "Snooze", snooze).build())
+                .addAction(Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_close), "Stop", stop).build())
+        } else {
+            fun controls(compact: Boolean) = android.widget.RemoteViews(packageName,
+                if (compact) R.layout.ring_notification_compact else R.layout.ring_notification).apply {
+                val name = a.label.trim().ifBlank { "Alarm" }
+                setTextViewText(R.id.ring_notification_label, name)
+                setOnClickPendingIntent(R.id.ring_notification_snooze, snooze)
+                setOnClickPendingIntent(R.id.ring_notification_stop, stop)
+                setContentDescription(R.id.ring_notification_snooze, "Snooze alarm for $minutes minutes")
+                setContentDescription(R.id.ring_notification_stop, "Stop alarm")
+                if (compact) setTextViewText(R.id.ring_notification_snooze, "Snooze · $minutes min")
+                else {
+                    setTextViewText(R.id.ring_notification_minutes, "$minutes min")
+                    setContentDescription(R.id.ring_notification_minutes, "Snooze duration: $minutes minutes")
+                    setOnClickPendingIntent(R.id.ring_notification_less, RingControls.pending(this@RingingService, a, entry.value, "less"))
+                    setOnClickPendingIntent(R.id.ring_notification_more, RingControls.pending(this@RingingService, a, entry.value, "more"))
+                    setBoolean(R.id.ring_notification_less, "setEnabled", minutes > SnoozeDuration.MIN)
+                    setBoolean(R.id.ring_notification_more, "setEnabled", minutes < SnoozeDuration.MAX)
+                    setFloat(R.id.ring_notification_less, "setAlpha", if (minutes > SnoozeDuration.MIN) 1f else .38f)
+                    setFloat(R.id.ring_notification_more, "setAlpha", if (minutes < SnoozeDuration.MAX) 1f else .38f)
+                }
+            }
+            notification.setStyle(Notification.DecoratedCustomViewStyle())
+                .setCustomContentView(controls(true)).setCustomBigContentView(controls(false)).setCustomHeadsUpContentView(controls(false))
+        }
         if (fullScreen) notification.setFullScreenIntent(screen, true)
         startForeground(1, notification.build())
     }

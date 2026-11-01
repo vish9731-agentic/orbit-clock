@@ -32,6 +32,7 @@ class RingActivity : AppCompatActivity() {
         override fun onReceive(c: Context, i: Intent) {
             val a = Store(c).get(id)
             if (a == null || !Scheduler.isActive(c, a, at)) finish()
+            else if (::duration.isInitialized) { selectedMinutes = RingControls.minutes(c, a, at, selectedMinutes); updateDuration() }
         }
     }
     override fun onCreate(state: Bundle?) {
@@ -42,20 +43,21 @@ class RingActivity : AppCompatActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         id = intent.getStringExtra("id") ?: ""; at = intent.getLongExtra("at", 0)
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(changes, IntentFilter(Store.CHANGED), RECEIVER_NOT_EXPORTED)
-        else registerReceiver(changes, IntentFilter(Store.CHANGED))
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(changes, IntentFilter(Store.CHANGED).apply { addAction(RingControls.CHANGED) }, RECEIVER_NOT_EXPORTED)
+        else registerReceiver(changes, IntentFilter(Store.CHANGED).apply { addAction(RingControls.CHANGED) })
         val alarm = Store(this).get(id)
         if (alarm == null || !Scheduler.isActive(this, alarm, at)) { finish(); return }
         val sameOccurrence = state != null && state.getString("ring.id") == id && state.getLong("ring.at") == at
         selectedMinutes = SnoozeDuration.clamp(if (sameOccurrence) state!!.getInt("ring.minutes", alarm.snoozeMinutes) else alarm.snoozeMinutes)
+        selectedMinutes = RingControls.minutes(this, alarm, at, selectedMinutes)
         val colors = OrbitPalette(this)
-        val background = if (watch) colors.surface else 0xff111f1c.toInt()
-        val foreground = if (watch) colors.onSurface else 0xffd3e3df.toInt()
+        val background = if (watch) colors.surface else RingAtmosphere.tint(LocalTime.now().toSecondOfDay() / 60)
+        val foreground = if (watch) colors.onSurface else 0xffe5ebe8.toInt()
         val accent = if (watch) colors.primary else 0xff74e8d7.toInt()
         val name = alarm.label.trim().ifBlank { "Alarm" }
         fun dp(n: Int) = (resources.displayMetrics.density * n).toInt()
         fun label(value: String, size: Float) = TextView(this).apply {
-            text = value; textSize = size; gravity = Gravity.CENTER; setTextColor(foreground); includeFontPadding = false
+            text = value; textSize = size; typeface = Typeface.create(Typeface.create("sans-serif", Typeface.NORMAL), 400, false); gravity = Gravity.CENTER; setTextColor(foreground); includeFontPadding = false
         }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
@@ -71,26 +73,27 @@ class RingActivity : AppCompatActivity() {
         } else {
             body.addView(Space(this), LinearLayout.LayoutParams(1, 0, 3.3f))
             body.addView(label(time, 144f).apply {
-                typeface = Typeface.create("sans-serif-light", Typeface.NORMAL); letterSpacing = -.025f
+                typeface = Typeface.create(Typeface.create("sans-serif", Typeface.NORMAL), 350, false); letterSpacing = -.025f
                 fontFeatureSettings = "tnum"
                 contentDescription = "Alarm time: $time"; maxLines = 1
                 setAutoSizeTextTypeUniformWithConfiguration(56, 144, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
             }, LinearLayout.LayoutParams(-1, dp(156)))
-            body.addView(label(name, 26f).apply {
+            body.addView(label(name, 24f).apply {
+                setTextColor(0xffb9c2bd.toInt())
                 contentDescription = "Alarm label: $name"; maxLines = 2; ellipsize = TextUtils.TruncateAt.END
             }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12); bottomMargin = dp(40) })
         }
         fun control(value: String, callback: () -> Unit) = MaterialButton(this).apply {
-            text = value; isAllCaps = false; textSize = 22f; typeface = Typeface.create("sans-serif", Typeface.NORMAL); minWidth = 0; minimumWidth = 0
+            text = value; isAllCaps = false; textSize = 22f; typeface = Typeface.create(Typeface.create("sans-serif", Typeface.NORMAL), 400, false); minWidth = 0; minimumWidth = 0
             setPadding(0, 0, 0, 0); cornerRadius = dp(28); insetTop = 0; insetBottom = 0
             backgroundTintList = ColorStateList.valueOf(if (watch) colors.containerHigh else android.graphics.Color.TRANSPARENT)
             setTextColor(foreground); setOnClickListener { OrbitMotion.tick(this); callback() }
             OrbitMotion.bind(this)
         }
         val stepper = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-        decrease = control("−") { selectedMinutes = SnoozeDuration.decrease(selectedMinutes); updateDuration() }.apply { contentDescription = "Decrease snooze by 5 minutes" }
-        increase = control("+") { selectedMinutes = SnoozeDuration.increase(selectedMinutes); updateDuration() }.apply { contentDescription = "Increase snooze by 5 minutes" }
-        duration = label("", if (watch) 18f else 16f).apply { accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
+        decrease = control("−") { selectedMinutes = SnoozeDuration.decrease(selectedMinutes); RingControls.select(this, id, at, selectedMinutes); updateDuration() }.apply { contentDescription = "Decrease snooze by 5 minutes" }
+        increase = control("+") { selectedMinutes = SnoozeDuration.increase(selectedMinutes); RingControls.select(this, id, at, selectedMinutes); updateDuration() }.apply { contentDescription = "Increase snooze by 5 minutes" }
+        duration = label("", if (watch) 18f else 16f).apply { typeface = Typeface.create(typeface, 500, false); accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
         val size = dp(if (watch) 40 else 48)
         stepper.addView(decrease, LinearLayout.LayoutParams(size, size))
         stepper.addView(duration, LinearLayout.LayoutParams(dp(if (watch) 68 else 96), size))
@@ -114,7 +117,10 @@ class RingActivity : AppCompatActivity() {
         indicator = LinearProgressIndicator(this).apply { max = 100; visibility = View.GONE; trackCornerRadius = dp(3); setIndicatorColor(accent) }
         body.addView(indicator, LinearLayout.LayoutParams(-1, dp(4)))
         val scroller = ScrollView(this).apply {
-            isFillViewport = true; setBackgroundColor(background)
+            isFillViewport = true
+            if (watch) setBackgroundColor(background) else this.background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0xff030405.toInt(), 0xff060708.toInt(), background))
             addView(body, FrameLayout.LayoutParams(-1, -2))
         }
         setContentView(scroller)

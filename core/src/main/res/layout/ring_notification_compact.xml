@@ -1,0 +1,6 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+ android:layout_width="match_parent" android:layout_height="48dp" android:gravity="center_vertical" android:paddingHorizontal="8dp" android:background="@drawable/ring_notification_surface">
+ <TextView android:id="@+id/ring_notification_label" android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:gravity="center_vertical" android:paddingStart="8dp" android:textColor="#dce6e0" android:textSize="14sp" android:fontFamily="sans-serif" android:maxLines="1" android:ellipsize="end"/>
+ <TextView android:id="@+id/ring_notification_snooze" android:layout_width="112dp" android:layout_height="match_parent" android:gravity="center" android:text="Snooze" android:textColor="#74e8d7" android:textSize="14sp" android:fontFamily="sans-serif-medium"/>
+ <TextView android:id="@+id/ring_notification_stop" android:layout_width="60dp" android:layout_height="match_parent" android:gravity="center" android:text="Stop" android:textColor="#d3e3df" android:textSize="14sp" android:fontFamily="sans-serif"/>
+</LinearLayout>

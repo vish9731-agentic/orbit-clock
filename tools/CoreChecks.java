@@ -1,6 +1,7 @@
 import dev.orbit.clock.core.AlarmTiming;
 import dev.orbit.clock.core.RotaryGesture;
 import dev.orbit.clock.core.SnoozeDuration;
+import dev.orbit.clock.core.RingAtmosphere;
 import java.time.*;
 import java.util.*;
 
@@ -17,6 +18,28 @@ public class CoreChecks {
     }
     static void at(String name, String expected, Instant actual) { eq(name,Instant.parse(expected),actual); }
     public static void main(String[] args) {
+        int midnight = RingAtmosphere.tint(0), dawn = RingAtmosphere.tint(420), morning = RingAtmosphere.tint(600);
+        int afternoon = RingAtmosphere.tint(840), evening = RingAtmosphere.tint(1110), night = RingAtmosphere.tint(1320);
+        eq("deep-night blue hint", true, (midnight & 255) > (midnight >> 16 & 255));
+        eq("dawn rose hint", true, (dawn >> 16 & 255) > (dawn & 255));
+        eq("morning sage hint", true, (morning >> 8 & 255) > (morning >> 16 & 255));
+        eq("afternoon warm hint", true, (afternoon >> 16 & 255) > (afternoon >> 8 & 255) && (afternoon >> 8 & 255) > (afternoon & 255));
+        eq("evening violet hint", true, (evening & 255) > (evening >> 16 & 255) && (evening >> 16 & 255) > (evening >> 8 & 255));
+        eq("night indigo hint", true, (night & 255) > (night >> 16 & 255));
+        eq("atmosphere midnight wraps", RingAtmosphere.tint(0), RingAtmosphere.tint(1440));
+        eq("atmosphere negative minute wraps", RingAtmosphere.tint(1439), RingAtmosphere.tint(-1));
+        boolean dark = true, smooth = true;
+        for (int minute=0; minute<1440; minute++) {
+            int color=RingAtmosphere.tint(minute), nextColor=RingAtmosphere.tint(minute+1);
+            dark &= (color >>> 24)==255;
+            for (int shift : new int[]{16,8,0}) {
+                int channel=color >> shift & 255;
+                dark &= channel <= 20;
+                smooth &= Math.abs(channel-(nextColor >> shift & 255)) <= 1;
+            }
+        }
+        eq("all-day tint stays near black", true, dark);
+        eq("all-day tint blends without boundary jumps", true, smooth);
         at("one-shot today","2026-10-30T07:00:00Z",next(7,0,Set.of(),"2026-10-30T06:00:00Z","UTC",0,0));
         at("one-shot tomorrow","2026-10-31T07:00:00Z",next(7,0,Set.of(),"2026-10-30T08:00:00Z","UTC",0,0));
         at("weekend skipped","2026-11-02T07:00:00Z",next(7,0,Set.of(1,2,3,4,5),"2026-10-30T08:00:00Z","UTC",0,0));

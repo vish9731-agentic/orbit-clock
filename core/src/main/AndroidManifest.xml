@@ -9,6 +9,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <application>
         <activity android:name="dev.orbit.clock.core.RingActivity" android:exported="false" android:showWhenLocked="true" android:turnScreenOn="true" android:excludeFromRecents="true"/>
+        <receiver android:name="dev.orbit.clock.core.RingActionReceiver" android:exported="false"/>
         <receiver android:name="dev.orbit.clock.core.AlarmReceiver" android:exported="false"/>
         <receiver android:name="dev.orbit.clock.core.RestoreReceiver" android:exported="true">
             <intent-filter>

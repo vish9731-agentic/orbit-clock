@@ -1,3 +1,13 @@
+PASS deep-night blue hint
+PASS dawn rose hint
+PASS morning sage hint
+PASS afternoon warm hint
+PASS evening violet hint
+PASS night indigo hint
+PASS atmosphere midnight wraps
+PASS atmosphere negative minute wraps
+PASS all-day tint stays near black
+PASS all-day tint blends without boundary jumps
 PASS one-shot today
 PASS one-shot tomorrow
 PASS weekend skipped
@@ -43,4 +53,4 @@ PASS custom snooze moves by five
 PASS snooze overflow protected
 PASS snooze underflow protected
 
-44 production-policy checks passed.
+54 production-policy checks passed.

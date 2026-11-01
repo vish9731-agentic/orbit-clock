@@ -12,5 +12,6 @@ fi
   "$project_dir/core/src/main/java/dev/orbit/clock/core/AlarmTiming.java" \
   "$project_dir/core/src/main/java/dev/orbit/clock/core/RotaryGesture.java" \
   "$project_dir/core/src/main/java/dev/orbit/clock/core/SnoozeDuration.java" \
+  "$project_dir/core/src/main/java/dev/orbit/clock/core/RingAtmosphere.java" \
   "$project_dir/tools/CoreChecks.java"
 java -cp "$check_dir" CoreChecks
