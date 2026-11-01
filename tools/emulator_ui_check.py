@@ -11,7 +11,7 @@ from PIL import Image, ImageChops, ImageStat
 import imageio_ffmpeg
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--scope', choices=['full', 'ringing-motion', 'motion', 'guidance', 'visual-cue', 'notifications'], default='full')
+parser.add_argument('--scope', choices=['full', 'ringing-motion', 'motion', 'guidance', 'visual-cue', 'notifications', 'media-focus'], default='full')
 ARGS = parser.parse_args()
 
 OUT = Path('emulator-results')
@@ -576,7 +576,12 @@ try:
         assert find('Slide left to snooze · right to stop', optional=True) is None
         click('Stop'); assert not record(alarm['id'])['enabled']
         passed('Visual-only ringing cue leaves Stop immediately functional')
-    if ARGS.scope not in ['guidance', 'visual-cue']: motion_checks()
+    if ARGS.scope == 'media-focus':
+        import sys
+        sys.path.insert(0,str(Path(__file__).parent/'media-focus'))
+        from checks import run as run_media_focus
+        run_media_focus(globals())
+    if ARGS.scope not in ['guidance', 'visual-cue', 'media-focus']: motion_checks()
     pid = adb('shell', 'pidof', PKG).strip(); assert pid
     crashes = adb('logcat', '-d', '-b', 'crash'); (OUT / 'crashes.txt').write_text(crashes)
     assert not crashes.strip(), crashes

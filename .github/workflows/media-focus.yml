@@ -1,0 +1,60 @@
+name: Alarm media pause verification
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/media-focus.yml'
+      - 'tools/media-focus/**'
+      - 'core/src/main/java/dev/orbit/clock/core/RingingService.kt'
+permissions:
+  contents: read
+jobs:
+  media-focus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;34.0.0'
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+      - run: python -m pip install pillow imageio-ffmpeg
+      - name: Build phone and independent native media fixture
+        run: |
+          ./gradlew --no-daemon :phone:assembleDebug
+          bash tools/media-focus/build-probe.sh
+      - name: Prepare emulator
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android/sdk/ndk
+          sudo chmod 666 /dev/kvm
+      - name: Verify playback pause with real alarms
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: false
+          emulator-boot-timeout: 360
+          script: |
+            adb shell settings put global device_provisioned 1
+            adb shell settings put secure user_setup_complete 1
+            adb shell pm disable-user --user 0 com.google.android.googlesdksetup || true
+            adb install phone/build/outputs/apk/debug/phone-debug.apk
+            adb install media-probe-build/media-focus-probe.apk
+            adb shell pm grant dev.orbit.clock android.permission.POST_NOTIFICATIONS
+            adb shell pm grant dev.orbit.focusprobe android.permission.POST_NOTIFICATIONS
+            adb shell appops set dev.orbit.clock SCHEDULE_EXACT_ALARM allow
+            python tools/emulator_ui_check.py --scope media-focus
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: media-focus-feedback
+          retention-days: 3
+          path: emulator-results/

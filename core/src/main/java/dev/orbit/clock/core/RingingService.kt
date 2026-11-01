@@ -8,6 +8,12 @@ import android.os.*
 class RingingService : Service() {
     private var tone: Ringtone? = null
     private var vibrating = false
+    private var alarmFocusRequest: AudioFocusRequest? = null
+    private var hasAudioFocus = false
+    private var retryFocusOnNewAlarm = false
+    private var focusGeneration = 0
+    private val alarmAudioAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
     private var lock: PowerManager.WakeLock? = null
     private val active = linkedMapOf<String, Long>()
     private val timeouts = mutableMapOf<String, Runnable>()
@@ -41,6 +47,7 @@ class RingingService : Service() {
         }
         active[id] = at
         updateNotification(true)
+        acquireAudioFocus()
         val wake = lock ?: getSystemService(PowerManager::class.java)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "orbit:alarm").also { lock = it }
         if (wake.isHeld) wake.release()
@@ -98,9 +105,48 @@ class RingingService : Service() {
         if (fullScreen) notification.setFullScreenIntent(screen, true)
         startForeground(1, notification.build())
     }
+    private fun acquireAudioFocus() {
+        if (alarmFocusRequest != null && !retryFocusOnNewAlarm) return // Shared across overlapping alarms.
+        if (alarmFocusRequest != null) releaseAudioFocus() // A new alarm may request after permanent loss.
+        val manager = getSystemService(AudioManager::class.java)
+        // PAUSE is idempotent; never send PLAY_PAUSE, which could start stopped media.
+        runCatching {
+            val down = SystemClock.uptimeMillis()
+            for (action in intArrayOf(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.ACTION_UP)) {
+                manager.dispatchMediaKeyEvent(android.view.KeyEvent(down, SystemClock.uptimeMillis(), action,
+                    android.view.KeyEvent.KEYCODE_MEDIA_PAUSE, 0))
+            }
+        }.onFailure { android.util.Log.w("OrbitAudioFocus", "Media pause dispatch unavailable", it) }
+        val generation = ++focusGeneration
+        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+            .setAudioAttributes(alarmAudioAttributes).setAcceptsDelayedFocusGain(true)
+            .setWillPauseWhenDucked(true)
+            .setOnAudioFocusChangeListener({ change ->
+                if (generation == focusGeneration && active.isNotEmpty()) {
+                    hasAudioFocus = change == AudioManager.AUDIOFOCUS_GAIN
+                    retryFocusOnNewAlarm = change == AudioManager.AUDIOFOCUS_LOSS
+                    updateOutputs() // Respect losses; a delayed gain can start the still-active alarm.
+                }
+            }, handler).build()
+        alarmFocusRequest = request
+        val result = runCatching { manager.requestAudioFocus(request) }
+            .onFailure { android.util.Log.w("OrbitAudioFocus", "Alarm audio focus unavailable", it) }
+            .getOrDefault(AudioManager.AUDIOFOCUS_REQUEST_FAILED)
+        hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        retryFocusOnNewAlarm = result == AudioManager.AUDIOFOCUS_REQUEST_FAILED
+    }
+    private fun releaseAudioFocus() {
+        ++focusGeneration // Ignore callbacks queued for an occurrence that has already ended.
+        hasAudioFocus = false
+        retryFocusOnNewAlarm = false
+        val request = alarmFocusRequest ?: return
+        alarmFocusRequest = null
+        runCatching { getSystemService(AudioManager::class.java).abandonAudioFocusRequest(request) }
+            .onFailure { android.util.Log.w("OrbitAudioFocus", "Audio focus cleanup unavailable", it) }
+    }
     private fun updateOutputs() {
         val alarms = active.keys.mapNotNull { Store(this).get(it) }
-        if (alarms.any { it.sound }) {
+        if (hasAudioFocus && alarms.any { it.sound }) {
             if (tone?.isPlaying != true) {
                 tone?.stop()
                 tone = null
@@ -110,7 +156,7 @@ class RingingService : Service() {
                         val uri = RingtoneManager.getActualDefaultRingtoneUri(this, type)
                             ?: RingtoneManager.getDefaultUri(type)
                         RingtoneManager.getRingtone(this, uri)?.also {
-                            it.audioAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build()
+                            it.audioAttributes = alarmAudioAttributes
                             it.isLooping = true
                             it.play()
                         }
@@ -133,6 +179,7 @@ class RingingService : Service() {
         timeouts.remove(id)?.let { handler.removeCallbacks(it) }
         if (active.isEmpty()) {
             tone?.stop(); tone = null
+            releaseAudioFocus()
             getSystemService(Vibrator::class.java).cancel(); vibrating = false
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -140,7 +187,7 @@ class RingingService : Service() {
     }
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null); unregisterReceiver(changes)
-        tone?.stop(); getSystemService(Vibrator::class.java).cancel()
+        tone?.stop(); tone = null; releaseAudioFocus(); getSystemService(Vibrator::class.java).cancel()
         if (lock?.isHeld == true) lock?.release()
         active.toMap().forEach { (id, at) -> Scheduler.act(this, id, at, false) }
         active.clear(); timeouts.clear(); super.onDestroy()
