@@ -2,7 +2,7 @@
 
 Native Android phone and Wear OS clock apps with a Material You / Material 3 interface, shared alarms, and rotating-bezel controls for Galaxy Watch 4 Classic.
 
-Both debug APKs build successfully. Seven Kotlin/JUnit tests, 54 standalone production-policy checks and phone/watch lint pass. Targeted emulator checks exercise the ringing UI, occurrence snooze selection, volume buttons, real heads-up actions over another app and native motion. See [verification/STATUS.md](verification/STATUS.md) for exact revisions and outcomes. Physical-device testing remains. This is an initial prototype, not full Google Clock parity or a validated alarm replacement.
+Both debug APKs build successfully. Seven Kotlin/JUnit tests, 71 standalone production-policy checks and phone/watch lint pass. Targeted emulator checks exercise the ringing UI, occurrence snooze selection, volume buttons, real heads-up actions over another app and native motion. See [verification/STATUS.md](verification/STATUS.md) for exact revisions and outcomes. Physical-device testing remains. This is an initial prototype, not full Google Clock parity or a validated alarm replacement.
 
 Private repository: [vish9731-agentic/orbit-clock](https://github.com/vish9731-agentic/orbit-clock).
 
@@ -89,13 +89,15 @@ While the ringing screen is open and focused, either physical volume button snoo
 
 ## Ringing screen
 
-The phone follows the user-selected Google Clock reference: a plain dark green background, large time, saved custom label (or “Alarm” when blank), and a Snooze/Stop rail with a draggable center thumb. A compact minus/minutes/plus row sits above it, with five-minute steps from 5 to 60. Both volume buttons still snooze while the ringing screen is focused. Accessible action labels also support tapping. Watch controls retain their compact dark layout.
+The phone follows the user-selected Google Clock reference: a black background with localized time-of-day corner lighting, large time, saved custom label (or “Alarm” when blank), and a Snooze/Stop rail with a draggable center thumb. A compact minus/minutes/plus row sits above it, with five-minute steps from 5 to 60. Both volume buttons still snooze while the ringing screen is focused. Accessible action labels also support tapping. Watch controls retain their compact dark layout.
 
 ## Ringing and notification UI
 
 Only the ringing slider shimmers. Other screens retain static affordances and normal native press, value and navigation feedback, without shimmer or prose tips.
 
-The clock uses weight 350, the 24sp label weight 400, duration weight 500, and 22sp rail labels weight 450. A nearly black static gradient carries a tiny hint of local time: deep-night blue, dawn rose, morning sage, afternoon amber, evening violet or night indigo. All tint channels stay at or below 20/255 and blend smoothly through midnight.
+The clock uses weight 350, the 24sp label weight 400, duration weight 500, and 22sp rail labels weight 450. The main field stays black while an upper corner carries restrained light: blue/orange dawn, fresh yellow morning sunshine, blue-sky noon, gold/teal afternoon, coral/orange sunset, deep-blue late evening, or night with five tiny stars and a small crescent. Adjacent scenes crossfade at their corners without moving across the clock or controls.
+
+The clock and background use actual current local time on opening/resume, clock/time-zone changes and visible minute boundaries. An alarm snoozed from 3 pm until 11 pm therefore re-rings with night artwork, preserving its saved time and default snooze duration. Shaders are cached per minute and viewport and clipped to the light regions; there is no background animation loop or new permission. See [verification/STATUS.md](verification/STATUS.md) for the successful scenario evidence and the latest full rerun's SystemUI setup blocker.
 
 Phone alarm banners have Snooze/Stop controls, plus five-minute snooze adjustments in the heads-up/expanded layout. Collapsed notifications retain both actions. The banner and ringing screen share selection for that occurrence without editing the saved default. Android owns the notification header, dimensions and presentation; banner actions are taps rather than a draggable gesture. Wear notifications use native Snooze/Stop actions. See [interaction details](docs/INTERACTIONS.md).
 
