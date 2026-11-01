@@ -105,13 +105,8 @@ class RingActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(8) })
         } else {
             body.addView(AlarmSlideControl(this,
-                { CoachHints.learn(this, "ring_controls"); act(true) },
-                { CoachHints.learn(this, "ring_controls"); act(false) }), LinearLayout.LayoutParams(-1, dp(80)))
-            val hintKey = if (CoachHints.eligible(this, "ring_controls")) "ring_controls" else "volume_snooze"
-            val message = if (hintKey == "ring_controls") "Slide left to snooze · right to stop" else "Either volume button also snoozes."
-            CoachHints.caption(this, hintKey, message, 0xffadc6be.toInt())?.let {
-                body.addView(it, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
-            }
+                { VisualHints.learn(this, "ring_controls"); act(true) },
+                { VisualHints.learn(this, "ring_controls"); act(false) }), LinearLayout.LayoutParams(-1, dp(80)))
             body.addView(Space(this), LinearLayout.LayoutParams(1, 0, 1.15f))
             progress = label("", 12f).apply { visibility = View.GONE }
             body.addView(progress, LinearLayout.LayoutParams(-1, -2))
@@ -164,7 +159,7 @@ class RingActivity : AppCompatActivity() {
                 volumeKey = event.keyCode
             } else if (event.action == KeyEvent.ACTION_UP && volumeKey == event.keyCode) {
                 volumeKey = KeyEvent.KEYCODE_UNKNOWN
-                if (!event.isCanceled) { CoachHints.learn(this, "volume_snooze"); act(true) }
+                if (!event.isCanceled) { VisualHints.learn(this, "volume_snooze"); act(true) }
             }
             return true
         }
@@ -191,7 +186,7 @@ class RingActivity : AppCompatActivity() {
             progress.visibility = View.VISIBLE
             if (!watch) { indicator.visibility = View.VISIBLE; indicator.setProgressCompat(gesture.progress(), true) }
             window.decorView.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-            when (action) { RotaryGesture.Action.SNOOZE -> { CoachHints.learn(this, "watch_bezel"); act(true) }; RotaryGesture.Action.DISMISS -> { CoachHints.learn(this, "watch_bezel"); act(false) }; else -> Unit }
+            when (action) { RotaryGesture.Action.SNOOZE -> { VisualHints.learn(this, "watch_bezel"); act(true) }; RotaryGesture.Action.DISMISS -> { VisualHints.learn(this, "watch_bezel"); act(false) }; else -> Unit }
             return true
         }
         return super.onGenericMotionEvent(event)

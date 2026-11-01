@@ -116,6 +116,14 @@ open class ClockActivity : AppCompatActivity() {
         icon?.let { setIconResource(it); iconTint = ColorStateList.valueOf(if (tonal) colors.onSecondaryContainer else colors.onPrimary) }
         setOnClickListener { OrbitMotion.tick(this); action() }
         OrbitMotion.bind(this)
+        val cue = when {
+            label == "1" -> "timer_presets"
+            label == "Lap" -> "stopwatch_laps"
+            label.endsWith(" hours") -> "bedtime_schedule"
+            label.contains("wake-up alarm") -> "wake_control"
+            else -> null
+        }
+        if (cue != null) VisualHints.bind(this, cue)
     }
     private fun card(parent: LinearLayout = content, color: Int = colors.container, padding: Int = if (watch) 16 else 24): LinearLayout {
         val card = MaterialCardView(this).apply {
@@ -184,6 +192,7 @@ open class ClockActivity : AppCompatActivity() {
                 backgroundTintList = ColorStateList.valueOf(colors.primaryContainer); imageTintList = ColorStateList.valueOf(colors.onPrimaryContainer)
                 setOnClickListener { OrbitMotion.tick(this); if (tab == "Alarms") editAlarm(Alarm()) else addCity() }
             }
+            VisualHints.bind(addButton!!, "add_control")
             bodyFrame.addView(addButton, FrameLayout.LayoutParams(dp(64), dp(64), Gravity.BOTTOM or Gravity.END).apply { marginEnd = dp(24); bottomMargin = dp(20) })
         }
         OrbitMotion.bindTree(root); ViewCompat.requestApplyInsets(root)
@@ -249,9 +258,6 @@ open class ClockActivity : AppCompatActivity() {
         }
         scroll.requestFocus(); handler.removeCallbacks(tick); if (foreground) handler.post(tick)
     }
-    private fun coach(key: String, message: String) {
-        CoachHints.row(this, key, message, colors)?.let { content.addView(it, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) }) }
-    }
     private fun chooseWatchTool(anchor: View) {
         PopupMenu(this, anchor).apply {
             sections.forEachIndexed { i, s -> menu.add(0, i, i, s) }
@@ -311,20 +317,15 @@ open class ClockActivity : AppCompatActivity() {
                 addView(text(next.atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("EEEE, d MMM · HH:mm", Locale.getDefault())), 13f, colors.onPrimaryContainer))
             }
         } else if (all.isNotEmpty()) {
-            content.addView(text("All alarms are off · turn one on to schedule it", 14f, colors.muted)); space(content)
+            content.addView(text("All alarms off", 14f, colors.muted)); space(content)
         }
         if (all.isEmpty()) {
             card(color = colors.container).apply {
                 gravity = Gravity.CENTER_HORIZONTAL; space(this, 20)
                 addView(OrbitDial(this@ClockActivity, colors), LinearLayout.LayoutParams(dp(if (watch) 100 else 176), dp(if (watch) 100 else 176)))
                 space(this, 28); addView(text("No alarms yet", if (watch) 22f else 28f)); space(this, 8)
-                addView(text("Tap + to set your first alarm.", 14f, colors.muted).apply { gravity = Gravity.CENTER })
                 space(this, 12)
             }
-        }
-        if (all.isNotEmpty()) {
-            if (watch && CoachHints.eligible(this, "watch_bezel")) coach("watch_bezel", "While ringing, turn the bezel to snooze or stop.")
-            else coach("alarm_edit", "Tap an alarm to change its time or label.")
         }
         all.forEach { alarm ->
             val inner = card(color = if (alarm.enabled) colors.containerHigh else colors.container)
@@ -336,11 +337,15 @@ open class ClockActivity : AppCompatActivity() {
                 contentDescription = "Edit ${alarm.label} at ${time(alarm.hour, alarm.minute)} ${period(alarm.hour)}"
                 setOnClickListener { OrbitMotion.tick(this); editAlarm(alarm) }
             }
+            clock.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, R.drawable.ic_edit, 0)
+            clock.compoundDrawablePadding = dp(10)
+            clock.compoundDrawablesRelative[2]?.setTint(colors.muted)
             line.addView(clock, LinearLayout.LayoutParams(0, dp(if (watch) 52 else 72), 1f))
             line.addView(MaterialSwitch(this).apply {
                 isChecked = alarm.enabled; contentDescription = "${alarm.label} enabled"
                 setOnCheckedChangeListener { view, enabled -> OrbitMotion.tick(view); Store(this@ClockActivity).save(alarm.copy(enabled = enabled, snoozeUntil = 0, skipThrough = 0)) }
             })
+            VisualHints.bind(clock, "alarm_edit")
             inner.addView(line)
             if (period(alarm.hour).isNotEmpty()) inner.addView(text(period(alarm.hour), 12f, colors.muted))
             space(inner, 6); inner.addView(text(alarm.label, 17f)); space(inner, 6)
@@ -383,7 +388,7 @@ open class ClockActivity : AppCompatActivity() {
     private fun editAlarm(original: Alarm) {
         var hour = original.hour; var minute = original.minute
         val exists = Store(this).get(original.id) != null
-        if (exists) CoachHints.learn(this, "alarm_edit")
+        if (exists) VisualHints.learn(this, "alarm_edit")
         val sheet = BottomSheetDialog(this)
         val body = column().apply { setPadding(dp(if (watch) 20 else 24), dp(24), dp(if (watch) 20 else 24), dp(32)) }
         body.addView(text(if (exists) "Edit alarm" else "New alarm", 24f)); space(body, 16)
@@ -470,16 +475,22 @@ open class ClockActivity : AppCompatActivity() {
         val now = text("", if (watch) 36f else 60f).apply { typeface = Typeface.create("sans-serif-light", Typeface.NORMAL) }
         val date = text("", 14f, colors.muted); hero.addView(now); space(hero, 8); hero.addView(date)
         val zones = prefs.getStringSet("zones", setOf("Europe/London", "America/New_York", "Asia/Tokyo"))!!.sorted()
-        coach("city_remove", "Touch and hold a city to remove it.")
         val displays = zones.map { id ->
             val c = card(padding = 20); (c.parent as View).tag = "item:city:$id"; val line = row(); val city = column()
             city.addView(text(id.substringAfterLast('/').replace('_', ' '), 18f)); space(city, 8)
             val info = text("", 12f, colors.muted); city.addView(info); line.addView(city, LinearLayout.LayoutParams(0, -2, 1f))
             val value = text("", if (watch) 24f else 30f); line.addView(value); c.addView(line)
             (c.parent as View).stateDescription = "Touch and hold to remove city"
-            (c.parent as View).setOnLongClickListener {
-                MaterialAlertDialogBuilder(this).setTitle("Remove this city?").setNegativeButton("Keep", null).setPositiveButton("Remove") { _, _ -> CoachHints.learn(this@ClockActivity, "city_remove"); pendingFeedback = "City removed"; prefs.edit().putStringSet("zones", zones.filterNot { it == id }.toSet()).apply(); render() }.show(); true
+            fun removeCity() {
+                MaterialAlertDialogBuilder(this).setTitle("Remove this city?").setNegativeButton("Keep", null).setPositiveButton("Remove") { _, _ -> VisualHints.learn(this@ClockActivity, "city_remove"); pendingFeedback = "City removed"; prefs.edit().putStringSet("zones", zones.filterNot { it == id }.toSet()).apply(); render() }.show()
             }
+            (c.parent as View).setOnLongClickListener { removeCity(); true }
+            line.addView(MaterialButton(this, null, com.google.android.material.R.attr.materialIconButtonStyle).apply {
+                setIconResource(R.drawable.ic_close); iconTint = ColorStateList.valueOf(colors.muted)
+                text = ""; iconPadding = 0; contentDescription = "Remove ${id.substringAfterLast('/').replace('_', ' ')}"
+                setOnClickListener { OrbitMotion.tick(this); removeCity() }
+                VisualHints.bind(this, "city_remove")
+            }, LinearLayout.LayoutParams(dp(48), dp(48)))
             Triple(id, value, info)
         }
         ticker = {
@@ -516,7 +527,7 @@ open class ClockActivity : AppCompatActivity() {
         val setup = card(color = colors.container); setup.addView(text("Set a timer", if (watch) 22f else 26f)); space(setup, 20)
         val minutes = input(setup, "Minutes", "5", numeric = true).apply { textSize = 42f; gravity = Gravity.CENTER; contentDescription = "Timer minutes" }
         val presets = row()
-        listOf(1, 5, 10, 25).forEach { m -> presets.addView(button("$m", tonal = true) { CoachHints.learn(this, "timer_presets"); OrbitMotion.text(minutes, m.toString()); minutes.setSelection(minutes.text?.length ?: 0) }.apply { contentDescription = "Timer preset: $m min" }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(4) }) }
+        listOf(1, 5, 10, 25).forEach { m -> presets.addView(button("$m", tonal = true) { VisualHints.learn(this, "timer_presets"); OrbitMotion.text(minutes, m.toString()); minutes.setSelection(minutes.text?.length ?: 0) }.apply { contentDescription = "Timer preset: $m min" }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(4) }) }
         fun selectPreset(animate: Boolean) {
             for (i in 0 until presets.childCount) {
                 val b = presets.getChildAt(i) as MaterialButton
@@ -532,7 +543,7 @@ open class ClockActivity : AppCompatActivity() {
         selectPreset(false)
         minutes.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { CoachHints.learn(this@ClockActivity, "timer_presets"); selectPreset(true) }
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { VisualHints.learn(this@ClockActivity, "timer_presets"); selectPreset(true) }
             override fun afterTextChanged(s: Editable?) = Unit
         })
         setup.addView(presets); space(setup, 20)
@@ -540,10 +551,9 @@ open class ClockActivity : AppCompatActivity() {
             val count = minutes.text.toString().toLongOrNull()
             if (count == null || count !in 1..1440) { inputError(minutes, "Enter 1–1440 minutes"); return@button }
             if (!Scheduler.allowed(this)) { permissions(); return@button }
-            CoachHints.learn(this, "timer_presets"); pendingFeedback = "Timer started"
+            VisualHints.learn(this, "timer_presets"); pendingFeedback = "Timer started"
             Store(this).save(Alarm(timer = true, label = "Timer · $count min", snoozeUntil = System.currentTimeMillis() + count * 60_000))
         }, LinearLayout.LayoutParams(-1, dp(56)))
-        coach("timer_presets", "Tap a preset, or enter your own minutes.")
         val labels = Store(this).all().filter { !it.deleted && it.enabled && it.timer }.map { alarm ->
             val c = card(color = colors.primaryContainer); (c.parent as View).tag = "item:timer:${alarm.id}"; c.addView(text(alarm.label, 14f, colors.onPrimaryContainer)); space(c, 12)
             val countdown = text("", if (watch) 28f else 42f, colors.onPrimaryContainer).apply { typeface = Typeface.create("sans-serif-light", Typeface.NORMAL) }
@@ -582,11 +592,10 @@ open class ClockActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(-1, dp(64)))
         space(content, 12)
         content.addView(button(if (running) "Lap" else "Reset", tonal = true) {
-            if (running) { CoachHints.learn(this, "stopwatch_laps"); prefs.edit().putString("laps", "${elapsed()}|" + prefs.getString("laps", "")).apply() }
+            if (running) { VisualHints.learn(this, "stopwatch_laps"); prefs.edit().putString("laps", "${elapsed()}|" + prefs.getString("laps", "")).apply() }
             else prefs.edit().putLong("elapsed", 0).putString("laps", "").apply()
             render(); content.findViewWithTag<View>("stopwatch_face")?.let { OrbitMotion.pulse(it) }
         }, LinearLayout.LayoutParams(-1, dp(52)))
-        coach("stopwatch_laps", if (running) "Tap Lap to capture a split without pausing." else "Start, then tap Lap to record a split.")
         space(content, 24)
         val laps = prefs.getString("laps", "")!!.split('|').filter { it.isNotBlank() }
         laps.take(100).forEachIndexed { index, value ->
@@ -609,18 +618,17 @@ open class ClockActivity : AppCompatActivity() {
                 addView(text("${time(bed.hour, bed.minute)} → ${time(alarm.hour, alarm.minute)}", if (watch) 24f else 32f, colors.onPrimaryContainer))
             } else addView(text("Choose a wake-up time to get started.", 14f, colors.onPrimaryContainer).apply { gravity = Gravity.CENTER })
         }
-        coach("bedtime_schedule", "Choose a wake-up time; bedtime follows your sleep goal.")
         card().apply {
             addView(text("Sleep goal", 20f)); space(this, 8); addView(text("Make room for a consistent night's rest.", 14f, colors.muted)); space(this, 16)
             addView(button("$goal hours", tonal = true) {
                 val choices = (4..12).map { "$it hours" }.toTypedArray()
-                MaterialAlertDialogBuilder(this@ClockActivity).setTitle("Sleep goal").setSingleChoiceItems(choices, goal - 4) { dialog, index -> CoachHints.learn(this@ClockActivity, "bedtime_schedule"); prefs.edit().putInt("sleepGoal", index + 4).apply(); dialog.dismiss(); render(); OrbitMotion.pulse(content.getChildAt(0)) }.setNegativeButton("Cancel", null).show()
+                MaterialAlertDialogBuilder(this@ClockActivity).setTitle("Sleep goal").setSingleChoiceItems(choices, goal - 4) { dialog, index -> VisualHints.learn(this@ClockActivity, "bedtime_schedule"); prefs.edit().putInt("sleepGoal", index + 4).apply(); dialog.dismiss(); render(); OrbitMotion.pulse(content.getChildAt(0)) }.setNegativeButton("Cancel", null).show()
             })
         }
         card().apply {
             addView(text("Wake-up schedule", 20f)); space(this, 8)
             addView(text(if (alarm != null) "${time(alarm.hour, alarm.minute)} ${period(alarm.hour)}" else "Start the day your way", 14f, colors.muted)); space(this, 16)
-            addView(button(if (alarm == null) "Set wake-up alarm" else "Edit wake-up alarm", icon = R.drawable.ic_alarm) { CoachHints.learn(this@ClockActivity, "bedtime_schedule"); editAlarm(alarm ?: Alarm(label = "Wake up", days = setOf(1, 2, 3, 4, 5))) })
+            addView(button(if (alarm == null) "Set wake-up alarm" else "Edit wake-up alarm", icon = R.drawable.ic_alarm) { VisualHints.learn(this@ClockActivity, "bedtime_schedule"); editAlarm(alarm ?: Alarm(label = "Wake up", days = setOf(1, 2, 3, 4, 5))) })
         }
     }
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {

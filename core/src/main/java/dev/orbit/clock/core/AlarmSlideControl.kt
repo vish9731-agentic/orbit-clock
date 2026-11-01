@@ -52,6 +52,7 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
             setOnTouchListener { _, e ->
                 when (e.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
+                        VisualHints.cancel(this@AlarmSlideControl)
                         returnSpring?.cancel(); animate().cancel(); tracker?.recycle(); tracker = VelocityTracker.obtain(); track(e)
                         startX = e.rawX - translationX; dragging = true; thresholdTicked = false
                         if (OrbitMotion.enabled()) animate().scaleX(1.04f).scaleY(1.04f).setStartDelay(0).setDuration(100).start()
@@ -84,6 +85,7 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
             }
         }
         addView(thumb, LayoutParams(dp(96), dp(64), Gravity.CENTER))
+        VisualHints.bind(this, "ring_controls", directional = true)
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
     }
     private fun travel() = ((width - dp(96)) / 2f - dp(10)).coerceAtLeast(0f)

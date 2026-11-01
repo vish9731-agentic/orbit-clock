@@ -57,14 +57,14 @@ def tap_xy(point):
 
 def click(value=None, desc=None): tap_xy(xy(find(value, desc)))
 
-def scroll_find(value):
+def scroll_find(value=None, desc=None):
     for _ in range(5):
-        n = find(value, optional=True)
+        n = find(value, desc=desc, optional=True)
         if n is not None: return n
         w, h = map(int, re.search(r'(\d+)x(\d+)', adb('shell', 'wm', 'size')).groups())
         adb('shell', 'input', 'swipe', str(w // 2), str(int(h * .73)), str(w // 2), str(int(h * .35)), '350')
         time.sleep(.3)
-    raise AssertionError('Cannot scroll to ' + value)
+    raise AssertionError('Cannot scroll to ' + str(value or desc))
 
 def fill(value, desc=None):
     node = find(desc=desc) if desc else find(edit=True)
@@ -112,7 +112,7 @@ def assert_scheduled(alarm_id, expected):
         time.sleep(.1)
     raise AssertionError(f'Expected scheduled deadline {expected}, got {last} for {alarm_id}')
 
-def open_real_ringing_timer():
+def open_real_ringing_timer(capture=False):
     # Use the app UI and the real AlarmManager/notification path; no exported test backdoor.
     # Bring the launcher screen itself forward instead of merely restoring its task.
     adb('shell', 'am', 'start', '-W', '-f', '0x14000000', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
@@ -120,8 +120,11 @@ def open_real_ringing_timer():
     candidates = [a for a in records() if a.get('timer') and a['enabled'] and not a['deleted']]
     alarm = max(candidates, key=lambda a: a['revision'])
     adb('shell', 'input', 'keyevent', '3')
+    recorder = None
     until = time.monotonic() + 95
     while time.monotonic() < until:
+        if capture and recorder is None and alarm['snoozeUntil'] - int(adb('shell', 'date', '+%s').strip()) * 1000 < 3500:
+            recorder = subprocess.Popen(['adb', 'shell', 'screenrecord', '--bit-rate', '2500000', '--time-limit', '9', '/sdcard/orbit-cue.mp4'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         active = int(preferences('scheduled_occurrences').get(alarm['id'] + '.active', 0))
         if active == alarm['snoozeUntil']: break
         time.sleep(1)
@@ -133,6 +136,11 @@ def open_real_ringing_timer():
         adb('shell', 'cmd', 'statusbar', 'expand-notifications')
         click('Timer · 1 min')
     find(desc='Snooze duration: 10 minutes')
+    if recorder is not None:
+        recorder.communicate(timeout=15)
+        adb('pull', '/sdcard/orbit-cue.mp4', str(OUT / 'swipe-cue-internal.mp4'))
+        assert int(preferences('visual_hints').get('ring_controls.shown', 0)) == 1
+        passed('Finite visual swipe cue appears on the real ringing rail')
     return alarm
 
 def slide_alarm(direction, short=False):
@@ -213,51 +221,25 @@ def restart_app():
     time.sleep(.5)
 
 def guidance_checks():
-    # Dismissal is a real user action, and survives process recreation.
-    click('Alarm')
-    if find('Morning routine', optional=True) is None:
-        click(desc='Add alarm'); find('New alarm'); fill('Morning routine')
-        tap_xy(xy(scroll_find('Save alarm'))); find('Morning routine')
-    adb('shell', 'settings', 'put', 'system', 'font_scale', '1.3'); time.sleep(1)
-    tip = scroll_find('Tap an alarm to change its time or label.')
-    close = find(desc='Dismiss hint')
-    assert xy(tip)[0] < xy(close)[0]
-    screenshot('guidance-large-type')
-    click(desc='Dismiss hint')
-    assert preferences('coach_hints').get('alarm_edit.dismissed') == 'true'
-    adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0'); time.sleep(1)
-    restart_app(); click('Alarm')
-    assert find('Tap an alarm to change its time or label.', optional=True) is None
-    passed('Dismissible education remains hidden after restart and supports large text')
-    # Three visible app sessions maximum; rebuilding a page does not consume the budget.
-    for _ in range(4):
-        click('Clock'); find('London')
-        tip = find('Touch and hold a city to remove it.', optional=True)
-        count = int(preferences('coach_hints').get('city_remove.shown', 0))
-        if tip is None:
-            assert count == 3, count
-            break
-        assert 1 <= count <= 3, count
-        click('Timer'); click('Clock')
-        assert int(preferences('coach_hints')['city_remove.shown']) == count
-        restart_app()
-    else: raise AssertionError('City hint exceeded its visible-session cap')
-    passed('Hints cap visible sessions and do not count rerenders or repeat visits')
-    # The hidden gesture remains accessible; performing it retires education permanently.
-    city = scroll_find('Paris') if find('Paris', optional=True) is not None else scroll_find('London')
-    name = city.attrib['text']; x, y = xy(city)
-    adb('shell', 'input', 'swipe', str(x), str(y), str(x), str(y), '700')
-    find('Remove this city?'); click('Remove')
-    assert preferences('coach_hints').get('city_remove.learned') == 'true'
-    assert find(name, optional=True) is None
-    passed('Discoverable city removal retires its tip after successful use')
-    click('Timer')
-    if find('Tap a preset, or enter your own minutes.', optional=True) is not None:
-        click(desc='Timer preset: 25 min')
-    else: click(desc='Timer preset: 25 min')
-    assert preferences('coach_hints').get('timer_presets.learned') == 'true'
-    assert find('Tap a preset, or enter your own minutes.', optional=True) is None
-    passed('Using a control retires its contextual hint without moving the setup controls')
+    # Visual affordances replace prose tips; exercise their real actions.
+    banned = ['Tap an alarm to change its time or label.', 'Touch and hold a city to remove it.',
+              'Tap a preset, or enter your own minutes.', 'Start, then tap Lap to record a split.',
+              'Choose a wake-up time; bedtime follows your sleep goal.', 'Dismiss hint']
+    for tab in ['Alarm', 'Clock', 'Timer', 'Stopwatch', 'Bedtime']:
+        click(tab)
+        xml = ET.tostring(tree(), encoding='unicode')
+        assert not any(t in xml for t in banned), tab
+    passed('All five tools omit explanatory hint rows and dismiss-tip controls')
+    click('Clock')
+    city = 'Paris' if find('Paris', optional=True) is not None else 'London'
+    tap_xy(xy(scroll_find(desc='Remove ' + city)))
+    find('Remove this city?'); click('Keep'); find(city)
+    tap_xy(xy(scroll_find(desc='Remove ' + city))); click('Remove')
+    assert find(city, optional=True) is None
+    passed('Visible city remove icon supports cancel and confirmed deletion')
+    click('Timer'); click(desc='Timer preset: 25 min')
+    assert preferences('visual_hints').get('timer_presets.learned') == 'true'
+    passed('Visual preset guidance retains immediate selection and learning')
     # Status reports connection/request state, never invents a delivery acknowledgement.
     click(desc='Sync devices')
     until = time.monotonic() + 12
@@ -287,10 +269,11 @@ def guidance_checks():
 def ringing_snooze_checks():
     adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
     adb('shell', 'appops', 'set', PKG, 'USE_FULL_SCREEN_INTENT', 'allow')
-    first = open_real_ringing_timer()
+    first = open_real_ringing_timer(capture=True)
     passed('Real alarm delivery opens the ringing snooze controls')
-    find('Slide left to snooze · right to stop')
-    passed('First-use alarm guidance is inline and leaves actions available')
+    assert find('Slide left to snooze · right to stop', optional=True) is None
+    assert find('Either volume button also snoozes.', optional=True) is None
+    passed('Ringing uses visual swipe guidance without instructional text')
     find(desc='Alarm label: Timer · 1 min')
     find(desc='Alarm slider: swipe left to snooze, right to stop')
     adb('shell', 'cmd', 'uimode', 'night', 'no'); time.sleep(1)
@@ -367,11 +350,11 @@ def ringing_snooze_checks():
     assert snoozed['snoozeMinutes'] == first['snoozeMinutes']
     assert_scheduled(first['id'], snoozed['snoozeUntil'])
     passed('Snooze actually schedules the selected twenty-five minutes')
-    assert preferences('coach_hints').get('ring_controls.learned') == 'true'
+    assert preferences('visual_hints').get('ring_controls.learned') == 'true'
     second = open_real_ringing_timer()
-    find('Either volume button also snoozes.')
+    assert find('Either volume button also snoozes.', optional=True) is None
     assert find('Slide left to snooze · right to stop', optional=True) is None
-    passed('Successful touch action retires gesture education and reveals the shortcut hint')
+    passed('Successful touch action retires visual swipe guidance without adding text')
     click(desc='Increase snooze by 5 minutes'); find(desc='Snooze duration: 15 minutes')
     slide_alarm(1)
     dismissed = record(second['id'])
@@ -389,7 +372,7 @@ def ringing_snooze_checks():
         volume_alarm = open_real_ringing_timer()
         if key == 25:
             assert find('Either volume button also snoozes.', optional=True) is None
-            assert preferences('coach_hints').get('volume_snooze.learned') == 'true'
+            assert preferences('visual_hints').get('volume_snooze.learned') == 'true'
             passed('Using the hardware shortcut retires its hint on later alarms')
         click(desc='Increase snooze by 5 minutes' if target > 10 else 'Decrease snooze by 5 minutes')
         find(desc=f'Snooze duration: {target} minutes')
