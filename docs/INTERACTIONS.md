@@ -13,16 +13,23 @@ Keep the approved Google Clock ringing layout and quiet typography. Visual affor
 | [Android predictive back](https://developer.android.com/design/ui/mobile/guides/patterns/predictive-back) | Native back opt-in and Material bottom-sheet handling, with older-platform fallback |
 | [Android haptics](https://developer.android.com/develop/ui/views/haptics/haptics-principles) | Normal system ticks for selection/threshold, confirmation on completion, no forced vibration preferences |
 
-## Visual guidance
+## Ringing-only visual guidance
 
-Explanatory coaching rows/captions are removed. Existing action labels, permission explanations, validation errors and accessibility descriptions remain.
+The user now wants shimmer only on the ringing screen. All main-tool bindings are removed, and VisualHints rejects every key except ring_controls. Static edit/remove affordances remain; existing press, ripple, navigation and value feedback remain. No coach-tip rows or captions are restored.
 
-- The ringing rail receives two outward light sweeps, suggesting both swipe directions without moving its thumb or changing touch behavior.
-- Add, the first timer preset, the running stopwatch Lap action, sleep-goal and wake-up controls receive a brief soft highlight.
-- Alarm times include a small pencil affordance. Cities include a visible 48dp remove icon with confirmation; long press remains available.
-- No cue adds text, consumes input, changes layout, or delays an action. Each lasts 1.8 seconds after a 500ms delay, with no permanent loop.
-- Cues require a focused, visible control and enabled animations. They cancel on interaction, loss of focus or detach, and after demonstrated learning.
-- Each cue displays at most once per app process and across three eligible sessions. New visual preferences are separate from the retired prose-tip preferences.
+The ringing rail emits two finite outward light sweeps, without moving its thumb or intercepting touch. Visibility, focus, learning, reduced-motion and lifecycle cancellation still apply. No other screen receives shimmer.
+
+## Ringing type and atmosphere
+
+The clock uses explicit weight 350, the smaller label uses 400, duration 500, and rail labels 450 at 22sp. The label is quieter than the clock. Hit targets and the selected rail layout remain.
+
+RingAtmosphere interpolates through deep-night blue, dawn rose, morning sage, afternoon amber, evening violet and night indigo using local time. Every RGB channel stays at or below 20/255. A static near-black gradient carries only a faint lower-screen tint, with no illustrations or ongoing animation. Native dark watch colors remain unchanged.
+
+## Alarm notification controls
+
+The phone heads-up and expanded notification use a compact black surface with alarm label, five-minute decrement/increment selection and a Snooze/Stop action rail. The collapsed view preserves both actions. Android controls its system header, presentation, timing and custom-view size; notification controls are taps, not a draggable slider. No overlay permission is requested. Wear notifications expose native Snooze/Stop actions.
+
+RingControls stores snooze selection by alarm ID and occurrence timestamp. Full-screen and notification controls read the same selection; saved alarm defaults remain unchanged. Immutable action PendingIntents have unique occurrence/action URIs and target a non-exported receiver. The receiver validates Scheduler.isActive before acting, so stale actions cannot affect a later occurrence. Notification updates are alert-once and do not open an activity for adjustment, snooze or stop.
 
 ## Motion and state
 
@@ -34,6 +41,6 @@ Save/delete/start/cancel feedback confirms local state changes. Explicit sync re
 
 ## Verification
 
-Use full emulator scope for this cross-app change. Focused guidance, ringing-motion, motion or visual-cue scopes are available for subsequent corrections after the unaffected flows are covered. Tests exercise real user interactions, process restart, visual cues, learning, actual alarm delivery, spring interruption, hardware snooze, native back, rapid navigation and reduced motion. Internal transition video checks need enough actual intermediate frames, not a fixed recording duration: static virtual displays may stop emitting frames when a scene settles.
+Use full emulator scope for this cross-app change. Focused guidance, ringing-motion, motion or visual-cue scopes are available for subsequent corrections after the unaffected flows are covered. Tests exercise real user interactions, process restart, visual cues, learning, actual alarm delivery, spring interruption, hardware snooze, native back, rapid navigation and reduced motion. Internal transition video checks require an actual intermediate scene blend and a settled destination, without assuming a virtual-display frame rate. Endpoint masking excludes incidental focus feedback.
 
 The visual-cue scope records before real timer delivery and includes notification opening in its 40-second window, so internal review can see the actual two-pass shimmer. A shorter home-screen-only recording is not evidence of the visual effect.

@@ -1,12 +1,12 @@
 # Orbit Clock motion and typography
 
-Preserve the user-selected Google Clock ringing layout: plain dark green, large time, saved label, compact duration row, and Snooze/Stop rail. Motion adds feedback to that layout; it does not introduce decorative clock faces or cards.
+Preserve the user-selected Google Clock ringing layout: near-black with a very subtle local-time tint, large time, saved label, compact duration row, and Snooze/Stop rail. Motion adds feedback to that layout; it does not introduce decorative clock faces or cards.
 
 ## Typography and proportions
 
-Ringing time uses a light weight with tabular numerals and restrained tracking. The label is 26sp regular, action labels are 24sp regular, and the duration is 16sp. Plus/minus controls retain 48dp hit areas on phone. The rail is 80dp high, with a 96 × 64dp thumb. Large text remains supported; alarm labels can wrap to two lines.
+Ringing time uses explicit weight 350 with tabular numerals and restrained tracking. The label is 24sp at weight 400, action labels are 22sp at weight 450, and the duration is 16sp at weight 500. Plus/minus controls retain 48dp hit areas on phone. The rail is 80dp high, with a 96 × 64dp thumb. Large text remains supported; alarm labels can wrap to two lines.
 
-Main clock, timer and stopwatch numerals use tabular figures to avoid horizontal jitter. Existing Material type roles and the selected dark green ringing palette remain intact.
+Main clock, timer and stopwatch numerals use tabular figures to avoid horizontal jitter. Existing Material type roles remain intact; ringing uses its own near-black atmosphere and restrained mint actions.
 
 ## Interaction inventory
 
@@ -36,7 +36,7 @@ Main clock, timer and stopwatch numerals use tabular figures to avoid horizontal
 | Snooze-duration adjustment | Value changes immediately, then gives the 180ms value pulse |
 | Slider drag | Thumb follows the finger directly, grows by 4%, tilts up to 8°, and gently dims the opposite action label |
 | Slider threshold | One tick when crossing the threshold per gesture; confirmation haptic on completion |
-| Visual affordances | Two finite light sweeps over existing controls; outward on the alarm rail; no instructional captions or layout movement |
+| Visual affordances | Two finite outward light sweeps only on the ringing rail; no main-tool shimmer, instructional captions or layout movement |
 | Incomplete/canceled slider drag | Native, velocity-aware spring return with bounded travel; labels follow actual spring position and new input interrupts without a jump |
 | Slider completion and volume buttons | Alarm action executes immediately, never waits for animation completion |
 
@@ -50,10 +50,12 @@ Animations cancel on detach; slider motion also cancels on focus loss. New input
 
 ## Verification
 
-The cloud emulator suite enables real Android animations, exercises normal feature flows, records a static Timer-to-paused-Stopwatch transition, checks for multiple intermediate content frames, and emits an internal filmstrip for visual review. It also tests rapid navigation, rapid duration adjustment, preset selection, invalid input recovery, short-slider cancellation with motion enabled/disabled, volume snooze with motion disabled, and editor/stopwatch actions with all animation scales set to zero.
+The cloud emulator suite enables real Android animations, exercises normal feature flows, records a static Timer-to-paused-Stopwatch transition for 12 seconds, checks for a visible content blend between source/destination and a settled destination, and emits an internal filmstrip for visual review. It also tests rapid navigation, rapid duration adjustment, preset selection, invalid input recovery, short-slider cancellation with motion enabled/disabled, volume snooze with motion disabled, and editor/stopwatch actions with all animation scales set to zero.
 
 See verification/STATUS.md for the observed result and source revision. Emulator feedback cannot establish physical-device frame rate, haptic quality or watch usability.
 
 Verification scope defaults to full. After the main flows have been covered on unchanged app code, select ringing-motion or motion for a focused rerun using the workflow input or explicit commit markers [ui:ringing-motion] / [ui:motion]. Focused tests retain the same assertions. Scheduled-deadline reads wait up to five seconds for the main screen’s asynchronous restore to finish; a missing or wrong final schedule still fails.
 
 See [INTERACTIONS.md](INTERACTIONS.md) for reference mapping, visual affordances, visible-session caps, native back behavior, and truthful connection feedback. Visual light sweeps use up to three focused, visible app-process sessions and retire after use. No explanatory tip text or coach-mark rows are added. Native page transitions keep the header/navigation/status/FAB mounted. Confirmation feedback reflects local saves and never asserts watch delivery without an acknowledgement.
+
+The capture check masks pixels that differ between the two tools and requires a visible intermediate scene distinct from both endpoints, followed by a settled paused Stopwatch. It does not treat a virtual display’s number of emitted frames as a physical-device frame-rate guarantee. Input-focus color changes cannot substitute for a scene blend.

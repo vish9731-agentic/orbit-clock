@@ -2,7 +2,7 @@
 
 Native Android phone and Wear OS clock apps with a Material You / Material 3 interface, shared alarms, and rotating-bezel controls for Galaxy Watch 4 Classic.
 
-Both debug APKs build successfully. The project passes 7 Kotlin/JUnit tests and 44 standalone production-policy checks, with phone/watch lint passing. The current interface replaces prose tips with finite visual light sweeps and explicit edit/remove icons, alongside continuous Material navigation, interruptible spring feedback and finite connection status. See revision-specific evidence below. The phone passed 48 full emulator scenarios, seven fresh-install checks and three focused visual-cue checks; overlapping scopes are not a unique-test total. See [verification/STATUS.md](verification/STATUS.md) for exact sources and runs. Physical-device testing remains. This is an initial prototype, not full Google Clock feature parity or a validated alarm replacement.
+Both debug APKs build successfully. Seven Kotlin/JUnit tests, 54 standalone production-policy checks and phone/watch lint pass. Targeted emulator checks exercise the ringing UI, occurrence snooze selection, volume buttons, real heads-up actions over another app and native motion. See [verification/STATUS.md](verification/STATUS.md) for exact revisions and outcomes. Physical-device testing remains. This is an initial prototype, not full Google Clock parity or a validated alarm replacement.
 
 Private repository: [vish9731-agentic/orbit-clock](https://github.com/vish9731-agentic/orbit-clock).
 
@@ -55,7 +55,7 @@ The intended flow is: request a change → a coding session with access updates 
 
 The [Android debug workflow](.github/workflows/android-debug.yml) runs on push, pull request or manual dispatch. After a successful default-branch build, it is configured to publish individual APKs to the `debug-latest` prerelease as well as Actions artifacts. **Verified:** [cloud build, tests, lint and publication succeeded](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41104668417). Both phone and watch debug APKs are built and uploaded from the verified revision; the development signing key is unchanged.
 
-Verified download links (version `0.1.36`, version code `37` for this build):
+Verified download links (version `0.1.42`, version code `43` for this build):
 
 - [Phone debug APK](https://github.com/vish9731-agentic/orbit-clock/releases/download/debug-latest/orbit-clock-phone-debug.apk)
 - [Watch debug APK](https://github.com/vish9731-agentic/orbit-clock/releases/download/debug-latest/orbit-clock-watch-debug.apk)
@@ -83,8 +83,10 @@ While the ringing screen is open and focused, either physical volume button snoo
 
 The phone follows the user-selected Google Clock reference: a plain dark green background, large time, saved custom label (or “Alarm” when blank), and a Snooze/Stop rail with a draggable center thumb. A compact minus/minutes/plus row sits above it, with five-minute steps from 5 to 60. Both volume buttons still snooze while the ringing screen is focused. Accessible action labels also support tapping. Watch controls retain their compact dark layout.
 
-## Motion and visual affordances
+## Ringing and notification UI
 
-The selected dark green ringing layout is preserved. A brief outward shimmer suggests both swipe directions without moving the thumb. Soft highlights draw attention to Add, a timer preset, Lap and bedtime controls; alarm times have an edit icon and cities have a visible remove icon with confirmation. There are no explanatory coaching rows or captions.
+Only the ringing slider shimmers. Other screens retain static affordances and normal native press, value and navigation feedback, without shimmer or prose tips.
 
-Cues run for two passes only, require visible focused controls, respect reduced motion and stop on interaction/detach. Learning retires the relevant cue; otherwise each appears at most once per process across three eligible sessions. Native Material navigation, ripples, press states and haptics remain. Connection status reports availability/request state without claiming delivery. See [interaction references](docs/INTERACTIONS.md) and [motion policy](docs/MOTION.md).
+The clock uses weight 350, the 24sp label weight 400, duration weight 500, and 22sp rail labels weight 450. A nearly black static gradient carries a tiny hint of local time: deep-night blue, dawn rose, morning sage, afternoon amber, evening violet or night indigo. All tint channels stay at or below 20/255 and blend smoothly through midnight.
+
+Phone alarm banners have Snooze/Stop controls, plus five-minute snooze adjustments in the heads-up/expanded layout. Collapsed notifications retain both actions. The banner and ringing screen share selection for that occurrence without editing the saved default. Android owns the notification header, dimensions and presentation; banner actions are taps rather than a draggable gesture. Wear notifications use native Snooze/Stop actions. See [interaction details](docs/INTERACTIONS.md).
