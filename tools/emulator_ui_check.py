@@ -183,11 +183,11 @@ def motion_checks():
     # Static Timer -> paused Stopwatch: no ticking content can fake transition frames.
     target = xy(find('Stopwatch'))
     video = OUT / 'motion-internal.mp4'
-    recorder = subprocess.Popen(['adb', 'shell', 'screenrecord', '--bit-rate', '2500000', '--time-limit', '3', '/sdcard/orbit-motion.mp4'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    recorder = subprocess.Popen(['adb', 'shell', 'screenrecord', '--bit-rate', '2500000', '--time-limit', '12', '/sdcard/orbit-motion.mp4'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         time.sleep(.55)
         tap_xy(target)
-        recorder.communicate(timeout=8)
+        recorder.communicate(timeout=18)
     finally:
         if recorder.poll() is None: recorder.kill(); recorder.communicate()
     adb('pull', '/sdcard/orbit-motion.mp4', str(video))
