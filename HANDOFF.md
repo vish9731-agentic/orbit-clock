@@ -2,7 +2,7 @@
 
 ## Blue-hour stars and cloud wisps
 
-21:00 blue hour now includes five faint stars at 65% of deep-night strength, without the moon. Daylight corner scenes gain three soft, narrow cloud wisps made from cached gradients. The black main field, current-local-time selection and snooze behavior are preserved. Build and emulator verification are pending for this change.
+21:00 blue hour now includes five faint stars at 65% of deep-night strength, without the moon. Daylight corner scenes gain three soft, narrow cloud wisps made from cached gradients. The black main field, current-local-time selection and snooze behavior are preserved. Build/tests/lint and APK publication passed in run 41331010277 (source 7c00710f38e05134f7b1535cfd9f9924304dc89e); all 71 production-policy checks pass. Emulator run 41331010227 remains incomplete: evening-to-night verified actual afternoon/night rendered controls and live refresh, then its guest disconnected during the first snooze. Afternoon-to-evening was still active when recorded. Do not claim a full emulator pass or completed visual review of the new 21:00 stars/clouds.
 
 
 ## Goal and authorization
