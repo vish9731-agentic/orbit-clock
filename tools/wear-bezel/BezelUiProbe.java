@@ -184,6 +184,7 @@ public final class BezelUiProbe extends Instrumentation {
         View buttons=actions(a), less=control(a,"Decrease snooze by 5 minutes"), more=control(a,"Increase snooze by 5 minutes");
         View snooze=control(a,"Snooze"), dismiss=control(a,"Dismiss");
         for(View v:new View[]{less,more,snooze,dismiss}) require(ui(() -> v.getWidth()>=47.5f*density && v.getHeight()>=47.5f*density),"Touch target smaller than 48dp: "+v.getContentDescription());
+        require(ui(() -> less.getWidth()>=55.5f*density && more.getWidth()>=55.5f*density),"Duration controls are not the larger 56dp circles");
         require(ui(() -> visibleTexts(buttons).isEmpty()),"Watch actions contain visible text");
         List<String> texts=ui(() -> visibleTexts(a.getWindow().getDecorView()));
         for(String text:texts) require(!text.matches("(?i).*(snooze|dismiss|stop|rotate|bezel|[0-9]+%).*"),"Visible textual bezel cue: "+text);

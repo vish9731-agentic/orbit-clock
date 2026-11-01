@@ -99,13 +99,13 @@ class RingActivity : AppCompatActivity() {
         increase = control("+") { selectedMinutes = SnoozeDuration.increase(selectedMinutes); RingControls.select(this, id, at, selectedMinutes); updateDuration() }.apply { contentDescription = "Increase snooze by 5 minutes" }
         if (watch) {
             decrease.textSize = 28f; increase.textSize = 28f
-            decrease.cornerRadius = dp(24); increase.cornerRadius = dp(24)
+            decrease.cornerRadius = dp(28); increase.cornerRadius = dp(28)
         }
         duration = label("", if (watch) 20f else 16f).apply {
             typeface = Typeface.create(typeface, 500, false); accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
             if (watch) { maxLines = 1; setAutoSizeTextTypeUniformWithConfiguration(14, 20, 1, android.util.TypedValue.COMPLEX_UNIT_SP) }
         }
-        val size = dp(48)
+        val size = dp(if (watch) 56 else 48)
         stepper.addView(decrease, LinearLayout.LayoutParams(size, size))
         stepper.addView(duration, LinearLayout.LayoutParams(dp(if (watch) 68 else 96), size))
         stepper.addView(increase, LinearLayout.LayoutParams(size, size))
