@@ -38,13 +38,13 @@ jobs:
       - name: Verify seven atmospheres and eight real snoozes
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 33
           target: google_apis
           arch: x86_64
           profile: pixel_6
           ram-size: 2048M
           heap-size: 256M
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 2048 -feature -Vulkan
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 2048
           disable-animations: false
           emulator-boot-timeout: 360
           script: |
@@ -52,13 +52,13 @@ jobs:
             adb shell settings put secure user_setup_complete 1
             adb shell pm disable-user --user 0 com.google.android.googlesdksetup || true
             adb shell am force-stop com.google.android.apps.nexuslauncher
-            adb shell setprop debug.hwui.renderer skiagl
+            adb shell pm disable-user --user 0 com.google.android.settings.intelligence || true
             adb shell wm size 720x1600
             adb shell wm density 280
             adb install phone/build/outputs/apk/debug/phone-debug.apk
             adb shell pm grant dev.orbit.clock android.permission.POST_NOTIFICATIONS
             adb shell appops set dev.orbit.clock SCHEDULE_EXACT_ALARM allow
-            adb shell appops set dev.orbit.clock USE_FULL_SCREEN_INTENT allow
+            adb shell appops set dev.orbit.clock USE_FULL_SCREEN_INTENT allow || true
             adb logcat -c
             python tools/capture-ringing-atmospheres.py
       - name: Runner resource diagnostics

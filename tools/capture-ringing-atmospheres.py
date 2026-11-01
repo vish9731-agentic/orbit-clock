@@ -126,6 +126,11 @@ try:
     adb('shell','settings','put','system','font_scale','1.0')
     for key in ['window_animation_scale','transition_animation_scale','animator_duration_scale']:
         adb('shell','settings','put','global',key,'1')
+    # Start shortly before the fixture alarm, avoiding a next-day forward jump
+    # and the emulator's unrelated overdue system-job catch-up during cold boot.
+    epoch=int(adb('shell','date','+%s').strip())
+    today=dt.datetime.fromtimestamp(epoch,dt.timezone.utc).replace(hour=6,minute=58,second=0,microsecond=0)
+    set_time(int(today.timestamp()*1000))
     adb('shell','input','keyevent','224');adb('shell','wm','dismiss-keyguard')
     adb('shell','am','start','-W','-n',PKG+'/dev.orbit.clock.phone.MainActivity')
     before={a['id'] for a in records()}
