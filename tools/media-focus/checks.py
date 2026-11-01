@@ -35,7 +35,7 @@ def run(ui):
         raise AssertionError(label+': '+str(last))
     def main():adb('shell','am','start','-W','-f','0x14000000','-n',pkg+'/dev.orbit.clock.phone.MainActivity')
     def start_player(mode):
-        adb('shell','am','start','-W','-n',PROBE+'/.ProbeActivity','--es','mode',mode)
+        adb('shell','am','start','-W','-f','0x10008000','-n',PROBE+'/.ProbeActivity','--es','mode',mode)
         await_player(lambda p:p.get('mode')==mode and p.get('playing')=='true',mode+' did not play')
     def advancing(mode):
         before=player();time.sleep(.65);after=player()
@@ -98,7 +98,7 @@ def run(ui):
     passed('Stopping one overlapping alarm keeps media paused while the other rings')
     stop_banner();assert not record(first['id'])['enabled'];resumed('music')
     passed('Stopping the last alarm releases audio focus to the previous music player')
-    adb('shell','am','start','-W','-n',PROBE+'/.ProbeActivity','--es','mode','stop')
+    adb('shell','am','start','-W','-f','0x10008000','-n',PROBE+'/.ProbeActivity','--es','mode','stop')
     await_player(lambda p:p.get('playing')=='false' and 'closed;' in p.get('events',''),'Music fixture did not stop')
     video,_,_=create_timer();start_player('video');advancing('video')
     await_alarm(video);paused('video')
