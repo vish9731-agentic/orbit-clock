@@ -6,6 +6,8 @@ from PIL import Image, ImageDraw
 
 root=Path('wear-bezel-results')
 frames=sorted(p for p in root.rglob('*.png') if p.name[:2].isdigit())
+failures=sorted(root.rglob('failure.png'))
+frames.extend(failures)
 if frames:
     width=600
     cell=200

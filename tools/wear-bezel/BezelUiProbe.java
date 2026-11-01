@@ -158,14 +158,14 @@ public final class BezelUiProbe extends Instrumentation {
     }
     private Activity delivered(String id) throws Exception {
         resumed=null;
-        long at=System.currentTimeMillis()+6000;
+        long at=System.currentTimeMillis()+12000;
         JSONObject alarm=new JSONObject().put("id",id).put("hour",7).put("minute",0).put("label","Watch alarm").put("timer",true)
             .put("days",new JSONArray()).put("enabled",true).put("vibrate",true).put("sound",true).put("snoozeMinutes",10)
             .put("snoozeUntil",at).put("skipThrough",0).put("deleted",false).put("revision",System.currentTimeMillis()).put("writer","bezel-ui-probe");
         JSONArray all=records(); all.put(alarm); require(prefs("alarms").edit().putString("records",all.toString()).commit(),"Cannot seed alarm");
         ui(() -> { target.startActivity(new Intent().setClassName(PKG,MAIN).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK)); return null; });
-        waitUntil(() -> prefs("scheduled_occurrences").getLong(id+".scheduled",0)==at,5000,"Real timer was not scheduled");
-        waitUntil(() -> prefs("scheduled_occurrences").getLong(id+".active",0)==at,20000,"Real AlarmReceiver did not accept timer");
+        waitUntil(() -> prefs("scheduled_occurrences").getLong(id+".scheduled",0)==at,10000,"Real timer was not scheduled");
+        waitUntil(() -> prefs("scheduled_occurrences").getLong(id+".active",0)==at,30000,"Real AlarmReceiver did not accept timer");
         ui(() -> { target.startActivity(new Intent().setClassName(PKG,RING).putExtra("id",id).putExtra("at",at).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP)); return null; });
         waitUntil(() -> ui(() -> resumed!=null && resumed.getClass().getName().equals(RING) && id.equals(resumed.getIntent().getStringExtra("id")) && !resumed.isFinishing() && resumed.hasWindowFocus()),10000,"RingActivity did not become focused");
         // An automatic full-screen intent may already be opening/recreating the

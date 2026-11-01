@@ -63,9 +63,11 @@ class RingActivity : AppCompatActivity() {
         fun label(value: String, size: Float) = TextView(this).apply {
             text = value; textSize = size; typeface = Typeface.create(Typeface.create("sans-serif", Typeface.NORMAL), 400, false); gravity = Gravity.CENTER; setTextColor(foreground); includeFontPadding = false
         }
+        val watchWidth = resources.configuration.screenWidthDp
+        val sidePadding = if (watch) ((watchWidth - 180) / 2).coerceIn(0, 20) else 16
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(if (watch) 20 else 16), dp(8), dp(if (watch) 20 else 16), dp(8))
+            setPadding(dp(sidePadding), dp(8), dp(sidePadding), dp(8))
             isFocusableInTouchMode = true
         }
         val now = LocalTime.now()
@@ -73,7 +75,8 @@ class RingActivity : AppCompatActivity() {
         if (watch) {
             body.gravity = Gravity.CENTER
             val heading = label("$time · $name", 16f).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
-            body.addView(heading, LinearLayout.LayoutParams(dp(136), -2).apply { bottomMargin = dp(8) })
+            val headingWidth = if (watchWidth < 215) (watchWidth * .48f).toInt() else 136
+            body.addView(heading, LinearLayout.LayoutParams(dp(headingWidth), -2).apply { bottomMargin = dp(8) })
         } else {
             body.addView(Space(this), LinearLayout.LayoutParams(1, 0, 3.3f))
             body.addView(label(time, 144f).apply {
