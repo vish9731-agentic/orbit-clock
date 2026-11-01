@@ -199,6 +199,16 @@ class RingActivity : AppCompatActivity() {
         volumeKey = KeyEvent.KEYCODE_UNKNOWN
         super.onPause()
     }
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        if (watch && event.action == MotionEvent.ACTION_SCROLL && event.isFromSource(InputDevice.SOURCE_ROTARY_ENCODER)) {
+            // Alarm actions own the watch bezel, even when large text makes the
+            // ScrollView scrollable. Never spend an action detent on scrolling.
+            val delta = event.getAxisValue(MotionEvent.AXIS_SCROLL)
+            if (!delta.isFinite() || delta == 0f) return true
+            return onGenericMotionEvent(event)
+        }
+        return super.dispatchGenericMotionEvent(event)
+    }
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         if (event.action == MotionEvent.ACTION_SCROLL && event.isFromSource(InputDevice.SOURCE_ROTARY_ENCODER)) {
             val action = gesture.turn(event.getAxisValue(MotionEvent.AXIS_SCROLL), SystemClock.elapsedRealtime())

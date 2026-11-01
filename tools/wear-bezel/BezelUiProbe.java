@@ -242,7 +242,9 @@ public final class BezelUiProbe extends Instrumentation {
         require(record("bezel-duration-bounds").getInt("snoozeMinutes")==10,"Boundary adjustments edited alarm default");
         shell("settings put system font_scale 1.3"); SystemClock.sleep(1200);
         waitUntil(() -> ui(() -> resumed!=null && resumed.getClass().getName().equals(RING) && resumed.hasWindowFocus() && resumed.getResources().getConfiguration().fontScale>=1.29f),5000,"Large-type RingActivity not focused at 130 percent");
-        a=resumed; selected(a,60); layout(a); displayScreenshot("display-large-type"); screenshot("06-large-type-60"); click(control(a,"Dismiss"));
+        a=resumed; selected(a,60); layout(a);
+        rotate(a,1); require(progress(actions(a))==16 && !snoozing(actions(a)),"Large-type layout consumed bezel input instead of showing action progress");
+        displayScreenshot("display-large-type"); screenshot("06-large-type-60"); click(control(a,"Dismiss"));
         waitUntil(() -> !record("bezel-duration-bounds").getBoolean("enabled"),3000,"Touch dismissal failed");
         pass("Larger duration buttons retain 5–60 limits, remain visible at 130 percent font scale, and touch Dismiss works");
         shell("settings put system font_scale 1.0"); SystemClock.sleep(400);
