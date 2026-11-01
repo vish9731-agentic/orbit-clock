@@ -172,12 +172,12 @@ open class ClockActivity : AppCompatActivity() {
             if (navigationView == null) sections.forEachIndexed { i, name -> navigation.menu.add(0, i + 1, i, if (i == 0) "Alarm" else name).setIcon(icons[i]) }
             navigationView = navigation
             (navigation.parent as? ViewGroup)?.removeView(navigation)
+            root.addView(navigation, LinearLayout.LayoutParams(-1, dp(80)))
             navigation.selectedItemId = sections.indexOf(tab) + 1
             navigation.setOnItemSelectedListener { item ->
                 val target = sections[item.itemId - 1]
                 if (tab != target) { OrbitMotion.tick(navigation); tab = target; render() }; true
             }
-            root.addView(navigation, LinearLayout.LayoutParams(-1, dp(80)))
         }
         OrbitMotion.bindTree(root)
         if (tabChanged) { OrbitMotion.content(content, direction); OrbitMotion.enter(title, direction = direction) }

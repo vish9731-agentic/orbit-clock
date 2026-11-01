@@ -20,14 +20,17 @@ def adb(*args, binary=False):
         ['adb', *args], check=True, capture_output=True, text=True, timeout=35).stdout
 
 def tree():
-    for attempt in range(3):
+    # Dumps can race a window/keyboard transition; never reuse an old hierarchy.
+    last = ''
+    for attempt in range(5):
         try:
             adb('shell', 'rm', '-f', '/sdcard/orbit-window.xml')
-            adb('shell', 'uiautomator', 'dump', '/sdcard/orbit-window.xml')
+            last = adb('shell', 'uiautomator', 'dump', '/sdcard/orbit-window.xml')
             return ET.fromstring(adb('shell', 'cat', '/sdcard/orbit-window.xml'))
-        except (subprocess.SubprocessError, ET.ParseError):
-            if attempt == 2: raise
-            time.sleep(.5)
+        except (subprocess.SubprocessError, ET.ParseError) as error:
+            last += ' ' + str(getattr(error, 'stderr', '') or error)
+            if attempt == 4: raise RuntimeError('No fresh UI hierarchy: ' + last[-1200:]) from error
+            time.sleep(.6)
 
 def find(value=None, desc=None, edit=False, optional=False):
     for attempt in range(1 if optional else 4):
@@ -63,7 +66,12 @@ def fill(value, desc=None):
     tap_xy(xy(node)); adb('shell', 'input', 'keyevent', '123')
     for _ in range(len(node.attrib.get('text', '')) + 2): adb('shell', 'input', 'keyevent', '67')
     adb('shell', 'input', 'text', value.replace(' ', '%s')); time.sleep(.3)
-    ime = adb('shell', 'dumpsys', 'input_method')
+    for attempt in range(3):
+        try:
+            ime = adb('shell', 'dumpsys', 'input_method'); break
+        except subprocess.CalledProcessError as error:
+            if attempt == 2: raise RuntimeError('Keyboard-state probe failed: ' + str(error.stderr)[-1200:]) from error
+            time.sleep(.5)
     if re.search(r'(?:mInputShown|mIsInputViewShown|isInputViewShown)=true', ime):
         adb('shell', 'input', 'keyevent', '4'); time.sleep(.3)
 
