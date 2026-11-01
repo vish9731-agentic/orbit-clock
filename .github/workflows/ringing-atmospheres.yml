@@ -14,6 +14,19 @@ permissions:
 jobs:
   capture:
     if: ${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[ui:atmospheres]') }}
+    name: ${{ matrix.batch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - batch: afternoon-to-evening
+            start: 15
+            end: 19
+            options: ''
+          - batch: evening-to-night
+            start: 19
+            end: 23
+            options: '--skip-period-captures'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -35,7 +48,7 @@ jobs:
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android/sdk/ndk
           sudo chmod 666 /dev/kvm
           free -m
-      - name: Verify seven atmospheres and eight real snoozes
+      - name: Verify atmospheres and four real snoozes
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 33
@@ -60,7 +73,7 @@ jobs:
             adb shell appops set dev.orbit.clock SCHEDULE_EXACT_ALARM allow
             adb shell appops set dev.orbit.clock USE_FULL_SCREEN_INTENT allow || true
             adb logcat -c
-            python tools/capture-ringing-atmospheres.py
+            python tools/capture-ringing-atmospheres.py --start-hour ${{ matrix.start }} --end-hour ${{ matrix.end }} ${{ matrix.options }}
       - name: Runner resource diagnostics
         if: always()
         run: |
@@ -69,6 +82,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ringing-atmospheres
+          name: ringing-atmospheres-${{ matrix.batch }}
           retention-days: 3
           path: atmosphere-screenshots/

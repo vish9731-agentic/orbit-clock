@@ -1,4 +1,5 @@
 """Verify seven localized ringing atmospheres and real snoozes across eight hours."""
+import argparse
 import datetime as dt
 import json
 from pathlib import Path
@@ -8,8 +9,24 @@ import time
 import xml.etree.ElementTree as ET
 from PIL import Image
 
+parser=argparse.ArgumentParser()
+parser.add_argument('--start-hour',type=int,default=15)
+parser.add_argument('--end-hour',type=int,default=19)
+parser.add_argument('--skip-period-captures',action='store_true')
+ARGS=parser.parse_args()
+assert 0<=ARGS.start_hour<ARGS.end_hour<=23,'Expected a same-day increasing hour range'
 OUT=Path('atmosphere-screenshots'); OUT.mkdir(exist_ok=True)
 PKG='dev.orbit.clock'
+result=[];hourly=[]
+batch={'start_hour':ARGS.start_hour,'end_hour':ARGS.end_hour,
+       'expected_snoozes':ARGS.end_hour-ARGS.start_hour,'completed_snoozes':0,
+       'verified_period_captures':0,'live_refresh_passed':False,'crash_buffer_empty':None}
+def checkpoint():
+    # Preserve completed milestones even if the disposable guest later exits.
+    (OUT/'captures.json').write_text(json.dumps(result,indent=2))
+    (OUT/'hourly-snoozes.json').write_text(json.dumps(hourly,indent=2))
+    (OUT/'batch-summary.json').write_text(json.dumps(batch,indent=2))
+checkpoint()
 
 def adb(*args, binary=False):
     r=subprocess.run(['adb',*args],capture_output=True,timeout=40)
@@ -47,6 +64,7 @@ def tap(text=None,desc=None,res=None):
         n=find(text,desc,res); bounds=n.attrib['bounds']
         if bounds==previous: break
         previous=bounds; time.sleep(.35)
+    else:raise AssertionError('UI bounds did not settle: '+str(text or desc or res))
     x1,y1,x2,y2=map(int,re.findall(r'\d+',bounds))
     adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2));time.sleep(.4)
 
@@ -93,7 +111,34 @@ def fresh_ring(alarm_id,at):
 def capture(name):
     path=OUT/(name+'.png')
     path.write_bytes(adb('exec-out','screencap','-p',binary=True))
+    assert_rendered_controls(path)
     return path
+
+def assert_rendered_controls(path):
+    # Semantic nodes alone cannot detect dropped text drawing. On this fixed CI
+    # phone viewport, verify actual clock glyphs, label, stepper and both actions.
+    im=Image.open(path).convert('RGB');w,h=im.size
+    def bright(x1,y1,x2,y2):
+        return sum(min(im.getpixel((x,y)))>100
+                   for y in range(int(h*y1),int(h*y2))
+                   for x in range(int(w*x1),int(w*x2)))
+    columns=[any(min(im.getpixel((x,y)))>110 for y in range(int(h*.40),int(h*.57)))
+             for x in range(int(w*.05),int(w*.95))]
+    groups=[];start=None
+    for i,present in enumerate(columns+[False]):
+        if present and start is None:start=i
+        if not present and start is not None:
+            if i-start>2:groups.append(i-start)
+            start=None
+    assert len(groups)==5,('Rendered clock must contain four digits and colon',path,groups)
+    checks=[('alarm label',bright(.30,.57,.70,.65),200),
+            ('minus',bright(.25,.66,.38,.72),15),
+            ('plus',bright(.62,.66,.75,.72),30),
+            ('Snooze',bright(.08,.73,.36,.84),200),
+            ('Stop',bright(.72,.73,.90,.84),150)]
+    for name,pixels,minimum in checks:assert pixels>=minimum,('Rendered control missing',path,name,pixels)
+    print('RENDER '+json.dumps({'file':path.name,'clock_glyphs':len(groups),
+                               'control_pixels':{name:pixels for name,pixels,_ in checks}}),flush=True)
 
 def background_signature(path):
     # Before the clock text: sample the actual rendered corner artwork, avoiding
@@ -160,8 +205,8 @@ try:
     find(desc='Snooze duration: 10 minutes')
     day=dt.datetime.fromtimestamp(at/1000,dt.timezone.utc).replace(hour=0,minute=0,second=0,microsecond=0)
     periods=[('early-morning',6),('sunshine',8),('noon',12),('afternoon',15),('evening',18),('late-evening',21),('night',1)]
-    result=[];signatures={}
-    for name,hour in periods:
+    signatures={}
+    for name,hour in ([] if ARGS.skip_period_captures else periods):
         set_time(int(day.replace(hour=hour).timestamp()*1000))
         fresh_ring(alarm['id'],at)
         find(desc=f'Alarm time: {hour:02d}:00');find(desc='Alarm label: Alarm')
@@ -170,12 +215,13 @@ try:
         signature=background_signature(path);signatures[name]=signature
         result.append({'period':name,'time':f'{hour:02d}:00','file':path.name,
                        'peak':signature['peak'],'colored_fraction':signature['colored_fraction']})
+        batch['verified_period_captures']=len(result);checkpoint()
         print('CAPTURE '+json.dumps(result[-1]),flush=True)
-    for index,(name,_) in enumerate(periods):
+    for index,(name,_) in enumerate([] if ARGS.skip_period_captures else periods):
         for other,_ in periods[:index]:
             difference=visual_difference(signatures[name],signatures[other])
             assert difference>.7,('Atmospheres look identical',name,other,difference)
-    print('ATMOSPHERE PASS: seven distinguishable localized corner treatments',flush=True)
+    if not ARGS.skip_period_captures:print('ATMOSPHERE PASS: seven distinguishable localized corner treatments',flush=True)
 
     # Keep the same visible window while time changes. No recreation can hide a
     # failure to refresh at runtime or after a local timezone/time notification.
@@ -186,18 +232,18 @@ try:
     find(desc='Alarm time: 23:00')
     night_live=background_signature(capture('live-night'))
     assert visual_difference(afternoon_live,night_live)>1.0,'Visible window did not update with current time'
+    batch['live_refresh_passed']=True;checkpoint()
     print('ATMOSPHERE PASS: already-visible ringing updates from afternoon to night',flush=True)
 
-    # Eight actual Snooze actions cover the user's 15:00 -> 23:00 example. The
-    # saved alarm remains 07:00 throughout: appearance must use current local time,
-    # not its stored hour, first occurrence, or previous ringing appearance.
-    set_time(int(day.replace(hour=15).timestamp()*1000))
-    fresh_ring(alarm['id'],at);find(desc='Alarm time: 15:00')
+    # Independent guest batches cover 15->19 and 19->23: four genuine hourly
+    # re-rings in each guest. The saved alarm remains 07:00 throughout, so the
+    # current wall clock must choose appearance rather than the stored alarm hour.
+    set_time(int(day.replace(hour=ARGS.start_hour).timestamp()*1000))
+    fresh_ring(alarm['id'],at);find(desc=f'Alarm time: {ARGS.start_hour:02d}:00')
     plus=find(desc='Increase snooze by 5 minutes')
     x1,y1,x2,y2=map(int,re.findall(r'\d+',plus.attrib['bounds']))
     plus_xy=((x1+x2)//2,(y1+y2)//2)
-    hourly=[]
-    for hour in range(16,24):
+    for hour in range(ARGS.start_hour+1,ARGS.end_hour+1):
         # A new occurrence restores the saved ten-minute default. Ten deliberate
         # plus taps choose 60 minutes; actions are never retried after dispatch.
         for _ in range(10):
@@ -222,18 +268,20 @@ try:
         find(prefix=f'Alarm time: {actual.hour:02d}:')
         find(desc='Snooze duration: 10 minutes')
         entry={'hour':hour,'occurrence':at,'saved_hour':snoozed['hour'],'default_snooze':snoozed['snoozeMinutes']}
-        hourly.append(entry);print('SNOOZE '+json.dumps(entry),flush=True)
+        hourly.append(entry);batch['completed_snoozes']=len(hourly);checkpoint()
+        print('SNOOZE '+json.dumps(entry),flush=True)
         if hour==23:
             refreshed=background_signature(capture('snoozed-from-afternoon-to-night'))
             assert visual_difference(afternoon_live,refreshed)>1.0,'Re-ringing retained afternoon appearance'
             assert visual_difference(night_live,refreshed)<1.2,'Re-ringing did not pick current night appearance'
-    print('ATMOSPHERE PASS: eight real hourly snoozes re-ring from 15:00 through 23:00 using current time',flush=True)
-    (OUT/'captures.json').write_text(json.dumps(result,indent=2))
-    (OUT/'hourly-snoozes.json').write_text(json.dumps(hourly,indent=2))
+    assert len(hourly)==ARGS.end_hour-ARGS.start_hour
+    print(f'ATMOSPHERE PASS: {len(hourly)} real hourly snoozes re-ring from {ARGS.start_hour:02d}:00 through {ARGS.end_hour:02d}:00 using current time',flush=True)
     crash=adb('logcat','-d','-b','crash');(OUT/'crashes.txt').write_text(crash)
     assert not crash.strip(),crash
-    print('CAPTURE RESULT: seven distinct real app screenshots, live time refresh, eight real hourly snoozes and no crashes',flush=True)
+    batch['crash_buffer_empty']=True;checkpoint()
+    print(f'CAPTURE RESULT: {len(result)} distinct period screenshots, live time refresh, {len(hourly)} real hourly snoozes and no crashes',flush=True)
 except Exception:
+    checkpoint()
     # Collect non-graphics diagnostics first; a stalled compositor must not
     # prevent retaining the app/system logs needed to diagnose a failed launch.
     for name,args in [('failure-crashes.txt',('logcat','-d','-b','crash')),
