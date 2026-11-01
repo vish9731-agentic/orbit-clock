@@ -29,6 +29,26 @@ class RingActivity : AppCompatActivity() {
     private lateinit var progress: TextView
     private lateinit var indicator: LinearProgressIndicator
     private var watchActions: AlarmSlideControl? = null
+    private var phoneTime: TextView? = null
+    private var atmosphere: RingAtmosphereDrawable? = null
+    private var clockRunning = false
+    private val clockHandler = Handler(Looper.getMainLooper())
+    private val clockTick = object : Runnable {
+        override fun run() {
+            if (!clockRunning) return
+            refreshPhoneClock()
+            clockHandler.postDelayed(this, 60_000L - Math.floorMod(System.currentTimeMillis(), 60_000L))
+        }
+    }
+    private fun refreshPhoneClock() {
+        val now = LocalTime.now()
+        atmosphere?.updateTime(now.toSecondOfDay() / 60)
+        phoneTime?.let { clock ->
+            val value = now.format(DateTimeFormatter.ofPattern(if (android.text.format.DateFormat.is24HourFormat(this)) "HH:mm" else "h:mm"))
+            clock.text = value
+            clock.contentDescription = "Alarm time: $value"
+        }
+    }
     private val bezelHandler = Handler(Looper.getMainLooper())
     // Match RotaryGesture's >1500ms pause boundary without changing its thresholds.
     private val resetBezelFeedback = Runnable { watchActions?.releaseBezel() }
@@ -36,7 +56,12 @@ class RingActivity : AppCompatActivity() {
         override fun onReceive(c: Context, i: Intent) {
             val a = Store(c).get(id)
             if (a == null || !Scheduler.isActive(c, a, at)) finish()
-            else if (::duration.isInitialized) { selectedMinutes = RingControls.minutes(c, a, at, selectedMinutes); updateDuration() }
+            else if (::duration.isInitialized) {
+                selectedMinutes = RingControls.minutes(c, a, at, selectedMinutes); updateDuration()
+                if (clockRunning && (i.action == Intent.ACTION_TIME_CHANGED || i.action == Intent.ACTION_TIMEZONE_CHANGED)) {
+                    clockHandler.removeCallbacks(clockTick); clockTick.run()
+                } else refreshPhoneClock()
+            }
         }
     }
     override fun onCreate(state: Bundle?) {
@@ -47,15 +72,15 @@ class RingActivity : AppCompatActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         id = intent.getStringExtra("id") ?: ""; at = intent.getLongExtra("at", 0)
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(changes, IntentFilter(Store.CHANGED).apply { addAction(RingControls.CHANGED) }, RECEIVER_NOT_EXPORTED)
-        else registerReceiver(changes, IntentFilter(Store.CHANGED).apply { addAction(RingControls.CHANGED) })
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(changes, IntentFilter(Store.CHANGED).apply { addAction(RingControls.CHANGED); addAction(Intent.ACTION_TIME_CHANGED); addAction(Intent.ACTION_TIMEZONE_CHANGED) }, RECEIVER_NOT_EXPORTED)
+        else registerReceiver(changes, IntentFilter(Store.CHANGED).apply { addAction(RingControls.CHANGED); addAction(Intent.ACTION_TIME_CHANGED); addAction(Intent.ACTION_TIMEZONE_CHANGED) })
         val alarm = Store(this).get(id)
         if (alarm == null || !Scheduler.isActive(this, alarm, at)) { finish(); return }
         val sameOccurrence = state != null && state.getString("ring.id") == id && state.getLong("ring.at") == at
         selectedMinutes = SnoozeDuration.clamp(if (sameOccurrence) state!!.getInt("ring.minutes", alarm.snoozeMinutes) else alarm.snoozeMinutes)
         selectedMinutes = RingControls.minutes(this, alarm, at, selectedMinutes)
         val colors = OrbitPalette(this)
-        val background = if (watch) colors.surface else RingAtmosphere.tint(LocalTime.now().toSecondOfDay() / 60)
+        val background = colors.surface
         val foreground = if (watch) colors.onSurface else 0xffe5ebe8.toInt()
         val accent = if (watch) colors.primary else 0xff74e8d7.toInt()
         val name = alarm.label.trim().ifBlank { "Alarm" }
@@ -82,6 +107,7 @@ class RingActivity : AppCompatActivity() {
             body.addView(label(time, 144f).apply {
                 typeface = Typeface.create(Typeface.create("sans-serif", Typeface.NORMAL), 350, false); letterSpacing = -.025f
                 fontFeatureSettings = "tnum"
+                phoneTime = this
                 contentDescription = "Alarm time: $time"; maxLines = 1
                 setAutoSizeTextTypeUniformWithConfiguration(56, 144, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
             }, LinearLayout.LayoutParams(-1, dp(156)))
@@ -132,9 +158,11 @@ class RingActivity : AppCompatActivity() {
         }
         val scroller = ScrollView(this).apply {
             isFillViewport = true
-            if (watch) setBackgroundColor(background) else this.background = android.graphics.drawable.GradientDrawable(
-                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xff030405.toInt(), 0xff060708.toInt(), background))
+            if (watch) setBackgroundColor(background) else {
+                val scene = RingAtmosphereDrawable(now.toSecondOfDay() / 60)
+                atmosphere = scene
+                this.background = scene
+            }
             addView(body, FrameLayout.LayoutParams(-1, -2))
         }
         setContentView(scroller)
@@ -193,9 +221,14 @@ class RingActivity : AppCompatActivity() {
         super.onResume()
         // A restored task must not bring a previously snoozed occurrence back on screen.
         val alarm = Store(this).get(id)
-        if (alarm == null || !Scheduler.isActive(this, alarm, at)) finish()
+        if (alarm == null || !Scheduler.isActive(this, alarm, at)) { finish(); return }
+        // Use the actual local clock after every Snooze/new occurrence or resume.
+        // Neither the saved alarm hour nor its original occurrence selects the scene.
+        if (!watch) { clockRunning = true; clockHandler.removeCallbacks(clockTick); clockTick.run() }
     }
     override fun onPause() {
+        clockRunning = false
+        clockHandler.removeCallbacks(clockTick)
         volumeKey = KeyEvent.KEYCODE_UNKNOWN
         super.onPause()
     }
@@ -231,5 +264,5 @@ class RingActivity : AppCompatActivity() {
         }
         return super.onGenericMotionEvent(event)
     }
-    override fun onDestroy() { bezelHandler.removeCallbacks(resetBezelFeedback); unregisterReceiver(changes); super.onDestroy() }
+    override fun onDestroy() { clockRunning = false; clockHandler.removeCallbacksAndMessages(null); bezelHandler.removeCallbacks(resetBezelFeedback); unregisterReceiver(changes); super.onDestroy() }
 }

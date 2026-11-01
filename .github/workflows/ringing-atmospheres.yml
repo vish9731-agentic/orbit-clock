@@ -6,10 +6,27 @@ on:
     paths:
       - '.github/workflows/ringing-atmospheres.yml'
       - 'tools/capture-ringing-atmospheres.py'
+      - 'core/src/main/java/dev/orbit/clock/core/RingAtmosphere.java'
+      - 'core/src/main/java/dev/orbit/clock/core/RingAtmosphereDrawable.kt'
+      - 'core/src/main/java/dev/orbit/clock/core/RingActivity.kt'
 permissions:
   contents: read
 jobs:
   capture:
+    if: ${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[ui:atmospheres]') }}
+    name: ${{ matrix.batch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - batch: afternoon-to-evening
+            start: 15
+            end: 19
+            options: ''
+          - batch: evening-to-night
+            start: 19
+            end: 23
+            options: '--skip-period-captures'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -23,34 +40,48 @@ jobs:
           packages: 'platform-tools platforms;android-35 build-tools;34.0.0'
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
-      - name: Build unchanged phone UI
-        run: ./gradlew --no-daemon :phone:assembleDebug
+      - run: python -m pip install pillow
+      - name: Build phone UI
+        run: ./gradlew --no-daemon -Pkotlin.compiler.execution.strategy=in-process :phone:assembleDebug
       - name: Prepare runner
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android/sdk/ndk
           sudo chmod 666 /dev/kvm
-      - name: Capture six local times
+          free -m
+      - name: Verify atmospheres and four real snoozes
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 33
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          ram-size: 2048M
+          heap-size: 256M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 2048
           disable-animations: false
           emulator-boot-timeout: 360
           script: |
             adb shell settings put global device_provisioned 1
             adb shell settings put secure user_setup_complete 1
             adb shell pm disable-user --user 0 com.google.android.googlesdksetup || true
+            adb shell am force-stop com.google.android.apps.nexuslauncher
+            adb shell pm disable-user --user 0 com.google.android.settings.intelligence || true
+            adb shell wm size 720x1600
+            adb shell wm density 280
             adb install phone/build/outputs/apk/debug/phone-debug.apk
             adb shell pm grant dev.orbit.clock android.permission.POST_NOTIFICATIONS
             adb shell appops set dev.orbit.clock SCHEDULE_EXACT_ALARM allow
-            adb shell appops set dev.orbit.clock USE_FULL_SCREEN_INTENT allow
+            adb shell appops set dev.orbit.clock USE_FULL_SCREEN_INTENT allow || true
             adb logcat -c
-            python tools/capture-ringing-atmospheres.py
+            python tools/capture-ringing-atmospheres.py --start-hour ${{ matrix.start }} --end-hour ${{ matrix.end }} ${{ matrix.options }}
+      - name: Runner resource diagnostics
+        if: always()
+        run: |
+          free -m
+          sudo dmesg --level=err,warn || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ringing-atmospheres
+          name: ringing-atmospheres-${{ matrix.batch }}
           retention-days: 3
           path: atmosphere-screenshots/

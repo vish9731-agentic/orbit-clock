@@ -23,7 +23,7 @@ Private repository: [vish9731-agentic/orbit-clock](https://github.com/vish9731-a
 - World clocks, minute-based timers, stopwatch with laps, and a basic bedtime sleep goal/wake-up schedule.
 - Native platform views with a compact watch layout. Both apps use application ID `dev.orbit.clock` and the same development signing key.
 
-This app owns its alarms. It does not read or modify Google Clock's private alarm database. Music-service integrations, Assistant routines, sleep tracking, bedtime reminders, watch hardware validation and further accessibility tuning remain unfinished. World-clock choices, stopwatch state and sleep goals are local to each device. Offline dismissal cannot immediately stop the other device, and synchronization is eventually consistent.
+This app owns its alarms. It does not read or modify Google Clock's private alarm database. Music-service alarm sound integrations, Assistant routines, sleep tracking, bedtime reminders, watch hardware validation and further accessibility tuning remain unfinished. World-clock choices, stopwatch state and sleep goals are local to each device. Offline dismissal cannot immediately stop the other device, and synchronization is eventually consistent.
 
 ## Ringing snooze adjustment
 
@@ -106,3 +106,10 @@ The watch uses its own compact ringing layout: larger circular +/- controls keep
 Verified debug **0.1.61** (version code **62**), source `cc693c0cfa5c85462f23c08b9e3ff230ca53cccd`: [build, unit/policy checks, phone/watch lint and APK publication](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41316038225) passed. [Wear OS 4 / API 33 verification](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41316038217) passed all seven focused scenarios at both the default round-watch density and approximately 192dp width. Coverage includes injected native rotary events, anticlockwise Snooze and clockwise Dismiss, unchanged three-/six-unit thresholds, outward aura growth with fixed touch targets, pause/reversal resets, selected-duration preservation and 5–60 limits, 130% font scale, touch fallback and real AlarmManager/receiver delivery. No Orbit crashes were observed. Actual-display frames were reviewed internally. [Phone ringing visual-cue regression](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41316038243) also passed.
 
 Physical Galaxy Watch 4 Classic detents, direction mapping, haptics and on-device reliability still require device confirmation. The development signing identity and alarm record schema are unchanged; update over the installed app to preserve records.
+
+
+## Pause media when an alarm rings
+
+Orbit sends Android's native Pause command and requests transient exclusive alarm audio focus when ringing begins. Successful focus requests are shared across overlapping alarms and released after the last alarm stops or snoozes. If Android 15 denies background audio focus, the native Pause command still operates and the alarm tone remains available. Orbit never sends Play; the media app controls whether it resumes after focus returns.
+
+[All nine media emulator checks passed](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41320960051), including real music/video playback, overlapping alarms, Stop, Snooze and the Android 15 denial fallback. These checks used independent native test players. YouTube and physical-device audio have not been tested; apps must honor Android audio focus or media controls.
