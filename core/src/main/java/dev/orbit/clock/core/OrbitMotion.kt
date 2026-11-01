@@ -21,7 +21,7 @@ object OrbitMotion {
     fun bind(view: View) {
         if (view.getTag(R.id.orbit_motion_bound) == true) return
         view.setTag(R.id.orbit_motion_bound, true)
-        if (view is MaterialButton || view is FloatingActionButton || view is MaterialCardView && view.isClickable) {
+        if (view is MaterialButton || view is MaterialCardView && view.isClickable) {
             fun scale(to: Float, time: Long) = AnimatorSet().apply {
                 playTogether(ObjectAnimator.ofFloat(view, View.SCALE_X, to), ObjectAnimator.ofFloat(view, View.SCALE_Y, to))
                 duration = time; interpolator = ease

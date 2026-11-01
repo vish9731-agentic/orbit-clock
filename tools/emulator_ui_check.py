@@ -11,7 +11,7 @@ from PIL import Image, ImageChops, ImageStat
 import imageio_ffmpeg
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--scope', choices=['full', 'ringing-motion', 'motion'], default='full')
+parser.add_argument('--scope', choices=['full', 'ringing-motion', 'motion', 'guidance'], default='full')
 ARGS = parser.parse_args()
 
 OUT = Path('emulator-results')
@@ -164,9 +164,10 @@ def motion_checks():
         if recorder.poll() is None: recorder.kill(); recorder.communicate()
     adb('pull', '/sdcard/orbit-motion.mp4', str(video))
     frame_dir = OUT / 'motion-frames'; frame_dir.mkdir(exist_ok=True)
-    subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), '-loglevel', 'error', '-i', str(video), '-vf', 'fps=30,scale=270:-1', str(frame_dir / '%03d.png')], check=True, timeout=30)
+    subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), '-y', '-loglevel', 'error', '-i', str(video), '-vf', 'fps=30,scale=270:-1', str(frame_dir / '%03d.png')], check=True, timeout=30)
     frames = [Image.open(p).convert('RGB') for p in sorted(frame_dir.glob('*.png'))]
-    assert len(frames) >= 30, 'Missing motion video frames'
+    assert len(frames) >= 6, 'Missing motion video frames'
+    # Static virtual displays can stop emitting frames once the transition settles.
     # Inspect the card region, excluding status/navigation bars and their native ripple.
     crops = [f.crop((0, int(f.height*.13), f.width, int(f.height*.83))) for f in frames]
     changes = [ImageStat.Stat(ImageChops.difference(a, b)).mean for a, b in zip(crops, crops[1:])]
@@ -206,11 +207,90 @@ def motion_checks():
     for setting in ['window_animation_scale', 'transition_animation_scale', 'animator_duration_scale']:
         adb('shell', 'settings', 'put', 'global', setting, '1')
 
+def restart_app():
+    adb('shell', 'am', 'force-stop', PKG)
+    adb('shell', 'am', 'start', '-W', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
+    time.sleep(.5)
+
+def guidance_checks():
+    # Dismissal is a real user action, and survives process recreation.
+    click('Alarm')
+    if find('Morning routine', optional=True) is None:
+        click(desc='Add alarm'); find('New alarm'); fill('Morning routine')
+        tap_xy(xy(scroll_find('Save alarm'))); find('Morning routine')
+    adb('shell', 'settings', 'put', 'system', 'font_scale', '1.3'); time.sleep(1)
+    tip = scroll_find('Tap an alarm to change its time or label.')
+    close = find(desc='Dismiss hint')
+    assert xy(tip)[0] < xy(close)[0]
+    screenshot('guidance-large-type')
+    click(desc='Dismiss hint')
+    assert preferences('coach_hints').get('alarm_edit.dismissed') == 'true'
+    adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0'); time.sleep(1)
+    restart_app(); click('Alarm')
+    assert find('Tap an alarm to change its time or label.', optional=True) is None
+    passed('Dismissible education remains hidden after restart and supports large text')
+    # Three visible app sessions maximum; rebuilding a page does not consume the budget.
+    for _ in range(4):
+        click('Clock'); find('London')
+        tip = find('Touch and hold a city to remove it.', optional=True)
+        count = int(preferences('coach_hints').get('city_remove.shown', 0))
+        if tip is None:
+            assert count == 3, count
+            break
+        assert 1 <= count <= 3, count
+        click('Timer'); click('Clock')
+        assert int(preferences('coach_hints')['city_remove.shown']) == count
+        restart_app()
+    else: raise AssertionError('City hint exceeded its visible-session cap')
+    passed('Hints cap visible sessions and do not count rerenders or repeat visits')
+    # The hidden gesture remains accessible; performing it retires education permanently.
+    city = scroll_find('Paris') if find('Paris', optional=True) is not None else scroll_find('London')
+    name = city.attrib['text']; x, y = xy(city)
+    adb('shell', 'input', 'swipe', str(x), str(y), str(x), str(y), '700')
+    find('Remove this city?'); click('Remove')
+    assert preferences('coach_hints').get('city_remove.learned') == 'true'
+    assert find(name, optional=True) is None
+    passed('Discoverable city removal retires its tip after successful use')
+    click('Timer')
+    if find('Tap a preset, or enter your own minutes.', optional=True) is not None:
+        click(desc='Timer preset: 25 min')
+    else: click(desc='Timer preset: 25 min')
+    assert preferences('coach_hints').get('timer_presets.learned') == 'true'
+    assert find('Tap a preset, or enter your own minutes.', optional=True) is None
+    passed('Using a control retires its contextual hint without moving the setup controls')
+    # Status reports connection/request state, never invents a delivery acknowledgement.
+    click(desc='Sync devices')
+    until = time.monotonic() + 12
+    while True:
+        message = find(desc='Connection status').attrib['text']
+        if message != 'Checking connection…': break
+        assert time.monotonic() < until, message
+        time.sleep(.3)
+    assert 'synced' not in message.lower() and message
+    screenshot('guidance-connection-status')
+    passed('Connection feedback resolves and never claims an unconfirmed sync')
+    # A canceled back gesture must keep the editor; committed back must not save a draft.
+    click('Alarm'); before = {a['id'] for a in records()}
+    click(desc='Add alarm'); find('New alarm')
+    mode = adb('shell', 'settings', 'get', 'secure', 'navigation_mode').strip()
+    if mode == '2':
+        w, h = map(int, re.search(r'(\d+)x(\d+)', adb('shell', 'wm', 'size')).groups())
+        for action, x in [('DOWN', 1), ('MOVE', int(w*.12)), ('MOVE', 1), ('UP', 1)]:
+            adb('shell', 'input', 'motionevent', action, str(x), str(h//2)); time.sleep(.08)
+        find('New alarm')
+        passed('Canceled native back gesture preserves the editor draft')
+    adb('shell', 'input', 'keyevent', '4'); time.sleep(.4)
+    assert find('New alarm', optional=True) is None
+    assert {a['id'] for a in records()} == before
+    passed('Native back closes the editor without saving a draft')
+
 def ringing_snooze_checks():
     adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
     adb('shell', 'appops', 'set', PKG, 'USE_FULL_SCREEN_INTENT', 'allow')
     first = open_real_ringing_timer()
     passed('Real alarm delivery opens the ringing snooze controls')
+    find('Slide left to snooze · right to stop')
+    passed('First-use alarm guidance is inline and leaves actions available')
     find(desc='Alarm label: Timer · 1 min')
     find(desc='Alarm slider: swipe left to snooze, right to stop')
     adb('shell', 'cmd', 'uimode', 'night', 'no'); time.sleep(1)
@@ -265,6 +345,13 @@ def ringing_snooze_checks():
     assert record(first['id'])['snoozeUntil'] == first['snoozeUntil']
     find(desc='Snooze duration: 25 minutes')
     passed('Short slider drag resets without snoozing or stopping')
+    x, y = xy(find(desc='Alarm slider: swipe left to snooze, right to stop'))
+    for distance in [30, -30]:
+        adb('shell', 'input', 'swipe', str(x), str(y), str(x + distance), str(y), '100')
+    time.sleep(.5)
+    assert xy(find(desc='Alarm slider: swipe left to snooze, right to stop')) == (x, y)
+    assert record(first['id'])['snoozeUntil'] == first['snoozeUntil']
+    passed('Interrupted spring returns take new input without committing an alarm action')
     center_before = xy(find(desc='Alarm slider: swipe left to snooze, right to stop'))
     adb('shell', 'settings', 'put', 'global', 'animator_duration_scale', '0'); time.sleep(.5)
     slide_alarm(1, short=True)
@@ -280,7 +367,11 @@ def ringing_snooze_checks():
     assert snoozed['snoozeMinutes'] == first['snoozeMinutes']
     assert_scheduled(first['id'], snoozed['snoozeUntil'])
     passed('Snooze actually schedules the selected twenty-five minutes')
+    assert preferences('coach_hints').get('ring_controls.learned') == 'true'
     second = open_real_ringing_timer()
+    find('Either volume button also snoozes.')
+    assert find('Slide left to snooze · right to stop', optional=True) is None
+    passed('Successful touch action retires gesture education and reveals the shortcut hint')
     click(desc='Increase snooze by 5 minutes'); find(desc='Snooze duration: 15 minutes')
     slide_alarm(1)
     dismissed = record(second['id'])
@@ -296,6 +387,10 @@ def ringing_snooze_checks():
         if key == 25:
             adb('shell', 'settings', 'put', 'global', 'animator_duration_scale', '0'); time.sleep(.5)
         volume_alarm = open_real_ringing_timer()
+        if key == 25:
+            assert find('Either volume button also snoozes.', optional=True) is None
+            assert preferences('coach_hints').get('volume_snooze.learned') == 'true'
+            passed('Using the hardware shortcut retires its hint on later alarms')
         click(desc='Increase snooze by 5 minutes' if target > 10 else 'Decrease snooze by 5 minutes')
         find(desc=f'Snooze duration: {target} minutes')
         before = int(adb('shell', 'date', '+%s').strip()) * 1000
@@ -385,8 +480,9 @@ try:
         find('Alarms'); find('Stopwatch')
         passed('Header and navigation remain visible with large text')
         screenshot('alarms-large-type-dark')
-    if ARGS.scope != 'motion': ringing_snooze_checks()
-    motion_checks()
+    if ARGS.scope in ['full', 'guidance']: guidance_checks()
+    if ARGS.scope in ['full', 'ringing-motion']: ringing_snooze_checks()
+    if ARGS.scope != 'guidance': motion_checks()
     pid = adb('shell', 'pidof', PKG).strip(); assert pid
     crashes = adb('logcat', '-d', '-b', 'crash'); (OUT / 'crashes.txt').write_text(crashes)
     assert not crashes.strip(), crashes

@@ -5,6 +5,10 @@ import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.VelocityTracker
+import androidx.dynamicanimation.animation.DynamicAnimation
+import androidx.dynamicanimation.animation.SpringAnimation
+import androidx.dynamicanimation.animation.SpringForce
 import android.view.View
 import android.widget.FrameLayout
 import com.google.android.material.button.MaterialButton
@@ -17,6 +21,8 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
     private var dragging = false
     private var fired = false
     private var thresholdTicked = false
+    private var tracker: VelocityTracker? = null
+    private var returnSpring: SpringAnimation? = null
     private lateinit var snoozeLabel: MaterialButton
     private lateinit var stopLabel: MaterialButton
     private val thumb: MaterialButton
@@ -46,30 +52,33 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
             setOnTouchListener { _, e ->
                 when (e.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
-                        animate().cancel(); startX = e.rawX - translationX; dragging = true; thresholdTicked = false
+                        returnSpring?.cancel(); animate().cancel(); tracker?.recycle(); tracker = VelocityTracker.obtain(); track(e)
+                        startX = e.rawX - translationX; dragging = true; thresholdTicked = false
                         if (OrbitMotion.enabled()) animate().scaleX(1.04f).scaleY(1.04f).setStartDelay(0).setDuration(100).start()
                         parent.requestDisallowInterceptTouchEvent(true); true
                     }
                     MotionEvent.ACTION_MOVE -> {
                         if (dragging) {
                             translationX = (e.rawX - startX).coerceIn(-travel(), travel())
+                            track(e); feedback(translationX)
                             val fraction = if (travel() > 0) translationX / travel() else 0f
-                            rotation = if (OrbitMotion.enabled()) fraction * 8f else 0f
-                            snoozeLabel.alpha = if (fraction > 0) 1f - fraction * .45f else 1f
-                            stopLabel.alpha = if (fraction < 0) 1f + fraction * .45f else 1f
                             if (abs(fraction) >= .7f && !thresholdTicked) { thresholdTicked = true; OrbitMotion.tick(this) }
                         }
                         true
                     }
                     MotionEvent.ACTION_UP -> {
+                        track(e); tracker?.computeCurrentVelocity(1000, dp(900).toFloat())
+                        val velocity = tracker?.xVelocity ?: 0f
+                        tracker?.recycle(); tracker = null
+                        if (dragging) translationX = (e.rawX - startX).coerceIn(-travel(), travel())
                         val offset = translationX
                         val complete = dragging && travel() > 0 && abs(offset) >= travel() * .7f
                         dragging = false; parent.requestDisallowInterceptTouchEvent(false)
                         if (complete && !fired) { fired = true; performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM); if (offset < 0) snooze() else stop() }
-                        else { settle(); if (abs(offset) < dp(4)) performClick() }
+                        else { settle(velocity = velocity); if (abs(offset) < dp(4)) performClick() }
                         true
                     }
-                    MotionEvent.ACTION_CANCEL -> { dragging = false; settle(); parent.requestDisallowInterceptTouchEvent(false); true }
+                    MotionEvent.ACTION_CANCEL -> { tracker?.recycle(); tracker = null; dragging = false; settle(); parent.requestDisallowInterceptTouchEvent(false); true }
                     else -> false
                 }
             }
@@ -78,20 +87,36 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
     }
     private fun travel() = ((width - dp(96)) / 2f - dp(10)).coerceAtLeast(0f)
-    private fun settle(immediate: Boolean = false) {
-        thumb.animate().cancel(); snoozeLabel.animate().cancel(); stopLabel.animate().cancel()
+    private fun track(event: MotionEvent) {
+        val raw = MotionEvent.obtain(event)
+        raw.offsetLocation(event.rawX - event.x, event.rawY - event.y)
+        tracker?.addMovement(raw); raw.recycle()
+    }
+    private fun feedback(offset: Float) {
+        val fraction = if (travel() > 0) (offset / travel()).coerceIn(-1f, 1f) else 0f
+        thumb.rotation = if (OrbitMotion.enabled()) fraction * 8f else 0f
+        snoozeLabel.alpha = if (fraction > 0) 1f - fraction * .45f else 1f
+        stopLabel.alpha = if (fraction < 0) 1f + fraction * .45f else 1f
+    }
+    private fun settle(immediate: Boolean = false, velocity: Float = 0f) {
+        returnSpring?.cancel(); thumb.animate().cancel()
         if (immediate || !OrbitMotion.enabled()) {
             thumb.translationX = 0f; thumb.rotation = 0f; thumb.scaleX = 1f; thumb.scaleY = 1f
-            snoozeLabel.alpha = 1f; stopLabel.alpha = 1f
+            feedback(0f)
         } else {
-            thumb.animate().translationX(0f).rotation(0f).scaleX(1f).scaleY(1f).setStartDelay(0).setDuration(260)
-                .setInterpolator(android.view.animation.OvershootInterpolator(.65f)).start()
-            snoozeLabel.animate().alpha(1f).setDuration(180).start(); stopLabel.animate().alpha(1f).setDuration(180).start()
+            thumb.animate().scaleX(1f).scaleY(1f).setStartDelay(0).setDuration(180).start()
+            returnSpring = SpringAnimation(thumb, DynamicAnimation.TRANSLATION_X).apply {
+                spring = SpringForce(0f).apply { dampingRatio = .82f; stiffness = 700f }
+                setStartVelocity(velocity); setMinValue(-travel()); setMaxValue(travel()); setMinimumVisibleChange(.5f)
+                addUpdateListener { _, value, _ -> feedback(value) }
+                addEndListener { _, canceled, _, _ -> if (!canceled) { thumb.translationX = 0f; feedback(0f) } }
+                start()
+            }
         }
     }
-    override fun onDetachedFromWindow() { dragging = false; settle(true); super.onDetachedFromWindow() }
+    override fun onDetachedFromWindow() { tracker?.recycle(); tracker = null; dragging = false; settle(true); super.onDetachedFromWindow() }
     override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
         super.onWindowFocusChanged(hasWindowFocus)
-        if (!hasWindowFocus) { dragging = false; settle(true) }
+        if (!hasWindowFocus) { tracker?.recycle(); tracker = null; dragging = false; settle(true) }
     }
 }
