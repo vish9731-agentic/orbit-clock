@@ -61,21 +61,17 @@ def run(ui):
         (out/(mode+'-paused.txt')).write_text(str(after))
         (out/(mode+'-audio-focus.txt')).write_text(adb('shell','dumpsys','audio'))
         passed(('Music' if mode=='music' else 'Video')+' pauses on alarm focus loss and receives the native Pause command')
+    action_index=0
     def stop_banner(snooze=False):
-        # SystemUI shade commands animate asynchronously. Settle the previous
-        # collapse before opening again; never retry an alarm action tap.
+        nonlocal action_index
+        # API35 UiAutomator can expose Settings beneath the visible SystemUI
+        # shade. Locate the real rendered rail, as the existing heads-up tests do.
+        # Post-action record/focus assertions verify the exact occurrence changed.
         adb('shell','cmd','statusbar','collapse');time.sleep(1)
         adb('shell','cmd','statusbar','expand-notifications');time.sleep(1)
-        desc='Snooze alarm for 10 minutes' if snooze else 'Stop alarm'
-        node=find(desc=desc,optional=True)
-        if node is None:
-            w,h=map(int,re.search(r'(\d+)x(\d+)',adb('shell','wm','size')).groups())
-            adb('shell','input','swipe',str(w//2),'1',str(w//2),str(int(h*.75)),'500')
-            time.sleep(1);node=find(desc=desc,optional=True)
-        if node is None:
-            (out/'notification-action-missing.txt').write_text(adb('shell','dumpsys','notification','--noredact'))
-            raise AssertionError('Ringing notification action missing: '+desc)
-        tap(xy(node))
+        action_index+=1
+        l,t,r,b=ui['heads_up_bounds']('media-notification-'+str(action_index))
+        tap((int(l+(r-l)*(.24 if snooze else .76)),int((t+b)/2)))
         adb('shell','cmd','statusbar','collapse');time.sleep(1)
     def resumed(mode):
         p=await_player(lambda p:p.get('mode')==mode and p.get('playing')=='true' and 'focus:1;' in p.get('events',''),mode+' did not regain focus')
