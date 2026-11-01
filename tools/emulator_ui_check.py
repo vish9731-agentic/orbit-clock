@@ -88,7 +88,8 @@ def record(alarm_id): return next(a for a in records() if a['id'] == alarm_id)
 
 def open_real_ringing_timer():
     # Use the app UI and the real AlarmManager/notification path; no exported test backdoor.
-    adb('shell', 'am', 'start', '-W', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
+    # Bring the launcher screen itself forward instead of merely restoring its task.
+    adb('shell', 'am', 'start', '-W', '-f', '0x14000000', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
     click('Timer'); click('1'); click('Start timer')
     candidates = [a for a in records() if a.get('timer') and a['enabled'] and not a['deleted']]
     alarm = max(candidates, key=lambda a: a['revision'])
@@ -166,6 +167,8 @@ def ringing_snooze_checks():
         assert snoozed_by_key['enabled'] and snoozed_by_key['skipThrough'] == volume_alarm['snoozeUntil']
         assert snoozed_by_key['snoozeMinutes'] == volume_alarm['snoozeMinutes']
         assert int(preferences('scheduled_occurrences')[volume_alarm['id'] + '.scheduled']) == snoozed_by_key['snoozeUntil']
+        time.sleep(1)
+        assert find(desc=f'Snooze duration: {target} minutes', optional=True) is None, 'Volume snooze did not close ringing screen'
         passed(('Held volume up' if key == 24 else 'Volume down') + ' snoozes for the selected duration')
     adb('shell', 'am', 'start', '-W', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
     click('Timer')

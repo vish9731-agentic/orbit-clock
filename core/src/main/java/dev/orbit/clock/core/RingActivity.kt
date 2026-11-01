@@ -144,6 +144,12 @@ class RingActivity : AppCompatActivity() {
         if (!hasFocus) volumeKey = KeyEvent.KEYCODE_UNKNOWN
         super.onWindowFocusChanged(hasFocus)
     }
+    override fun onResume() {
+        super.onResume()
+        // A restored task must not bring a previously snoozed occurrence back on screen.
+        val alarm = Store(this).get(id)
+        if (alarm == null || !Scheduler.isActive(this, alarm, at)) finish()
+    }
     override fun onPause() {
         volumeKey = KeyEvent.KEYCODE_UNKNOWN
         super.onPause()
