@@ -110,12 +110,12 @@ def visual_difference(a,b):
     return sum(sum(abs(x-y) for x,y in zip(p,q)) for p,q in zip(a['samples'],b['samples']))/(len(a['samples'])*3)
 
 
-def set_time(milliseconds):
+def set_time(milliseconds,notify=True):
     value=dt.datetime.fromtimestamp(milliseconds/1000,dt.timezone.utc).strftime('%m%d%H%M%Y.%S')
     print(adb('shell','date','-u',value),flush=True)
     actual=int(adb('shell','date','+%s').strip())
     assert abs(actual-milliseconds//1000)<8, ('Clock did not change',actual,milliseconds//1000)
-    adb('shell','am','broadcast','-a','android.intent.action.TIME_SET','-p',PKG)
+    if notify:adb('shell','am','broadcast','--async','-a','android.intent.action.TIME_SET','-p',PKG)
 
 try:
     print(adb('root'),flush=True);adb('wait-for-device')
@@ -130,7 +130,7 @@ try:
     # and the emulator's unrelated overdue system-job catch-up during cold boot.
     epoch=int(adb('shell','date','+%s').strip())
     today=dt.datetime.fromtimestamp(epoch,dt.timezone.utc).replace(hour=6,minute=58,second=0,microsecond=0)
-    set_time(int(today.timestamp()*1000))
+    set_time(int(today.timestamp()*1000),notify=False)
     adb('shell','input','keyevent','224');adb('shell','wm','dismiss-keyguard')
     adb('shell','am','start','-W','-n',PKG+'/dev.orbit.clock.phone.MainActivity')
     before={a['id'] for a in records()}
