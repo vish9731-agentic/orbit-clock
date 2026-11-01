@@ -174,7 +174,11 @@ def motion_checks():
     click('25'); assert find(desc='Timer minutes').attrib['text'] == '25'
     click('1'); assert find(desc='Timer minutes').attrib['text'] == '1'
     click('Alarm'); click(desc='Add alarm'); find('New alarm'); tap_xy(xy(scroll_find('Cancel')))
-    click('Stopwatch'); click('Start'); time.sleep(.3); click('Pause'); click('Reset'); find('00:00.00')
+    click('Stopwatch')
+    start_position = xy(find('Start')); reset_position = xy(find('Reset'))
+    # A live stopwatch deliberately changes too often for UiAutomator's idle wait.
+    tap_xy(start_position); time.sleep(.3); tap_xy(start_position)
+    find('Start'); tap_xy(reset_position); find('00:00.00')
     passed('Animations-off mode keeps presets, editor and stopwatch actions responsive')
     for setting in ['window_animation_scale', 'transition_animation_scale', 'animator_duration_scale']:
         adb('shell', 'settings', 'put', 'global', setting, '1')
