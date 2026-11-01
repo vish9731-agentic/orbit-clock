@@ -114,9 +114,10 @@ def screenshot(name):
 
 def preferences(name):
     xml = adb('exec-out', 'run-as', PKG, 'cat', 'shared_prefs/' + name + '.xml')
+    if 'No such file or directory' in xml: return {}  # An untouched SharedPreferences file is legitimately absent.
     return {n.attrib['name']: n.attrib.get('value', n.text or '') for n in ET.fromstring(xml)}
 
-def records(): return json.loads(preferences('alarms')['records'])
+def records(): return json.loads(preferences('alarms').get('records', '[]'))
 
 def record(alarm_id): return next(a for a in records() if a['id'] == alarm_id)
 
