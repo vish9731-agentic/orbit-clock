@@ -16,9 +16,16 @@ def adb(*args, binary=False):
     return r.stdout if binary else r.stdout.decode(errors='replace')
 
 def tree():
-    adb('shell','rm','-f','/sdcard/orbit-atmosphere.xml')
-    adb('shell','uiautomator','dump','/sdcard/orbit-atmosphere.xml')
-    return ET.fromstring(adb('exec-out','cat','/sdcard/orbit-atmosphere.xml'))
+    # Window transitions can temporarily return no root. Retry only fresh reads.
+    last=''
+    for attempt in range(5):
+        try:
+            adb('shell','rm','-f','/sdcard/orbit-atmosphere.xml')
+            last=adb('shell','uiautomator','dump','/sdcard/orbit-atmosphere.xml')
+            return ET.fromstring(adb('exec-out','cat','/sdcard/orbit-atmosphere.xml'))
+        except (RuntimeError, subprocess.SubprocessError, ET.ParseError) as error:
+            if attempt==4: raise RuntimeError('No fresh UI hierarchy: '+last+' '+str(error)) from error
+            time.sleep(.6)
 
 def find(text=None,desc=None,res=None,optional=False):
     for _ in range(1 if optional else 4):
