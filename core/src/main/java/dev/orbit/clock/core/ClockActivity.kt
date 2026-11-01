@@ -13,6 +13,7 @@ import android.text.format.DateFormat
 import android.view.*
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.doOnLayout
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -40,17 +41,24 @@ open class ClockActivity : AppCompatActivity() {
     private lateinit var content: LinearLayout
     private lateinit var scroll: ScrollView
     private var tab = "Alarms"
+    private var renderedTab: String? = null
+    private var navigationView: BottomNavigationView? = null
     private val sections = listOf("Alarms", "Clock", "Timer", "Stopwatch", "Bedtime")
     private val icons = listOf(R.drawable.ic_alarm, R.drawable.ic_clock, R.drawable.ic_timer, R.drawable.ic_stopwatch, R.drawable.ic_bedtime)
     private val handler = Handler(Looper.getMainLooper())
     private var ticker: (() -> Unit)? = null
+    private var foreground = false
+    private val refresh = Runnable { if (foreground && !isFinishing && !isDestroyed) render() }
     private val tick = object : Runnable {
         override fun run() { ticker?.invoke(); handler.postDelayed(this, if (tab == "Stopwatch") 50 else 1000) }
     }
     private val prefs by lazy { getSharedPreferences("tools", MODE_PRIVATE) }
     private val changes = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
-            if (tab in listOf("Alarms", "Bedtime", "Timer")) render()
+            if (foreground && tab in listOf("Alarms", "Bedtime", "Timer")) {
+                handler.removeCallbacks(refresh)
+                handler.postDelayed(refresh, if (OrbitMotion.enabled()) 180 else 0)
+            }
         }
     }
     override fun onCreate(state: Bundle?) {
@@ -67,11 +75,11 @@ open class ClockActivity : AppCompatActivity() {
         render(); Sync.refresh(this)
     }
     override fun onResume() {
-        super.onResume(); Scheduler.restore(this)
+        super.onResume(); foreground = true; Scheduler.restore(this)
         if (::root.isInitialized) render()
         handler.removeCallbacks(tick); handler.post(tick)
     }
-    override fun onPause() { handler.removeCallbacks(tick); super.onPause() }
+    override fun onPause() { foreground = false; handler.removeCallbacks(tick); handler.removeCallbacks(refresh); super.onPause() }
     override fun onSaveInstanceState(out: Bundle) { out.putString("tab", tab); super.onSaveInstanceState(out) }
     override fun onDestroy() { unregisterReceiver(changes); super.onDestroy() }
     private fun dp(n: Int) = (resources.displayMetrics.density * n).toInt()
@@ -81,6 +89,7 @@ open class ClockActivity : AppCompatActivity() {
     private fun text(value: String, size: Float = 16f, color: Int = colors.onSurface) = TextView(this).apply {
         text = value; textSize = size; setTextColor(color); includeFontPadding = false
         typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+        fontFeatureSettings = "tnum"
         setLineSpacing(dp(3).toFloat(), 1f)
     }
     private fun button(label: String, tonal: Boolean = false, icon: Int? = null, action: () -> Unit) = MaterialButton(this).apply {
@@ -89,7 +98,8 @@ open class ClockActivity : AppCompatActivity() {
         backgroundTintList = ColorStateList.valueOf(if (tonal) colors.secondaryContainer else colors.primary)
         setTextColor(if (tonal) colors.onSecondaryContainer else colors.onPrimary)
         icon?.let { setIconResource(it); iconTint = ColorStateList.valueOf(if (tonal) colors.onSecondaryContainer else colors.onPrimary) }
-        setOnClickListener { action() }
+        setOnClickListener { OrbitMotion.tick(this); action() }
+        OrbitMotion.bind(this)
     }
     private fun card(parent: LinearLayout = content, color: Int = colors.container, padding: Int = if (watch) 16 else 24): LinearLayout {
         val card = MaterialCardView(this).apply {
@@ -103,6 +113,16 @@ open class ClockActivity : AppCompatActivity() {
     }
     private fun currentTitle() = if (watch) "$tab  ▾" else tab
     private fun render() {
+        val previousTab = renderedTab
+        val tabChanged = previousTab != tab
+        val direction = if (previousTab == null) 0 else if (sections.indexOf(tab) > sections.indexOf(previousTab)) 1 else -1
+        val previousScroll = if (!tabChanged && ::scroll.isInitialized) scroll.scrollY else 0
+        val positions = mutableMapOf<String, Float>()
+        if (!tabChanged && ::content.isInitialized) for (i in 0 until content.childCount) {
+            val child = content.getChildAt(i); val key = child.tag as? String
+            if (key?.startsWith("item:") == true) positions[key] = child.top + child.translationY
+        }
+        renderedTab = tab
         ticker = null
         root = column().apply { setBackgroundColor(colors.surface) }
         setContentView(root)
@@ -124,7 +144,7 @@ open class ClockActivity : AppCompatActivity() {
         if (!watch) header.addView(MaterialButton(this, null, com.google.android.material.R.attr.materialIconButtonStyle).apply {
             setIconResource(R.drawable.ic_sync); contentDescription = "Sync devices"; tooltipText = "Sync devices"
             iconTint = ColorStateList.valueOf(colors.muted); iconPadding = 0; text = ""
-            setOnClickListener { requestSync() }
+            setOnClickListener { OrbitMotion.tick(this); OrbitMotion.pulse(this); rotation = 0f; if (OrbitMotion.enabled()) animate().rotation(180f).setStartDelay(0).setDuration(300).start(); requestSync() }
         }, LinearLayout.LayoutParams(dp(48), dp(48)))
         root.addView(header)
         val body = FrameLayout(this)
@@ -141,28 +161,46 @@ open class ClockActivity : AppCompatActivity() {
                 backgroundTintList = ColorStateList.valueOf(colors.primaryContainer)
                 imageTintList = ColorStateList.valueOf(colors.onPrimaryContainer)
                 customSize = dp(64); compatElevation = dp(3).toFloat()
-                setOnClickListener { if (tab == "Alarms") editAlarm(Alarm()) else addCity() }
+                setOnClickListener { OrbitMotion.tick(this); if (tab == "Alarms") editAlarm(Alarm()) else addCity() }
             }, FrameLayout.LayoutParams(dp(64), dp(64), Gravity.BOTTOM or Gravity.END).apply { marginEnd = dp(24); bottomMargin = dp(20) })
         }
         if (!watch) {
-            val navigation = BottomNavigationView(this).apply {
+            val navigation = navigationView ?: BottomNavigationView(this).apply {
                 labelVisibilityMode = com.google.android.material.navigation.NavigationBarView.LABEL_VISIBILITY_LABELED
                 setBackgroundColor(colors.container); elevation = 0f
             }
-            sections.forEachIndexed { i, name -> navigation.menu.add(0, i + 1, i, if (i == 0) "Alarm" else name).setIcon(icons[i]) }
+            if (navigationView == null) sections.forEachIndexed { i, name -> navigation.menu.add(0, i + 1, i, if (i == 0) "Alarm" else name).setIcon(icons[i]) }
+            navigationView = navigation
+            (navigation.parent as? ViewGroup)?.removeView(navigation)
             navigation.selectedItemId = sections.indexOf(tab) + 1
             navigation.setOnItemSelectedListener { item ->
                 val target = sections[item.itemId - 1]
-                if (tab != target) { tab = target; render() }; true
+                if (tab != target) { OrbitMotion.tick(navigation); tab = target; render() }; true
             }
             root.addView(navigation, LinearLayout.LayoutParams(-1, dp(80)))
+        }
+        OrbitMotion.bindTree(root)
+        if (tabChanged) { OrbitMotion.content(content, direction); OrbitMotion.enter(title, direction = direction) }
+        else {
+            val renderedContent = content
+            content.doOnLayout {
+            if (content !== renderedContent) return@doOnLayout
+            scroll.scrollTo(0, previousScroll)
+            for (i in 0 until content.childCount) {
+                val child = content.getChildAt(i); val key = child.tag as? String
+                if (key?.startsWith("item:") == true && child.bottom >= previousScroll && child.top <= previousScroll + scroll.height) {
+                    val oldTop = positions[key]
+                    if (oldTop == null) OrbitMotion.enter(child) else OrbitMotion.reposition(child, oldTop - child.top)
+                }
+            }
+            }
         }
         scroll.requestFocus()
     }
     private fun chooseWatchTool(anchor: View) {
         PopupMenu(this, anchor).apply {
             sections.forEachIndexed { i, s -> menu.add(0, i, i, s) }
-            setOnMenuItemClickListener { tab = sections[it.itemId]; render(); true }; show()
+            setOnMenuItemClickListener { OrbitMotion.tick(anchor); tab = sections[it.itemId]; render(); true }; show()
         }
     }
     private fun requestSync() { Sync.refresh(this); Toast.makeText(this, "Sync requested", Toast.LENGTH_SHORT).show() }
@@ -205,23 +243,24 @@ open class ClockActivity : AppCompatActivity() {
         }
         all.forEach { alarm ->
             val inner = card(color = if (alarm.enabled) colors.containerHigh else colors.container)
+            (inner.parent as View).tag = "item:alarm:${alarm.id}"
             val line = row()
             val clock = text(time(alarm.hour, alarm.minute), if (watch) 36f else 54f, if (alarm.enabled) colors.onSurface else colors.muted).apply {
                 typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
                 maxLines = 1; setAutoSizeTextTypeUniformWithConfiguration(24, if (watch) 36 else 54, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
                 contentDescription = "Edit ${alarm.label} at ${time(alarm.hour, alarm.minute)} ${period(alarm.hour)}"
-                setOnClickListener { editAlarm(alarm) }
+                setOnClickListener { OrbitMotion.tick(this); editAlarm(alarm) }
             }
             line.addView(clock, LinearLayout.LayoutParams(0, dp(if (watch) 52 else 72), 1f))
             line.addView(MaterialSwitch(this).apply {
                 isChecked = alarm.enabled; contentDescription = "${alarm.label} enabled"
-                setOnCheckedChangeListener { _, enabled -> Store(this@ClockActivity).save(alarm.copy(enabled = enabled, snoozeUntil = 0, skipThrough = 0)) }
+                setOnCheckedChangeListener { view, enabled -> OrbitMotion.tick(view); Store(this@ClockActivity).save(alarm.copy(enabled = enabled, snoozeUntil = 0, skipThrough = 0)) }
             })
             inner.addView(line)
             if (period(alarm.hour).isNotEmpty()) inner.addView(text(period(alarm.hour), 12f, colors.muted))
             space(inner, 6); inner.addView(text(alarm.label, 17f)); space(inner, 6)
             inner.addView(text(if (alarm.days.isEmpty()) "Once" else alarm.days.sorted().joinToString(" · ") { DayOfWeek.of(it).getDisplayName(java.time.format.TextStyle.SHORT, Locale.getDefault()) }, 13f, colors.muted))
-            (inner.parent as View).apply { isClickable = true; contentDescription = "Edit ${alarm.label}"; setOnClickListener { editAlarm(alarm) } }
+            (inner.parent as View).apply { isClickable = true; contentDescription = "Edit ${alarm.label}"; setOnClickListener { OrbitMotion.tick(this); editAlarm(alarm) } }
         }
         if (watch) content.addView(button("Sync devices", tonal = true) { requestSync() })
     }
@@ -251,12 +290,12 @@ open class ClockActivity : AppCompatActivity() {
         val pickerButton = button("${time(hour, minute)} ${period(hour)}", tonal = true) {
             if (watch) chooseWatchTime(hour, minute) { h, m ->
                 hour = h; minute = m
-                body.findViewWithTag<MaterialButton>("alarm_time").text = "${time(hour, minute)} ${period(hour)}"
+                OrbitMotion.text(body.findViewWithTag<MaterialButton>("alarm_time"), "${time(hour, minute)} ${period(hour)}")
             } else {
             val picker = MaterialTimePicker.Builder().setHour(hour).setMinute(minute)
                 .setTimeFormat(if (DateFormat.is24HourFormat(this)) TimeFormat.CLOCK_24H else TimeFormat.CLOCK_12H)
                 .setTitleText("Set alarm time").build()
-            picker.addOnPositiveButtonClickListener { hour = picker.hour; minute = picker.minute; body.findViewWithTag<MaterialButton>("alarm_time").text = "${time(hour, minute)} ${period(hour)}" }
+            picker.addOnPositiveButtonClickListener { hour = picker.hour; minute = picker.minute; OrbitMotion.text(body.findViewWithTag<MaterialButton>("alarm_time"), "${time(hour, minute)} ${period(hour)}") }
             picker.show(supportFragmentManager, "alarm_time")
             }
         }.apply { tag = "alarm_time"; backgroundTintList = ColorStateList.valueOf(colors.containerHigh); setTextColor(colors.primary); textSize = if (watch) 28f else 42f; contentDescription = "Set alarm time"; minimumHeight = dp(96) }
@@ -272,15 +311,15 @@ open class ClockActivity : AppCompatActivity() {
             val b = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
                 text = name; contentDescription = DayOfWeek.of(day).name.lowercase().replaceFirstChar(Char::uppercaseChar)
                 minimumWidth = 0; minWidth = 0; setPadding(0, 0, 0, 0); cornerRadius = dp(24)
-                fun update() { isSelected = day in selected; backgroundTintList = ColorStateList.valueOf(if (isSelected) colors.primary else colors.surface); setTextColor(if (isSelected) colors.onPrimary else colors.onSurface) }
-                update(); setOnClickListener { if (!selected.add(day)) selected.remove(day); update() }
+                fun update(animate: Boolean = false) { isSelected = day in selected; val bg = if (isSelected) colors.primary else colors.surface; val fg = if (isSelected) colors.onPrimary else colors.onSurface; if (animate) OrbitMotion.selection(this, bg, fg) else { backgroundTintList = ColorStateList.valueOf(bg); setTextColor(fg) } }
+                update(); setOnClickListener { OrbitMotion.tick(this); if (!selected.add(day)) selected.remove(day); update(true) }
             }
             dayRow.addView(b, LinearLayout.LayoutParams(0, dp(48), 1f))
         }
         body.addView(days); space(body, 20)
         fun option(title: String, checked: Boolean): MaterialSwitch {
             val line = row(); line.addView(text(title), LinearLayout.LayoutParams(0, -2, 1f))
-            val switch = MaterialSwitch(this).apply { isChecked = checked; contentDescription = title }
+            val switch = MaterialSwitch(this).apply { isChecked = checked; contentDescription = title; setOnCheckedChangeListener { view, _ -> OrbitMotion.tick(view) } }
             line.addView(switch); body.addView(line, LinearLayout.LayoutParams(-1, dp(56))); return switch
         }
         val sound = option("Alarm sound", original.sound); val vibrate = option("Vibration", original.vibrate)
@@ -289,7 +328,7 @@ open class ClockActivity : AppCompatActivity() {
         actions.addView(button("Cancel", tonal = true) { sheet.dismiss() }, LinearLayout.LayoutParams(0, dp(52), 1f).apply { marginEnd = dp(12) })
         actions.addView(button("Save alarm") {
             val length = snooze.text.toString().toIntOrNull()
-            if (length == null || length !in 1..60) { snooze.error = "Enter 1–60 minutes"; return@button }
+            if (length == null || length !in 1..60) { snooze.error = "Enter 1–60 minutes"; OrbitMotion.reject(snooze); return@button }
             Store(this).save(original.copy(hour = hour, minute = minute, label = label.text.toString().trim().ifEmpty { "Alarm" }, days = selected.toSet(), sound = sound.isChecked, vibrate = vibrate.isChecked, snoozeMinutes = length, enabled = true, snoozeUntil = 0, skipThrough = 0))
             sheet.dismiss()
         }, LinearLayout.LayoutParams(0, dp(52), 1.4f))
@@ -300,6 +339,7 @@ open class ClockActivity : AppCompatActivity() {
         }) }
         sheet.setContentView(ScrollView(this).apply { addView(body) }); sheet.show()
         sheet.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+        OrbitMotion.bindTree(body); OrbitMotion.enter(body)
     }
     private fun chooseWatchTime(hour: Int, minute: Int, onPicked: (Int, Int) -> Unit) {
         val sheet = BottomSheetDialog(this)
@@ -319,6 +359,7 @@ open class ClockActivity : AppCompatActivity() {
         body.addView(pickers); space(body, 12)
         body.addView(button("Set time") { onPicked(hours.value, minutes.value); sheet.dismiss() }, LinearLayout.LayoutParams(-1, dp(48)))
         sheet.setContentView(ScrollView(this).apply { addView(body) }); sheet.show()
+        OrbitMotion.bindTree(body); OrbitMotion.enter(body)
     }
     private fun clocks() {
         val hero = card(color = colors.container)
@@ -329,7 +370,7 @@ open class ClockActivity : AppCompatActivity() {
         val date = text("", 14f, colors.muted); hero.addView(now); space(hero, 8); hero.addView(date)
         val zones = prefs.getStringSet("zones", setOf("Europe/London", "America/New_York", "Asia/Tokyo"))!!.sorted()
         val displays = zones.map { id ->
-            val c = card(padding = 20); val line = row(); val city = column()
+            val c = card(padding = 20); (c.parent as View).tag = "item:city:$id"; val line = row(); val city = column()
             city.addView(text(id.substringAfterLast('/').replace('_', ' '), 18f)); space(city, 8)
             val info = text("", 12f, colors.muted); city.addView(info); line.addView(city, LinearLayout.LayoutParams(0, -2, 1f))
             val value = text("", if (watch) 24f else 30f); line.addView(value); c.addView(line)
@@ -357,7 +398,8 @@ open class ClockActivity : AppCompatActivity() {
         fun update() { matches = ids.filter { it.replace('_', ' ').contains(query.text.toString(), ignoreCase = true) }; list.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, matches.map { it.replace('_', ' ').replace("/", " · ") }) }
         layout.addView(list, LinearLayout.LayoutParams(-1, dp(300)))
         val dialog = MaterialAlertDialogBuilder(this).setTitle("Add a city").setView(layout).setNegativeButton("Cancel", null).create()
-        list.setOnItemClickListener { _, _, position, _ ->
+        list.setOnItemClickListener { _, view, position, _ ->
+            OrbitMotion.tick(view)
             val zones = prefs.getStringSet("zones", setOf("Europe/London", "America/New_York", "Asia/Tokyo"))!!.toSet() + matches[position]
             prefs.edit().putStringSet("zones", zones).apply(); dialog.dismiss(); render()
         }
@@ -365,22 +407,40 @@ open class ClockActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { update() }
             override fun afterTextChanged(s: Editable?) {}
-        }); update(); dialog.show()
+        }); update(); dialog.show(); OrbitMotion.bindTree(layout); OrbitMotion.enter(layout)
     }
     private fun timers() {
         val setup = card(color = colors.container); setup.addView(text("Set a timer", if (watch) 22f else 26f)); space(setup, 20)
         val minutes = input(setup, "Minutes", "5", numeric = true).apply { textSize = 42f; gravity = Gravity.CENTER; contentDescription = "Timer minutes" }
         val presets = row()
-        listOf(1, 5, 10, 25).forEach { m -> presets.addView(button("$m", tonal = true) { minutes.setText(m.toString()) }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(4) }) }
+        listOf(1, 5, 10, 25).forEach { m -> presets.addView(button("$m", tonal = true) { OrbitMotion.text(minutes, m.toString()); minutes.setSelection(minutes.text?.length ?: 0) }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(4) }) }
+        fun selectPreset(animate: Boolean) {
+            for (i in 0 until presets.childCount) {
+                val b = presets.getChildAt(i) as MaterialButton
+                val selected = b.text.toString() == minutes.text.toString()
+                if (b.isSelected != selected || !animate) {
+                    b.isSelected = selected
+                    val bg = if (selected) colors.primary else colors.secondaryContainer
+                    val fg = if (selected) colors.onPrimary else colors.onSecondaryContainer
+                    if (animate) OrbitMotion.selection(b, bg, fg) else { b.backgroundTintList = ColorStateList.valueOf(bg); b.setTextColor(fg) }
+                }
+            }
+        }
+        selectPreset(false)
+        minutes.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { selectPreset(true); if (minutes.error != null) minutes.error = null }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
         setup.addView(presets); space(setup, 20)
         setup.addView(button("Start timer", icon = R.drawable.ic_play) {
             val count = minutes.text.toString().toLongOrNull()
-            if (count == null || count !in 1..1440) { minutes.error = "Enter 1–1440 minutes"; return@button }
+            if (count == null || count !in 1..1440) { minutes.error = "Enter 1–1440 minutes"; OrbitMotion.reject(minutes); return@button }
             if (!Scheduler.allowed(this)) { permissions(); return@button }
             Store(this).save(Alarm(timer = true, label = "Timer · $count min", snoozeUntil = System.currentTimeMillis() + count * 60_000))
         }, LinearLayout.LayoutParams(-1, dp(56)))
         val labels = Store(this).all().filter { !it.deleted && it.enabled && it.timer }.map { alarm ->
-            val c = card(color = colors.primaryContainer); c.addView(text(alarm.label, 14f, colors.onPrimaryContainer)); space(c, 12)
+            val c = card(color = colors.primaryContainer); (c.parent as View).tag = "item:timer:${alarm.id}"; c.addView(text(alarm.label, 14f, colors.onPrimaryContainer)); space(c, 12)
             val countdown = text("", if (watch) 28f else 42f, colors.onPrimaryContainer).apply { typeface = Typeface.create("sans-serif-light", Typeface.NORMAL) }
             c.addView(countdown); space(c, 16); c.addView(button("Cancel timer", tonal = true) { Store(this).save(alarm.copy(enabled = false, deleted = true)) }); alarm to countdown
         }
@@ -406,13 +466,13 @@ open class ClockActivity : AppCompatActivity() {
         content.addView(button(if (running) "Pause" else "Start", icon = if (running) R.drawable.ic_pause else R.drawable.ic_play) {
             if (running) prefs.edit().putLong("elapsed", elapsed()).putBoolean("running", false).apply()
             else prefs.edit().putLong("started", SystemClock.elapsedRealtime()).putBoolean("running", true).apply()
-            render()
+            render(); OrbitMotion.pulse(content.getChildAt(0))
         }, LinearLayout.LayoutParams(-1, dp(64)))
         space(content, 12)
         content.addView(button(if (running) "Lap" else "Reset", tonal = true) {
             if (running) prefs.edit().putString("laps", "${elapsed()}|" + prefs.getString("laps", "")).apply()
             else prefs.edit().putLong("elapsed", 0).putString("laps", "").apply()
-            render()
+            render(); OrbitMotion.pulse(content.getChildAt(0)); if (content.childCount > 5) OrbitMotion.enter(content.getChildAt(5))
         }, LinearLayout.LayoutParams(-1, dp(52)))
         space(content, 24)
         val laps = prefs.getString("laps", "")!!.split('|').filter { it.isNotBlank() }
@@ -420,7 +480,7 @@ open class ClockActivity : AppCompatActivity() {
             val ms = value.toLong(); val line = row()
             line.addView(text("Lap ${laps.size - index}", 14f, colors.muted), LinearLayout.LayoutParams(0, -2, 1f))
             line.addView(text(String.format(Locale.getDefault(), "%02d:%02d.%02d", ms / 60_000, ms / 1000 % 60, ms / 10 % 100), 18f))
-            card(padding = 20).addView(line)
+            val lap = card(padding = 20); (lap.parent as View).tag = "item:lap:$value"; lap.addView(line)
         }
     }
     private fun bedtime() {
@@ -440,7 +500,7 @@ open class ClockActivity : AppCompatActivity() {
             addView(text("Sleep goal", 20f)); space(this, 8); addView(text("Make room for a consistent night's rest.", 14f, colors.muted)); space(this, 16)
             addView(button("$goal hours", tonal = true) {
                 val choices = (4..12).map { "$it hours" }.toTypedArray()
-                MaterialAlertDialogBuilder(this@ClockActivity).setTitle("Sleep goal").setSingleChoiceItems(choices, goal - 4) { dialog, index -> prefs.edit().putInt("sleepGoal", index + 4).apply(); dialog.dismiss(); render() }.setNegativeButton("Cancel", null).show()
+                MaterialAlertDialogBuilder(this@ClockActivity).setTitle("Sleep goal").setSingleChoiceItems(choices, goal - 4) { dialog, index -> prefs.edit().putInt("sleepGoal", index + 4).apply(); dialog.dismiss(); render(); OrbitMotion.pulse(content.getChildAt(0)) }.setNegativeButton("Cancel", null).show()
             })
         }
         card().apply {

@@ -6,7 +6,8 @@ import subprocess
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageChops, ImageStat
+import imageio_ffmpeg
 
 OUT = Path('emulator-results')
 OUT.mkdir(exist_ok=True)
@@ -118,6 +119,58 @@ def slide_alarm(direction, short=False):
     adb('shell', 'input', 'swipe', str(x), str(y), str(x + direction * distance), str(y), '450')
     time.sleep(.5)
 
+def motion_checks():
+    # Static Timer -> paused Stopwatch: no ticking content can fake transition frames.
+    click('Timer')
+    target = xy(find('Stopwatch'))
+    video = OUT / 'motion-internal.mp4'
+    recorder = subprocess.Popen(['adb', 'shell', 'screenrecord', '--bit-rate', '2500000', '--time-limit', '3', '/sdcard/orbit-motion.mp4'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        time.sleep(.55)
+        tap_xy(target)
+        recorder.communicate(timeout=8)
+    finally:
+        if recorder.poll() is None: recorder.kill(); recorder.communicate()
+    adb('pull', '/sdcard/orbit-motion.mp4', str(video))
+    frame_dir = OUT / 'motion-frames'; frame_dir.mkdir(exist_ok=True)
+    subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), '-loglevel', 'error', '-i', str(video), '-vf', 'fps=30,scale=270:-1', str(frame_dir / '%03d.png')], check=True, timeout=30)
+    frames = [Image.open(p).convert('RGB') for p in sorted(frame_dir.glob('*.png'))]
+    assert len(frames) >= 30, 'Missing motion video frames'
+    # Inspect the card region, excluding status/navigation bars and their native ripple.
+    crops = [f.crop((0, int(f.height*.13), f.width, int(f.height*.83))) for f in frames]
+    changes = [ImageStat.Stat(ImageChops.difference(a, b)).mean for a, b in zip(crops, crops[1:])]
+    assert sum(sum(v) > .8 for v in changes) >= 4, 'Transition jumped between static screens'
+    # Pick six frames around the first visible content movement for review.
+    first = next(i for i,v in enumerate(changes) if sum(v) > .8)
+    samples = [max(0, first-1), first+1, first+3, first+5, first+8, min(len(frames)-1, first+18)]
+    strip = Image.new('RGB', (frames[0].width*len(samples), frames[0].height))
+    for i,index in enumerate(samples): strip.paste(frames[min(index,len(frames)-1)], (i*frames[0].width,0))
+    strip.save(OUT / 'motion-strip.png')
+    for path in frame_dir.glob('*.png'): path.unlink()
+    frame_dir.rmdir()
+    encoded = base64.b64encode((OUT / 'motion-strip.png').read_bytes()).decode()
+    print('ORBIT_SCREENSHOT_BEGIN motion-strip', flush=True)
+    for start in range(0,len(encoded),100): print(encoded[start:start+100], flush=True)
+    print('ORBIT_SCREENSHOT_END motion-strip', flush=True)
+    passed('Enabled animations produce multiple intermediate content frames and settle')
+    # Rapid tab changes must leave the last selected tool usable, with no stale callbacks.
+    positions = {name: xy(find(name)) for name in ['Alarm', 'Clock', 'Timer', 'Stopwatch', 'Bedtime']}
+    for name in ['Alarm', 'Bedtime', 'Clock', 'Timer', 'Stopwatch', 'Timer']:
+        adb('shell', 'input', 'tap', *map(str, positions[name]))
+    find('Start timer'); find(desc='Timer minutes')
+    passed('Rapid animated navigation settles on the final tool')
+    # Reduced motion: selections, dialogs, navigation and input feedback remain usable.
+    for setting in ['window_animation_scale', 'transition_animation_scale', 'animator_duration_scale']:
+        adb('shell', 'settings', 'put', 'global', setting, '0')
+    time.sleep(1)
+    click('25'); assert find(desc='Timer minutes').attrib['text'] == '25'
+    click('1'); assert find(desc='Timer minutes').attrib['text'] == '1'
+    click('Alarm'); click(desc='Add alarm'); find('New alarm'); tap_xy(xy(scroll_find('Cancel')))
+    click('Stopwatch'); click('Start'); time.sleep(.3); click('Pause'); click('Reset'); find('00:00.00')
+    passed('Animations-off mode keeps presets, editor and stopwatch actions responsive')
+    for setting in ['window_animation_scale', 'transition_animation_scale', 'animator_duration_scale']:
+        adb('shell', 'settings', 'put', 'global', setting, '1')
+
 def ringing_snooze_checks():
     adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
     adb('shell', 'appops', 'set', PKG, 'USE_FULL_SCREEN_INTENT', 'allow')
@@ -147,6 +200,10 @@ def ringing_snooze_checks():
     adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0'); time.sleep(1)
     minus = xy(find(desc='Decrease snooze by 5 minutes'))
     plus = xy(find(desc='Increase snooze by 5 minutes'))
+    for point in [plus, plus, plus, minus, minus, minus]:
+        adb('shell', 'input', 'tap', *map(str, point))
+    find(desc='Snooze duration: 10 minutes')
+    passed('Rapid duration changes keep the exact value while feedback is interrupted')
     tap_xy(minus); find(desc='Snooze duration: 5 minutes')
     assert find(desc='Decrease snooze by 5 minutes').attrib.get('enabled') == 'false'
     tap_xy(minus); find(desc='Snooze duration: 5 minutes')
@@ -173,6 +230,13 @@ def ringing_snooze_checks():
     assert record(first['id'])['snoozeUntil'] == first['snoozeUntil']
     find(desc='Snooze duration: 25 minutes')
     passed('Short slider drag resets without snoozing or stopping')
+    center_before = xy(find(desc='Alarm slider: swipe left to snooze, right to stop'))
+    adb('shell', 'settings', 'put', 'global', 'animator_duration_scale', '0'); time.sleep(.5)
+    slide_alarm(1, short=True)
+    assert xy(find(desc='Alarm slider: swipe left to snooze, right to stop')) == center_before
+    assert record(first['id'])['snoozeUntil'] == first['snoozeUntil']
+    adb('shell', 'settings', 'put', 'global', 'animator_duration_scale', '1'); time.sleep(.5)
+    passed('Reduced-motion slider cancellation restores the centered control without action')
     before = int(adb('shell', 'date', '+%s').strip()) * 1000
     slide_alarm(-1)
     after = int(adb('shell', 'date', '+%s').strip()) * 1000
@@ -194,6 +258,8 @@ def ringing_snooze_checks():
     adb('shell', 'am', 'start', '-W', '-f', '0x14000000', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
     click('Timer'); tap_xy(xy(scroll_find('Cancel timer')))
     for key, target, hold in [(24, 15, True), (25, 5, False)]:
+        if key == 25:
+            adb('shell', 'settings', 'put', 'global', 'animator_duration_scale', '0'); time.sleep(.5)
         volume_alarm = open_real_ringing_timer()
         click(desc='Increase snooze by 5 minutes' if target > 10 else 'Decrease snooze by 5 minutes')
         find(desc=f'Snooze duration: {target} minutes')
@@ -208,11 +274,15 @@ def ringing_snooze_checks():
         assert int(preferences('scheduled_occurrences')[volume_alarm['id'] + '.scheduled']) == snoozed_by_key['snoozeUntil']
         time.sleep(1)
         assert find(desc=f'Snooze duration: {target} minutes', optional=True) is None, 'Volume snooze did not close ringing screen'
-        passed(('Held volume up' if key == 24 else 'Volume down') + ' snoozes for the selected duration')
+        passed(('Held volume up' if key == 24 else 'Volume down with animations off') + ' snoozes for the selected duration')
+        if key == 25: adb('shell', 'settings', 'put', 'global', 'animator_duration_scale', '1')
         adb('shell', 'am', 'start', '-W', '-f', '0x14000000', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
         click('Timer'); tap_xy(xy(scroll_find('Cancel timer')))
 
 try:
+    for setting in ['window_animation_scale', 'transition_animation_scale', 'animator_duration_scale']:
+        adb('shell', 'settings', 'put', 'global', setting, '1')
+    time.sleep(1)
     adb('shell', 'cmd', 'uimode', 'night', 'no')
     adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
     adb('shell', 'settings', 'put', 'secure', 'show_ime_with_hard_keyboard', '1')
@@ -241,7 +311,16 @@ try:
     click(desc='Add city'); fill('Paris'); click('Europe · Paris')
     scroll_find('Paris'); passed('Search and add a world clock')
     screenshot('clocks-light')
-    click('Timer'); click('1'); click('Start timer'); time.sleep(.4)
+    click('Timer'); click('25'); assert find('25').attrib['selected'] == 'true'
+    click('1'); assert find('1').attrib['selected'] == 'true'
+    passed('Timer preset selection follows the animated value change')
+    fill('0', desc='Timer minutes'); click('Start timer')
+    assert not any(a.get('timer') and a['enabled'] and not a['deleted'] for a in records())
+    assert find(desc='Timer minutes').attrib['text'] == '0'
+    screenshot('timer-validation-motion')
+    click('1'); assert find(desc='Timer minutes').attrib['text'] == '1'
+    passed('Invalid timer feedback leaves input editable and recovers with a preset')
+    click('Start timer'); time.sleep(.4)
     scroll_find('Timer · 1 min'); passed('Create a timer through Material controls')
     screenshot('timer-light')
     tap_xy(xy(scroll_find('Cancel timer')))
@@ -271,6 +350,7 @@ try:
     passed('Header and navigation remain visible with large text')
     screenshot('alarms-large-type-dark')
     ringing_snooze_checks()
+    motion_checks()
     pid = adb('shell', 'pidof', PKG).strip(); assert pid
     crashes = adb('logcat', '-d', '-b', 'crash'); (OUT / 'crashes.txt').write_text(crashes)
     assert not crashes.strip(), crashes
@@ -288,3 +368,5 @@ except Exception:
     raise
 finally:
     adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
+    for setting in ['window_animation_scale', 'transition_animation_scale', 'animator_duration_scale']:
+        adb('shell', 'settings', 'put', 'global', setting, '1')

@@ -1,0 +1,4 @@
+<resources>
+    <item name="orbit_motion_bound" type="id"/>
+    <item name="orbit_motion_tint" type="id"/>
+</resources>
