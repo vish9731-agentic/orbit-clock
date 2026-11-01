@@ -28,7 +28,7 @@ class RingActivity : AppCompatActivity() {
     private lateinit var increase: MaterialButton
     private lateinit var progress: TextView
     private lateinit var indicator: LinearProgressIndicator
-    private var watchActions: WatchRingActions? = null
+    private var watchActions: AlarmSlideControl? = null
     private var phoneTime: TextView? = null
     private var atmosphere: RingAtmosphereDrawable? = null
     private var clockRunning = false
@@ -51,7 +51,7 @@ class RingActivity : AppCompatActivity() {
     }
     private val bezelHandler = Handler(Looper.getMainLooper())
     // Match RotaryGesture's >1500ms pause boundary without changing its thresholds.
-    private val resetBezelFeedback = Runnable { watchActions?.resetProgress() }
+    private val resetBezelFeedback = Runnable { watchActions?.releaseBezel() }
     private val changes = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
             val a = Store(c).get(id)
@@ -141,9 +141,9 @@ class RingActivity : AppCompatActivity() {
         body.addView(stepper, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(if (watch) 4 else 16) })
         updateDuration()
         if (watch) {
-            val actions = WatchRingActions(this, colors, { act(true) }, { act(false) })
+            val actions = AlarmSlideControl(this, { act(true) }, { act(false) }, compact = true)
             watchActions = actions
-            body.addView(actions, LinearLayout.LayoutParams(-1, dp(80)))
+            body.addView(actions, LinearLayout.LayoutParams(dp((watchWidth * .80f).toInt().coerceAtMost(240)), dp(64)).apply { gravity = Gravity.CENTER_HORIZONTAL })
         } else {
             body.addView(AlarmSlideControl(this,
                 { VisualHints.learn(this, "ring_controls"); act(true) },
@@ -244,12 +244,13 @@ class RingActivity : AppCompatActivity() {
     }
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         if (event.action == MotionEvent.ACTION_SCROLL && event.isFromSource(InputDevice.SOURCE_ROTARY_ENCODER)) {
+            if (watch && watchActions?.touchActive == true) return true
             val rawTurn = event.getAxisValue(MotionEvent.AXIS_SCROLL)
             // Wear's positive raw axis is anticlockwise. Keep the existing
             // three/six-unit amounts while mapping anticlockwise to Snooze.
             val action = gesture.turn(if (watch) -rawTurn else rawTurn, SystemClock.elapsedRealtime())
             if (watch) {
-                watchActions?.setProgress(gesture.isSnoozing, gesture.progress())
+                watchActions?.setBezelProgress(gesture.isSnoozing, gesture.fraction())
                 bezelHandler.removeCallbacks(resetBezelFeedback)
                 bezelHandler.postDelayed(resetBezelFeedback, 1501)
             } else {

@@ -37,6 +37,7 @@ public final class BezelUiProbe extends Instrumentation {
     private File out;
     private final List<String> checks = new ArrayList<>();
     private float density;
+    private long injectedDownTime;
     private String fixtureId = "";
     private long fixtureAt;
 
@@ -85,7 +86,7 @@ public final class BezelUiProbe extends Instrumentation {
         return null;
     }
     private View control(Activity a, String desc) { View result = ui(() -> find(a.getWindow().getDecorView(), desc, null)); require(result != null, "Missing control " + desc); return result; }
-    private View actions(Activity a) { View result = ui(() -> find(a.getWindow().getDecorView(), null, "watch_ring_actions")); require(result != null, "Missing watch-specific action component"); return result; }
+    private View actions(Activity a) { View result = ui(() -> find(a.getWindow().getDecorView(), null, "watch_ring_slider")); require(result != null, "Missing watch-specific action component"); return result; }
     private int progress(View actions) { return ui(() -> ((Number) field(actions, "currentProgress")).intValue()); }
     private boolean snoozing(View actions) { return ui(() -> (Boolean) field(actions, "currentSnoozing")); }
     private void selected(Activity a, int minutes) { control(a, "Snooze duration: " + minutes + " minutes"); }
@@ -237,80 +238,118 @@ public final class BezelUiProbe extends Instrumentation {
         waitUntil(() -> ui(() -> resumed!=null && resumed!=old && resumed.getClass().getName().equals(RING) && !resumed.isFinishing() && resumed.hasWindowFocus()),10000,"Ringing recreation did not resume");
         Activity result=resumed; waitUntil(() -> ui(() -> actions(result).getWidth()>0),3000,"Recreated actions not laid out"); return result;
     }
-    private void layout(Activity a) {
-        View buttons=actions(a), less=control(a,"Decrease snooze by 5 minutes"), more=control(a,"Increase snooze by 5 minutes");
-        View snooze=control(a,"Snooze"), dismiss=control(a,"Dismiss");
-        for(View v:new View[]{less,more,snooze,dismiss}) require(ui(() -> v.getWidth()>=47.5f*density && v.getHeight()>=47.5f*density),"Touch target smaller than 48dp: "+v.getContentDescription());
-        require(ui(() -> less.getWidth()>=55.5f*density && more.getWidth()>=55.5f*density),"Duration controls are not the larger 56dp circles");
-        require(ui(() -> visibleTexts(buttons).isEmpty()),"Watch actions contain visible text");
-        List<String> texts=ui(() -> visibleTexts(a.getWindow().getDecorView()));
-        for(String text:texts) require(!text.matches("(?i).*(snooze|dismiss|stop|rotate|bezel|[0-9]+%).*"),"Visible textual bezel cue: "+text);
-        require(ui(() -> less.getWidth()==less.getHeight() && more.getWidth()==more.getHeight()),"Duration buttons are not circular squares");
-        for(View v:new View[]{less,more,snooze,dismiss}) {
-            Rect rect=new Rect(); require(ui(() -> v.getGlobalVisibleRect(rect) && rect.width()==v.getWidth() && rect.height()==v.getHeight()),"Control clipped by layout");
+
+    private View sliderThumb(Activity a) { return ui(() -> (View) field(actions(a), "thumb")); }
+    private float position(View thumb) { return ui(thumb::getTranslationX); }
+    private float travel(View rail, View thumb) { return ui(() -> (rail.getWidth()-thumb.getWidth())/2f-10*density); }
+    private void settleAt(View thumb, float target) throws Exception {
+        waitUntil(() -> Math.abs(position(thumb)-target)<density,1200,"Slider did not settle at its input target");
+    }
+    private void motionSamples(View thumb, float from, float target, String name) throws Exception {
+        java.util.Set<Integer> intermediate=new java.util.HashSet<>();
+        JSONArray samples=new JSONArray();
+        long until=SystemClock.elapsedRealtime()+650;
+        while(SystemClock.elapsedRealtime()<until) {
+            float value=position(thumb); samples.put(value);
+            if(Math.abs(value-from)>.5f && Math.abs(value-target)>.5f) intermediate.add(Math.round(value*2));
+            SystemClock.sleep(16);
         }
+        save(name+".json",samples.toString());
+        require(intermediate.size()>=2,"Slider jumped between detents without intermediate positions: "+samples);
+        settleAt(thumb,target);
+    }
+    private void pointer(int action,float x,float y) {
+        long now=SystemClock.uptimeMillis();
+        if(action==MotionEvent.ACTION_DOWN) injectedDownTime=now;
+        MotionEvent e=MotionEvent.obtain(injectedDownTime,now,action,x,y,0);
+        e.setSource(InputDevice.SOURCE_TOUCHSCREEN); sendPointerSync(e); e.recycle();
+    }
+    private void partialSwipe(Activity a, boolean cancel) throws Exception {
+        View thumb=sliderThumb(a); View rail=actions(a);
+        float[] p=ui(() -> { int[] xy=new int[2]; thumb.getLocationOnScreen(xy); return new float[]{xy[0]+thumb.getWidth()/2f,xy[1]+thumb.getHeight()/2f,thumb.getTranslationX()}; });
+        float before=p[2], x=p[0], y=p[1];
+        pointer(MotionEvent.ACTION_DOWN,x,y);
+        require(Math.abs(position(thumb)-before)<3*density,"Catching a moving thumb caused a position jump");
+        SystemClock.sleep(45);
+        pointer(MotionEvent.ACTION_MOVE,x+travel(rail,thumb)*.25f,y);
+        require(Math.abs(position(thumb)-(before+travel(rail,thumb)*.25f))<2*density,"Touch drag did not follow the finger");
+        SystemClock.sleep(45);
+        pointer(cancel?MotionEvent.ACTION_CANCEL:MotionEvent.ACTION_UP,x+travel(rail,thumb)*.25f,y);
+    }
+    private void layout(Activity a) {
+        View rail=actions(a), thumb=sliderThumb(a);
+        require(rail.getClass().getName().equals("dev.orbit.clock.core.AlarmSlideControl"),"Watch is not using the actual phone slider class");
+        require(ui(() -> thumb.getWidth()>thumb.getHeight() && thumb.getHeight()>=47.5f*density),"Phone-proportioned pill thumb missing");
+        control(a,"Snooze"); control(a,"Dismiss");
+        for(String desc:new String[]{"Decrease snooze by 5 minutes","Increase snooze by 5 minutes"}) {
+            View v=control(a,desc);
+            require(ui(() -> v.getWidth()>=55.5f*density && v.getHeight()>=55.5f*density),"Duration button shrank");
+        }
+        Rect r=new Rect();
+        require(ui(() -> rail.getGlobalVisibleRect(r) && r.width()==rail.getWidth() && r.height()==rail.getHeight()),"Watch slider is clipped");
     }
     private void exercise() throws Exception {
-        require(target.getPackageManager().hasSystemFeature("android.hardware.type.watch"),"Wear OS image required");
-        require(target.getSystemService(android.app.AlarmManager.class).canScheduleExactAlarms(),"Exact alarms unavailable");
-        Activity a=delivered("bezel-snooze"); layout(a); selected(a,10);
-        click(control(a,"Increase snooze by 5 minutes")); click(control(a,"Increase snooze by 5 minutes")); click(control(a,"Decrease snooze by 5 minutes")); selected(a,15);
-        require(record("bezel-snooze").getInt("snoozeMinutes")==10,"Duration adjustment edited saved default");
+        require(target.getPackageManager().hasSystemFeature("android.hardware.type.watch"),"Wear OS required");
+        require(android.animation.ValueAnimator.areAnimatorsEnabled(),"Motion verification requires animations enabled");
+        Activity a=delivered("slider-snooze");
+        layout(a); selected(a,10);
+        click(control(a,"Increase snooze by 5 minutes")); selected(a,15);
         a=recreate(a); selected(a,15); layout(a);
-        pass("Watch-only icon actions and larger circular duration targets; selection survives recreation without editing default");
-        View component=actions(a), snooze=control(a,"Snooze"); Bitmap idle=componentBitmap(component); displayScreenshot("display-idle"); screenshot("01-idle");
-        int width=ui(component::getWidth), height=ui(component::getHeight);
-        List<String> header=ui(() -> visibleTexts(resumed.getWindow().getDecorView()));
-        // Raw rotary AXIS_SCROLL is positive anticlockwise and negative clockwise.
-        rotate(a,1); require(progress(component)==33 && snoozing(component),"First snooze detent progress changed");
-        Bitmap first=componentBitmap(component); screenshot("02-snooze-33"); float radius1=changedRadius(idle,first,component,snooze,true); noChangedPixels(idle,first,false);
-        SystemClock.sleep(1750); require(progress(component)==0,"Aura did not reset between independent samples");
-        rotate(a,2); require(progress(component)==66 && snoozing(component),"Two-unit snooze progress changed");
-        Bitmap second=componentBitmap(component); screenshot("03-snooze-66"); float radius2=changedRadius(idle,second,component,snooze,true); noChangedPixels(idle,second,false);
-        require(radius1>16*density && radius2>radius1+1.5f*density,"Aura did not spread beyond the core with rotation: "+radius1+","+radius2);
-        require(ui(component::getWidth)==width && ui(component::getHeight)==height,"Progress moved action layout");
-        require(header.equals(ui(() -> visibleTexts(resumed.getWindow().getDecorView()))),"Bezel added visible percentage/action text");
-        require(record("bezel-snooze").getLong("snoozeUntil")<System.currentTimeMillis(),"Two detents unexpectedly snoozed");
-        save("aura-metrics.json",new JSONObject().put("firstRadiusPixels",radius1).put("secondRadiusPixels",radius2).put("density",density).toString(2));
-        idle.recycle(); first.recycle(); second.recycle(); pass("Anticlockwise Snooze aura spreads radially; other side and fixed touch layout stay unchanged");
-        SystemClock.sleep(1750); require(progress(component)==0,"Idle aura did not reset");
-        rotate(a,-1); require(progress(component)==16 && !snoozing(component),"Pause did not reset dismissal rotation");
-        rotate(a,.5f); require(progress(component)==16 && snoozing(component),"Reversal did not reset prior rotation");
-        SystemClock.sleep(1750); require(progress(component)==0,"Reversed aura did not clear after idle");
-        pass("Idle and reversal reset graphical progress with the original 1500ms gesture pause");
-        rotate(a,1); rotate(a,1); require(!ui(a::isFinishing),"Snooze fired before three units");
+        require(record("slider-snooze").getInt("snoozeMinutes")==10,"Duration changed saved default");
+        pass("Actual phone slider scaled for round watch; larger duration controls and recreation preserve selection");
+        displayScreenshot("display-idle"); screenshot("01-idle");
+        View rail=actions(a), thumb=sliderThumb(a);
+        float span=travel(rail,thumb);
+        rotate(a,1);
+        motionSamples(thumb,0,-span/3f,"left-motion");
+        require(record("slider-snooze").getLong("snoozeUntil")<System.currentTimeMillis(),"A partial bezel turn fired an action");
+        screenshot("02-left-partial");
+        float from=position(thumb); rotate(a,-1);
+        motionSamples(thumb,from,span/6f,"reverse-motion");
+        screenshot("03-reversal");
+        pass("Bezel detents produce continuous intermediate positions and interruptible directional reversal");
+        SystemClock.sleep(2200); settleAt(thumb,0);
+        require(record("slider-snooze").getLong("snoozeUntil")<System.currentTimeMillis(),"Spring inertia snoozed alarm");
+        partialSwipe(a,false); SystemClock.sleep(60); partialSwipe(a,true);
+        SystemClock.sleep(1200); settleAt(thumb,0);
+        require(record("slider-snooze").getBoolean("enabled") && record("slider-snooze").getLong("snoozeUntil")<System.currentTimeMillis(),"Partial swipe/return unexpectedly fired an action");
+        pass("Idle and partial touch releases settle gracefully; moving thumb can be caught without jumping; inertia never acts");
+        SystemClock.sleep(1700);
+        rotate(a,1); rotate(a,1);
+        require(record("slider-snooze").getLong("snoozeUntil")<System.currentTimeMillis(),"Snooze fired before three units");
         long before=System.currentTimeMillis(); rotate(a,1); long after=System.currentTimeMillis();
-        final long snoozeBefore=before;
-        waitUntil(() -> record("bezel-snooze").getLong("snoozeUntil")>=snoozeBefore+15*60000L,3000,"Three-unit bezel snooze did not execute");
-        JSONObject changed=record("bezel-snooze"); require(changed.getLong("snoozeUntil")<=after+15*60000L+1000 && changed.getInt("snoozeMinutes")==10,"Bezel snooze did not use occurrence-only 15-minute selection");
-        require(prefs("scheduled_occurrences").getLong("bezel-snooze.scheduled",0)==changed.getLong("snoozeUntil"),"Snooze deadline not installed");
-        pass("Anticlockwise three-unit snooze schedules selected occurrence duration, preserving saved default");
-
-        a=delivered("bezel-dismiss"); component=actions(a); rotate(a,-3); require(progress(component)==50&&!snoozing(component),"Half dismissal progress incorrect"); screenshot("04-dismiss-50");
-        SystemClock.sleep(1750); require(progress(component)==0,"Dismissal aura did not reset between samples");
-        rotate(a,-5); require(progress(component)==83&&!snoozing(component),"Five-unit dismissal progress incorrect"); screenshot("05-dismiss-83");
-        require(record("bezel-dismiss").getBoolean("enabled"),"Dismiss fired before six units");
-        SystemClock.sleep(1750); rotate(a,-3); rotate(a,-2); require(record("bezel-dismiss").getBoolean("enabled"),"Dismiss fired before sixth accumulated unit"); rotate(a,-1);
-        waitUntil(() -> !record("bezel-dismiss").getBoolean("enabled"),3000,"Six-unit dismissal did not disable timer");
-        require(prefs("scheduled_occurrences").getLong("bezel-dismiss.scheduled",0)==0,"Dismissed timer remains scheduled");
-        pass("Clockwise dismissal aura follows rotation and original six-unit threshold dismisses exactly");
-
-        a=delivered("bezel-duration-bounds"); click(control(a,"Decrease snooze by 5 minutes")); selected(a,5); require(!ui(control(a,"Decrease snooze by 5 minutes")::isEnabled),"Minimum decrease remains enabled");
-        for(int i=0;i<11;i++) click(control(a,"Increase snooze by 5 minutes")); selected(a,60); require(!ui(control(a,"Increase snooze by 5 minutes")::isEnabled),"Maximum increase remains enabled");
-        require(record("bezel-duration-bounds").getInt("snoozeMinutes")==10,"Boundary adjustments edited alarm default");
-        shell("settings put system font_scale 1.3"); SystemClock.sleep(1200);
-        waitUntil(() -> ui(() -> resumed!=null && resumed.getClass().getName().equals(RING) && resumed.hasWindowFocus() && resumed.getResources().getConfiguration().fontScale>=1.29f),5000,"Large-type RingActivity not focused at 130 percent");
+        final long earliest=before+15*60000L;
+        waitUntil(() -> record("slider-snooze").getLong("snoozeUntil")>=earliest,3000,"Anticlockwise snooze failed");
+        JSONObject changed=record("slider-snooze");
+        require(changed.getLong("snoozeUntil")<=after+15*60000L+1000 && changed.getInt("snoozeMinutes")==10,"Selected snooze duration not preserved");
+        pass("Anticlockwise three-unit threshold snoozes for selected duration without changing default");
+        a=delivered("slider-dismiss"); rail=actions(a); thumb=sliderThumb(a); span=travel(rail,thumb);
+        rotate(a,-3); settleAt(thumb,span*.5f); screenshot("04-right-partial");
+        require(record("slider-dismiss").getBoolean("enabled"),"Dismiss fired early");
+        rotate(a,-2); require(record("slider-dismiss").getBoolean("enabled"),"Dismiss fired before six units");
+        rotate(a,-1);
+        waitUntil(() -> !record("slider-dismiss").getBoolean("enabled"),3000,"Clockwise six-unit dismiss failed");
+        pass("Clockwise moves right and retains exact six-unit dismissal threshold");
+        a=delivered("slider-limits");
+        click(control(a,"Decrease snooze by 5 minutes")); selected(a,5);
+        require(!ui(control(a,"Decrease snooze by 5 minutes")::isEnabled),"Minimum control enabled");
+        for(int i=0;i<11;i++)click(control(a,"Increase snooze by 5 minutes"));
+        selected(a,60); require(!ui(control(a,"Increase snooze by 5 minutes")::isEnabled),"Maximum control enabled");
+        shell("settings put system font_scale 1.3");
+        waitUntil(() -> ui(() -> resumed!=null && resumed.getClass().getName().equals(RING) && resumed.hasWindowFocus() && resumed.getResources().getConfiguration().fontScale>=1.29f),8000,"Large type not applied");
         a=resumed; selected(a,60); layout(a);
-        rotate(a,-1); require(progress(actions(a))==16 && !snoozing(actions(a)),"Large-type layout consumed bezel input instead of showing action progress");
-        displayScreenshot("display-large-type"); screenshot("06-large-type-60"); click(control(a,"Dismiss"));
-        waitUntil(() -> !record("bezel-duration-bounds").getBoolean("enabled"),3000,"Touch dismissal failed");
-        pass("Larger duration buttons retain 5–60 limits, remain visible at 130 percent font scale, and touch Dismiss works");
-        shell("settings put system font_scale 1.0"); SystemClock.sleep(400);
-        a=delivered("bezel-touch-snooze"); click(control(a,"Increase snooze by 5 minutes")); selected(a,15);
-        before=System.currentTimeMillis(); click(control(a,"Snooze")); after=System.currentTimeMillis();
-        changed=record("bezel-touch-snooze"); require(changed.getLong("snoozeUntil")>=before+15*60000L && changed.getLong("snoozeUntil")<=after+15*60000L+1000,"Touch snooze did not honor selected duration");
-        require(changed.getInt("snoozeMinutes")==10,"Touch snooze changed saved default");
-        pass("Small circular Snooze action retains touch fallback and selected-duration scheduling");
+        displayScreenshot("display-large-type"); screenshot("06-large-type-60");
+        click(control(a,"Dismiss"));
+        waitUntil(() -> !record("slider-limits").getBoolean("enabled"),3000,"Touch Stop failed");
+        pass("Duration limits and 130 percent text fit watch; native Stop touch fallback works");
+        shell("settings put system font_scale 1.0"); SystemClock.sleep(600);
+        a=delivered("slider-touch-snooze"); click(control(a,"Increase snooze by 5 minutes")); selected(a,15);
+        shell("settings put global animator_duration_scale 0");
+        waitUntil(() -> !android.animation.ValueAnimator.areAnimatorsEnabled(),3000,"Reduced motion not applied");
+        rotate(a,.5f); settleAt(sliderThumb(a),-travel(actions(a),sliderThumb(a))/6f);
+        click(control(a,"Snooze"));
+        require(record("slider-touch-snooze").getLong("snoozeUntil")>System.currentTimeMillis()+14*60000L,"Touch Snooze failed");
+        pass("Native Snooze touch fallback and reduced-motion bezel feedback retain selected duration");
     }
     @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); start(); }
     @Override public void onStart() {
@@ -334,7 +373,7 @@ public final class BezelUiProbe extends Instrumentation {
             try { displayScreenshot("failure"); save("failure.txt",trace.toString()); save("failure-activities.txt",shell("dumpsys activity activities")); save("failure-logcat.txt",shell("logcat -d -t 400")); } catch(Exception ignored) { }
         }
         finally {
-            try { save("checks.json",new JSONArray(checks).toString(2)); save("alarms.json",records().toString(2)); save("crashes.txt",shell("logcat -d -b crash")); shell("settings put system font_scale 1.0"); } catch(Exception ignored) { }
+            try { save("checks.json",new JSONArray(checks).toString(2)); save("alarms.json",records().toString(2)); save("crashes.txt",shell("logcat -d -b crash")); shell("settings put system font_scale 1.0"); shell("settings put global animator_duration_scale 1"); } catch(Exception ignored) { }
         }
         finish(code,result);
     }

@@ -6,6 +6,10 @@ The user wants a personal Android phone + Galaxy Watch 4 Classic clock app inspi
 
 The user authorized creating the private personal repository, uploading this project, fixing build failures, running tests and publishing debug APK downloads. Login and account authorization are completed by the user. Do not use Bytebeam repositories for this project.
 
+## Watch spring slider — pending verification
+
+The user supersedes circular watch actions with the current phone slider, proportioned for the watch. Anticlockwise Snooze moves left, clockwise Dismiss right; preserve existing three/six-unit amounts and duration controls. Compact mode uses the same phone rail, pill thumb and labels. Retargetable spring motion preserves velocity across bezel steps and reversals; partial touch swipes return with damped inertia. Physical input alone commits actions; spring animation never does. Verification covers intermediate motion frames, pauses, reversals, touch interruption, thresholds, duration and reduced motion at both watch densities. Build/runtime checks are pending; do not claim a published slider APK before confirmation.
+
 ## Watch bezel ringing controls — verified 0.1.61
 
 The user requested a distinct watch ringing UI: larger circular plus/minus controls with the snooze duration intact, and small circular Snooze/Dismiss icon buttons that expand outward through an aura during bezel rotation. No visible bezel instructions, action words or percentage text. The time/alarm heading remains stable. Native 48dp action touch targets stay fixed while the visible cores grow from 32dp to 44dp and layered radial halos spread from both sides. Curved arrows indicate anticlockwise Snooze and clockwise Dismiss. Direct progress, reversal and idle reset are graphical, with no decorative animation loop or action tied to animation completion.
