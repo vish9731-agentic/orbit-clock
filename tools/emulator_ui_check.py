@@ -21,6 +21,7 @@ def adb(*args, binary=False):
 def tree():
     for attempt in range(3):
         try:
+            adb('shell', 'rm', '-f', '/sdcard/orbit-window.xml')
             adb('shell', 'uiautomator', 'dump', '/sdcard/orbit-window.xml')
             return ET.fromstring(adb('shell', 'cat', '/sdcard/orbit-window.xml'))
         except (subprocess.SubprocessError, ET.ParseError):
@@ -154,6 +155,10 @@ def ringing_snooze_checks():
     assert second['id'] + '.scheduled' not in preferences('scheduled_occurrences')
     assert int(preferences('scheduled_occurrences')[first['id'] + '.scheduled']) == snoozed['snoozeUntil']
     passed('Dismiss ignores duration and leaves another snoozed alarm intact')
+    # Multiple out-of-phase countdowns can prevent UiAutomator from reaching idle.
+    # Remove the already verified fixture before inspecting the next occurrence.
+    adb('shell', 'am', 'start', '-W', '-f', '0x14000000', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
+    click('Timer'); tap_xy(xy(scroll_find('Cancel timer')))
     for key, target, hold in [(24, 15, True), (25, 5, False)]:
         volume_alarm = open_real_ringing_timer()
         click(desc='Increase snooze by 5 minutes' if target > 10 else 'Decrease snooze by 5 minutes')
@@ -170,10 +175,8 @@ def ringing_snooze_checks():
         time.sleep(1)
         assert find(desc=f'Snooze duration: {target} minutes', optional=True) is None, 'Volume snooze did not close ringing screen'
         passed(('Held volume up' if key == 24 else 'Volume down') + ' snoozes for the selected duration')
-    adb('shell', 'am', 'start', '-W', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
-    click('Timer')
-    # Remove each snoozed fixture, keeping the app open for the final crash check.
-    for _ in range(3): tap_xy(xy(scroll_find('Cancel timer')))
+        adb('shell', 'am', 'start', '-W', '-f', '0x14000000', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
+        click('Timer'); tap_xy(xy(scroll_find('Cancel timer')))
 
 try:
     adb('shell', 'cmd', 'uimode', 'night', 'no')
