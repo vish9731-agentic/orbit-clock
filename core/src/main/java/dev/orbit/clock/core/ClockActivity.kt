@@ -414,7 +414,7 @@ open class ClockActivity : AppCompatActivity() {
         val setup = card(color = colors.container); setup.addView(text("Set a timer", if (watch) 22f else 26f)); space(setup, 20)
         val minutes = input(setup, "Minutes", "5", numeric = true).apply { textSize = 42f; gravity = Gravity.CENTER; contentDescription = "Timer minutes" }
         val presets = row()
-        listOf(1, 5, 10, 25).forEach { m -> presets.addView(button("$m", tonal = true) { OrbitMotion.text(minutes, m.toString()); minutes.setSelection(minutes.text?.length ?: 0) }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(4) }) }
+        listOf(1, 5, 10, 25).forEach { m -> presets.addView(button("$m", tonal = true) { OrbitMotion.text(minutes, m.toString()); minutes.setSelection(minutes.text?.length ?: 0) }.apply { contentDescription = "Set timer to $m minutes" }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(4) }) }
         fun selectPreset(animate: Boolean) {
             for (i in 0 until presets.childCount) {
                 val b = presets.getChildAt(i) as MaterialButton

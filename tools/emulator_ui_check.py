@@ -311,8 +311,8 @@ try:
     click(desc='Add city'); fill('Paris'); click('Europe · Paris')
     scroll_find('Paris'); passed('Search and add a world clock')
     screenshot('clocks-light')
-    click('Timer'); click('25'); assert find('25').attrib['selected'] == 'true'
-    click('1'); assert find('1').attrib['selected'] == 'true'
+    click('Timer'); click('25'); assert find(desc='Set timer to 25 minutes').attrib['selected'] == 'true'
+    click('1'); assert find(desc='Set timer to 1 minutes').attrib['selected'] == 'true'
     passed('Timer preset selection follows the animated value change')
     fill('0', desc='Timer minutes'); click('Start timer')
     assert not any(a.get('timer') and a['enabled'] and not a['deleted'] for a in records())

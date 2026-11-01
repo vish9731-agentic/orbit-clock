@@ -54,7 +54,7 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
                         if (dragging) {
                             translationX = (e.rawX - startX).coerceIn(-travel(), travel())
                             val fraction = if (travel() > 0) translationX / travel() else 0f
-                            rotation = fraction * 8f
+                            rotation = if (OrbitMotion.enabled()) fraction * 8f else 0f
                             snoozeLabel.alpha = if (fraction > 0) 1f - fraction * .45f else 1f
                             stopLabel.alpha = if (fraction < 0) 1f + fraction * .45f else 1f
                             if (abs(fraction) >= .7f && !thresholdTicked) { thresholdTicked = true; OrbitMotion.tick(this) }
