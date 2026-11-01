@@ -72,3 +72,9 @@ Source 3e5f55a7e71c608a1b6de5ebb87787b8d9c4078a, version code 18. Both volume up
 [Build, unit tests, 44 policy checks, both APKs, lint and publication](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41263319591) passed. [Android 15 emulator scenarios](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41263319565): **26 scenarios passed**, with no app crashes. The new scenarios use real timer deliveries and assert that held volume up schedules the selected 15 minutes, volume down schedules the selected 5 minutes, saved defaults remain unchanged and the corresponding AlarmManager schedule matches. Physical-device key behavior and watch runtime still require device acceptance tests.
 
 
+
+## Material You ringing redesign — release 0.1.18
+
+Source ad12f1416e2303865d7238d1e5e814a7d8149257, version code 19. RingActivity now uses the phone Material3 DayNight theme with DynamicColors, a scalable scalloped clock face, separate AM/PM, alarm/timer badge and label, a rounded bottom snooze card with minus/minutes/plus, a prominent icon Snooze button and quiet Dismiss action. System-bar contrast follows the resolved theme. Watch retains its compact dark layout. Selection persistence and touch/volume/rotary handlers are retained.
+
+[Build, unit tests, 44 policy checks, phone/watch APKs, lint and publication](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41274959680) passed. [Android 15 emulator](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41274959672) passed all **28 scenarios** with no crashes, including new light/dark surface and 130% font-scale action visibility checks, 5–60-minute limits, selection recreation, actual snooze deadlines, touch Dismiss and both volume-button snoozes. Light, dark and large-type ringing captures were visually inspected internally. No physical phone or watch runtime test was performed.
