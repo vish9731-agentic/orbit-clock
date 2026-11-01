@@ -64,3 +64,11 @@ When shell networking is restricted, use the GitHub connector: fetch https://api
 - [Android 15 emulator suite](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41196995861): **24 scenario checks passed** with no app crashes.
 - Real timer delivery exercised the ringing screen. Verified minus to 5 and disabled lower control; five-minute additions through 60 and disabled upper control; selection unchanged after activity recreation; no model/schedule edits while adjusting; actual selected 25-minute snooze deadline persisted and scheduled; saved default unchanged; separate Dismiss did not snooze or disturb the earlier snoozed timer.
 - Minimal ringing controls were visually inspected internally. Both release assets are uploaded. Watch APK compiles, but physical bezel and cross-device operation have not been hardware-tested.
+
+## Volume-button snooze — release 0.1.17
+
+Source 3e5f55a7e71c608a1b6de5ebb87787b8d9c4078a, version code 18. Both volume up and volume down snooze on release while RingActivity is open and focused, through the same selected-duration handler as touch and bezel. The whole press and repeats are consumed; canceled/unmatched releases do not act, and focus loss/pause resets the tracked press. Other screens retain normal volume handling. Notification-only/background interception is not implemented.
+
+[Build, unit tests, 44 policy checks, both APKs, lint and publication](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41263319591) passed. [Android 15 emulator scenarios](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41263319565): **26 scenarios passed**, with no app crashes. The new scenarios use real timer deliveries and assert that held volume up schedules the selected 15 minutes, volume down schedules the selected 5 minutes, saved defaults remain unchanged and the corresponding AlarmManager schedule matches. Physical-device key behavior and watch runtime still require device acceptance tests.
+
+
