@@ -90,9 +90,11 @@ try:
     result=[]
     for name,hour in periods:
         set_time(int(day.replace(hour=hour).timestamp()*1000))
-        # Native configuration recreation makes RingActivity read the new local clock/color.
-        adb('shell','settings','put','system','font_scale','1.01');time.sleep(.4)
-        adb('shell','settings','put','system','font_scale','1.0');time.sleep(1)
+        # Rooted test device: start a fresh window for the same valid ringing occurrence.
+        # Avoid saved-view restoration during synthetic font-configuration changes.
+        adb('shell','am','start','-W','-f','0x10008000','-n',PKG+'/dev.orbit.clock.core.RingActivity',
+            '--es','id',alarm['id'],'--el','at',str(at))
+        time.sleep(1)
         find(desc=f'Alarm time: {hour:02d}:00');find(desc='Alarm label: Alarm')
         time.sleep(.5)
         path=OUT/f'{name}-{hour:02d}00.png'
