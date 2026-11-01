@@ -301,7 +301,6 @@ def heads_up_bounds(name):
         path.write_bytes(adb('exec-out', 'screencap', '-p', binary=True))
         im = Image.open(path).convert('RGB')
         # The dark green action rail must be in the upper part of another app.
-        mask = im.point(lambda v: v)
         points = []
         for y in range(60, im.height // 2, 3):
             matches = [x for x in range(0, im.width, 3) if sum(abs(a-b) for a,b in zip(im.getpixel((x,y)), (16,58,53))) < 12]
@@ -357,6 +356,7 @@ def notification_checks():
     assert not stopped['enabled'] and stopped['snoozeUntil'] == 0
     assert second['id'] + '.scheduled' not in preferences('scheduled_occurrences')
     passed('Heads-up Stop dismisses the ringing occurrence directly over another app')
+    adb('shell', 'am', 'start', '-W', '-f', '0x14000000', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
 
 def ringing_snooze_checks():
     adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
@@ -565,7 +565,7 @@ try:
         assert find('Slide left to snooze · right to stop', optional=True) is None
         click('Stop'); assert not record(alarm['id'])['enabled']
         passed('Visual-only ringing cue leaves Stop immediately functional')
-    if ARGS.scope not in ['guidance', 'visual-cue', 'notifications']: motion_checks()
+    if ARGS.scope not in ['guidance', 'visual-cue']: motion_checks()
     pid = adb('shell', 'pidof', PKG).strip(); assert pid
     crashes = adb('logcat', '-d', '-b', 'crash'); (OUT / 'crashes.txt').write_text(crashes)
     assert not crashes.strip(), crashes
