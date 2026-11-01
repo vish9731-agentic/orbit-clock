@@ -49,6 +49,14 @@ Install the phone APK on the phone and the wear APK on the watch. Android will a
 
 Pair the watch using Galaxy Wearable and open both apps. Grant notifications on both devices. On watches running Android 13 / Wear OS 4 or newer, the watch APK uses the dedicated-alarm permission granted during installation, so precise-alarm setup does not need the system Alarms and reminders page. Older watches and the phone app still use the precise-alarm approval flow. Install the watch update over the existing app to preserve saved alarms; reopen Orbit afterward to restore their schedules. On Android 14+, allow the ringing screen/full-screen intent if requested. Confirm an alarm appears on both devices before testing it. A debug APK is installable with debugging enabled; it does not automatically attach a live debugger.
 
+## Watch precise-alarm setup — release 0.1.45
+
+The watch APK now uses automatic dedicated-alarm permission on Android 13 / Wear OS 4 and newer, avoiding the Samsung Alarms and reminders screen reported to load indefinitely. Update over the existing watch app and reopen it; saved alarms are preserved and scheduling is restored. Older-watch and phone permission flows are unchanged.
+
+Release **0.1.45** (version code **46**), source `c213a5afabdf1b03bc4c87f0c2316d9c44078160`: [build, unit/policy checks, phone/watch lint and APK publication](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41310315805) passed. [Wear OS 4 / API 33 verification](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41310315905) passed the runtime scenarios: fresh automatic exact-alarm access; the previous APK denied access; an in-place update preserving and rescheduling the saved alarm; and a UI-created one-minute timer delivered to the foreground ringing service with no Orbit crash. No exact-alarm appop grant is applied to the fixed APK. Both merged manifests are checked to keep the phone permission flow unchanged.
+
+The emulator is a Wear OS image, not Samsung's physical device. The user's reported 6.0 may be One UI Watch; precise device OS mapping and physical-watch acceptance remain unverified. The test environment simulates unplugged/discharging battery state so Wear OS's charging activity cannot obscure Orbit. Ringing service detection accepts Android's abbreviated ComponentName.
+
 ## Request changes and builds from a phone
 
 The intended flow is: request a change → a coding session with access updates this repository → GitHub Actions builds/tests it → download the successful APKs. Your Mac does not need to remain running for GitHub-hosted builds. The coding session must have repository write access and the ability to inspect Actions results; signing into ChatGPT alone does not provide those capabilities.

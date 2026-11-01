@@ -1,5 +1,13 @@
 # Verification status
 
+## Watch exact-alarm permission — release 0.1.45
+
+Release **0.1.45** (version code **46**), source `c213a5afabdf1b03bc4c87f0c2316d9c44078160`: [build, unit/policy checks, phone/watch lint and APK publication](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41310315805) passed. [Wear OS 4 / API 33 verification](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41310315905) passed the runtime scenarios: fresh automatic exact-alarm access; the previous APK denied access; an in-place update preserving and rescheduling the saved alarm; and a UI-created one-minute timer delivered to the foreground ringing service with no Orbit crash. No exact-alarm appop grant is applied to the fixed APK. Both merged manifests are checked to keep the phone permission flow unchanged.
+
+The emulator is a Wear OS image, not Samsung's physical device. The user's reported 6.0 may be One UI Watch; precise device OS mapping and physical-watch acceptance remain unverified. The test environment simulates unplugged/discharging battery state so Wear OS's charging activity cannot obscure Orbit. Ringing service detection accepts Android's abbreviated ComponentName.
+
+The watch manifest caps SCHEDULE_EXACT_ALARM at API 32 and declares USE_EXACT_ALARM. Shared scheduling code, alarm storage, package ID and development signing key are unchanged. The published assets are `orbit-clock-phone-debug.apk` and `orbit-clock-watch-debug.apk`; only the watch update is required for this permission fix.
+
 ## Ringing atmosphere and actionable banners — current change
 
 The latest user preference supersedes the earlier visual-guidance rollout: shimmer belongs only on the ringing slider. Main-tool shimmer bindings are removed and VisualHints rejects non-ring keys. Keep ordinary native navigation/press feedback, static edit/remove icons and no prose tips.
