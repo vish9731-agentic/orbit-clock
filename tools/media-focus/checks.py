@@ -1,5 +1,6 @@
 """Exercise real independent media playback against real Orbit alarm deliveries."""
 import re
+import subprocess
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -11,9 +12,20 @@ def run(ui):
         ['adb','click','find','xy','tap_xy','records','record','preferences','passed','assert_scheduled']]
     pkg=ui['PKG'];out=ui['OUT']
     def player():
-        raw=adb('exec-out','run-as',PROBE,'cat','shared_prefs/probe.xml')
-        if 'No such file or directory' in raw:return {}
-        return {n.attrib['name']:n.attrib.get('value',n.text or '') for n in ET.fromstring(raw)}
+        # SharedPreferences is rewritten frequently by the independent player.
+        # Retry only reads: an empty/transient XML snapshot is not a playback result.
+        last=''
+        for attempt in range(12):
+            try:
+                raw=adb('exec-out','run-as',PROBE,'cat','shared_prefs/probe.xml')
+                return {n.attrib['name']:n.attrib.get('value',n.text or '') for n in ET.fromstring(raw)}
+            except subprocess.CalledProcessError as error:
+                if 'No such file or directory' not in (error.stderr or ''):raise
+                last=error.stderr
+            except ET.ParseError as error:
+                last=str(error)
+            time.sleep(.08)
+        raise AssertionError('No complete playback status snapshot: '+last)
     def await_player(condition,label):
         until=time.monotonic()+12;last={}
         while time.monotonic()<until:
