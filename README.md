@@ -98,3 +98,7 @@ Only the ringing slider shimmers. Other screens retain static affordances and no
 The clock uses weight 350, the 24sp label weight 400, duration weight 500, and 22sp rail labels weight 450. A nearly black static gradient carries a tiny hint of local time: deep-night blue, dawn rose, morning sage, afternoon amber, evening violet or night indigo. All tint channels stay at or below 20/255 and blend smoothly through midnight.
 
 Phone alarm banners have Snooze/Stop controls, plus five-minute snooze adjustments in the heads-up/expanded layout. Collapsed notifications retain both actions. The banner and ringing screen share selection for that occurrence without editing the saved default. Android owns the notification header, dimensions and presentation; banner actions are taps rather than a draggable gesture. Wear notifications use native Snooze/Stop actions. See [interaction details](docs/INTERACTIONS.md).
+
+## Watch ringing and bezel feedback
+
+The watch uses its own compact ringing layout: larger circular +/- controls keep the selected snooze duration prominent, with smaller icon-only Snooze and Dismiss buttons below. Curved arrows show bezel direction. Turning the bezel expands the active control's layered aura outward while its touch target stays fixed. No instructional text or rotating percentage replaces the time/alarm label. The existing rotation amounts and snooze-duration selection are preserved. Phone ringing keeps its current slider.
