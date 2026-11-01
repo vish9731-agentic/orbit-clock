@@ -9,7 +9,7 @@ class RingingService : Service() {
     private var tone: Ringtone? = null
     private var vibrating = false
     private var alarmFocusRequest: AudioFocusRequest? = null
-    private var hasAudioFocus = false
+    private var mayPlayAlarmAudio = false
     private var retryFocusOnNewAlarm = false
     private var focusGeneration = 0
     private val alarmAudioAttributes = AudioAttributes.Builder()
@@ -123,7 +123,7 @@ class RingingService : Service() {
             .setWillPauseWhenDucked(true)
             .setOnAudioFocusChangeListener({ change ->
                 if (generation == focusGeneration && active.isNotEmpty()) {
-                    hasAudioFocus = change == AudioManager.AUDIOFOCUS_GAIN
+                    mayPlayAlarmAudio = change == AudioManager.AUDIOFOCUS_GAIN
                     retryFocusOnNewAlarm = change == AudioManager.AUDIOFOCUS_LOSS
                     updateOutputs() // Respect losses; a delayed gain can start the still-active alarm.
                 }
@@ -132,12 +132,16 @@ class RingingService : Service() {
         val result = runCatching { manager.requestAudioFocus(request) }
             .onFailure { android.util.Log.w("OrbitAudioFocus", "Alarm audio focus unavailable", it) }
             .getOrDefault(AudioManager.AUDIOFOCUS_REQUEST_FAILED)
-        hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        // Android 15 can deny focus to an alarm-triggered background FGS even
+        // after startForeground. Keep the safety-critical USAGE_ALARM tone audible;
+        // the independent native Pause command still stops cooperating media.
+        // A DELAYED request (for example during a call) waits for its gain callback.
+        mayPlayAlarmAudio = result != AudioManager.AUDIOFOCUS_REQUEST_DELAYED
         retryFocusOnNewAlarm = result == AudioManager.AUDIOFOCUS_REQUEST_FAILED
     }
     private fun releaseAudioFocus() {
         ++focusGeneration // Ignore callbacks queued for an occurrence that has already ended.
-        hasAudioFocus = false
+        mayPlayAlarmAudio = false
         retryFocusOnNewAlarm = false
         val request = alarmFocusRequest ?: return
         alarmFocusRequest = null
@@ -146,7 +150,7 @@ class RingingService : Service() {
     }
     private fun updateOutputs() {
         val alarms = active.keys.mapNotNull { Store(this).get(it) }
-        if (hasAudioFocus && alarms.any { it.sound }) {
+        if (mayPlayAlarmAudio && alarms.any { it.sound }) {
             if (tone?.isPlaying != true) {
                 tone?.stop()
                 tone = null

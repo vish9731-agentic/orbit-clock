@@ -54,13 +54,21 @@ def run(ui):
             time.sleep(.4)
         raise AssertionError('Alarm did not ring: '+a['id'])
     def paused(mode):
-        p=await_player(lambda p:p.get('mode')==mode and p.get('playing')=='false' and 'focus:-2;' in p.get('events',''),mode+' did not pause on transient focus loss')
-        assert 'media_pause;' in p['events'], p
+        p=await_player(lambda p:p.get('mode')==mode and p.get('playing')=='false' and 'media_pause;' in p.get('events',''),mode+' did not pause')
         before=int(p['position']);time.sleep(.65);after=player()
         assert after.get('playing')=='false' and abs(int(after['position'])-before)<150,(p,after)
+        audio=adb('shell','dumpsys','audio')
+        owned=any('-- pack: '+pkg+' --' in line and 'gain: GAIN_TRANSIENT_EXCLUSIVE' in line and 'loss: none' in line for line in audio.splitlines())
+        if owned:await_player(lambda p:'focus:-2;' in p.get('events',''),mode+' missing transient focus loss')
+        else:
+            # API35 background-start capability hardening may reject focus even
+            # for an alarm-triggered mediaPlayback FGS. Pause must still work.
+            assert 'Focus request DENIED' in audio,audio[:2500]
+        assert any('u/pid:' in line and 'state:started' in line and 'usage=USAGE_ALARM' in line for line in audio.splitlines()), 'Alarm tone is not playing'
         (out/(mode+'-paused.txt')).write_text(str(after))
-        (out/(mode+'-audio-focus.txt')).write_text(adb('shell','dumpsys','audio'))
-        passed(('Music' if mode=='music' else 'Video')+' pauses on alarm focus loss and receives the native Pause command')
+        (out/(mode+'-audio-focus.txt')).write_text(audio)
+        passed(('Music' if mode=='music' else 'Video')+' stops advancing on alarm; native Pause delivered and alarm tone remains audible'+(' with exclusive focus' if owned else ' despite Android background focus denial'))
+        return owned
     action_index=0
     def stop_banner(snooze=False):
         nonlocal action_index
@@ -87,7 +95,7 @@ def run(ui):
     second=next(a for a in records() if a['id'] not in before and a.get('timer') and a['enabled'])
     assert 0<second['snoozeUntil']-first['snoozeUntil']<45000,(first,second)
     adb('shell','am','start','-W','-a','android.settings.SETTINGS')
-    await_alarm(first);paused('music')
+    await_alarm(first);assert paused('music'), 'Music scenario must exercise actual focus loss and release'
     await_alarm(second);time.sleep(.5)
     p=player();assert p['playing']=='false' and p['events'].count('media_pause;')==1 and 'focus:1;' not in p['events'],p
     passed('Overlapping alarms share focus without resuming or repeatedly pausing the player')
@@ -101,12 +109,19 @@ def run(ui):
     adb('shell','am','start','-W','-f','0x10008000','-n',PROBE+'/.ProbeActivity','--es','mode','stop')
     await_player(lambda p:p.get('playing')=='false' and 'closed;' in p.get('events',''),'Music fixture did not stop')
     video,_,_=create_timer();start_player('video');advancing('video')
-    await_alarm(video);paused('video')
+    await_alarm(video);video_owned_focus=paused('video')
     before=int(adb('shell','date','+%s').strip())*1000
     stop_banner(snooze=True)
     snoozed=record(video['id']);assert snoozed['snoozeMinutes']==video['snoozeMinutes']
     assert before+10*60000<=snoozed['snoozeUntil']<=int(adb('shell','date','+%s').strip())*1000+10*60000+1000
-    assert_scheduled(video['id'],snoozed['snoozeUntil']);resumed('video')
-    passed('Snoozing releases focus to the video player and preserves the alarm default')
+    assert_scheduled(video['id'],snoozed['snoozeUntil'])
+    if video_owned_focus:resumed('video')
+    else:
+        time.sleep(.65);p=player()
+        assert p['playing']=='false' and 'focus:1;' not in p['events'],p
+    audio=adb('shell','dumpsys','audio')
+    assert not any('-- pack: '+pkg+' --' in line and 'gain: GAIN_TRANSIENT_EXCLUSIVE' in line for line in audio.splitlines())
+    (out/'video-after-snooze.txt').write_text(str(player()))
+    passed('Snoozing ends alarm audio, cleans up any focus request and preserves the alarm default without forcing video playback')
     adb('shell','am','force-stop',PROBE)
     main()
