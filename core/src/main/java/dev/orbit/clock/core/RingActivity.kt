@@ -122,7 +122,8 @@ class RingActivity : AppCompatActivity() {
             isAppearanceLightStatusBars = false; isAppearanceLightNavigationBars = false
             if (!watch) {
                 systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                hide(WindowInsetsCompat.Type.systemBars())
+                // Hide the status bar without triggering Android's first-use immersive tutorial.
+                hide(WindowInsetsCompat.Type.statusBars())
             }
         }
         ViewCompat.requestApplyInsets(scroller); body.requestFocus()
