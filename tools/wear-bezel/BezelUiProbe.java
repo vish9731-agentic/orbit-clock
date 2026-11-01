@@ -37,6 +37,8 @@ public final class BezelUiProbe extends Instrumentation {
     private File out;
     private final List<String> checks = new ArrayList<>();
     private float density;
+    private String fixtureId = "";
+    private long fixtureAt;
 
     private interface Task<T> { T call() throws Exception; }
     private interface Condition { boolean ready() throws Exception; }
@@ -156,9 +158,35 @@ public final class BezelUiProbe extends Instrumentation {
             while((size=input.read(chunk))!=-1) buffer.write(chunk,0,size); return buffer.toString("UTF-8");
         }
     }
+    private String bounded(String text, int maximum) { return text.length()<=maximum ? text : text.substring(0,maximum)+"\n[truncated]\n"; }
+    private String failureDiagnostics() {
+        StringBuilder detail=new StringBuilder("\nBEZEL DIAGNOSTICS\n");
+        detail.append("wallMillis=").append(System.currentTimeMillis()).append(" wallDate=").append(new java.util.Date()).append(" elapsedMillis=").append(SystemClock.elapsedRealtime()).append('\n');
+        detail.append("fixtureId=").append(fixtureId).append(" fixtureAt=").append(fixtureAt).append('\n');
+        detail.append("records=").append(bounded(prefs("alarms").getString("records","[]"),12000)).append('\n');
+        detail.append("scheduled_occurrences=").append(bounded(prefs("scheduled_occurrences").getAll().toString(),12000)).append('\n');
+        try {
+            String alarm=shell("dumpsys alarm"); save("failure-alarm.txt",alarm);
+            String[] lines=alarm.split("\\n"); boolean[] include=new boolean[lines.length];
+            for(int i=0;i<Math.min(30,lines.length);i++) include[i]=true;
+            for(int i=0;i<lines.length;i++) if(lines[i].contains(PKG)||lines[i].contains("bezel-"))
+                for(int j=Math.max(0,i-8);j<Math.min(lines.length,i+9);j++) include[j]=true;
+            detail.append("ORBIT ALARM SEGMENTS\n"); int emitted=0;
+            for(int i=0;i<lines.length && emitted<140;i++) if(include[i]) { detail.append(lines[i]).append('\n'); emitted++; }
+        } catch(Exception failure) { detail.append("Alarm dump failed: ").append(failure).append('\n'); }
+        try {
+            detail.append("TOP ACTIVITIES\n");
+            for(String line:shell("dumpsys activity activities").split("\\n"))
+                if(line.contains("topResumedActivity")||line.contains("ResumedActivity:")||line.contains("mFocusedApp=")||line.contains("mFocusedWindow=")||line.contains("state=RESUMED")) detail.append(line).append('\n');
+        } catch(Exception failure) { detail.append("Activity dump failed: ").append(failure).append('\n'); }
+        try { detail.append("RECENT LOGCAT\n").append(bounded(shell("logcat -d -v threadtime -t 160"),24000)).append('\n'); }
+        catch(Exception failure) { detail.append("Logcat failed: ").append(failure).append('\n'); }
+        return bounded(detail.toString(),50000);
+    }
     private Activity delivered(String id) throws Exception {
         resumed=null;
         long at=System.currentTimeMillis()+12000;
+        fixtureId=id; fixtureAt=at;
         JSONObject alarm=new JSONObject().put("id",id).put("hour",7).put("minute",0).put("label","Watch alarm").put("timer",true)
             .put("days",new JSONArray()).put("enabled",true).put("vibrate",true).put("sound",true).put("snoozeMinutes",10)
             .put("snoozeUntil",at).put("skipThrough",0).put("deleted",false).put("revision",System.currentTimeMillis()).put("writer","bezel-ui-probe");
@@ -204,38 +232,39 @@ public final class BezelUiProbe extends Instrumentation {
         View component=actions(a), snooze=control(a,"Snooze"); Bitmap idle=componentBitmap(component); displayScreenshot("display-idle"); screenshot("01-idle");
         int width=ui(component::getWidth), height=ui(component::getHeight);
         List<String> header=ui(() -> visibleTexts(resumed.getWindow().getDecorView()));
-        rotate(a,-1); require(progress(component)==33 && snoozing(component),"First snooze detent progress changed");
+        // Raw rotary AXIS_SCROLL is positive anticlockwise and negative clockwise.
+        rotate(a,1); require(progress(component)==33 && snoozing(component),"First snooze detent progress changed");
         Bitmap first=componentBitmap(component); screenshot("02-snooze-33"); float radius1=changedRadius(idle,first,component,snooze,true); noChangedPixels(idle,first,false);
         SystemClock.sleep(1750); require(progress(component)==0,"Aura did not reset between independent samples");
-        rotate(a,-2); require(progress(component)==66 && snoozing(component),"Two-unit snooze progress changed");
+        rotate(a,2); require(progress(component)==66 && snoozing(component),"Two-unit snooze progress changed");
         Bitmap second=componentBitmap(component); screenshot("03-snooze-66"); float radius2=changedRadius(idle,second,component,snooze,true); noChangedPixels(idle,second,false);
         require(radius1>16*density && radius2>radius1+1.5f*density,"Aura did not spread beyond the core with rotation: "+radius1+","+radius2);
         require(ui(component::getWidth)==width && ui(component::getHeight)==height,"Progress moved action layout");
         require(header.equals(ui(() -> visibleTexts(resumed.getWindow().getDecorView()))),"Bezel added visible percentage/action text");
         require(record("bezel-snooze").getLong("snoozeUntil")<System.currentTimeMillis(),"Two detents unexpectedly snoozed");
         save("aura-metrics.json",new JSONObject().put("firstRadiusPixels",radius1).put("secondRadiusPixels",radius2).put("density",density).toString(2));
-        idle.recycle(); first.recycle(); second.recycle(); pass("Left aura spreads radially as rotation accumulates; other side and fixed touch layout stay unchanged");
+        idle.recycle(); first.recycle(); second.recycle(); pass("Anticlockwise Snooze aura spreads radially; other side and fixed touch layout stay unchanged");
         SystemClock.sleep(1750); require(progress(component)==0,"Idle aura did not reset");
-        rotate(a,1); require(progress(component)==16 && !snoozing(component),"Pause did not reset dismissal rotation");
-        rotate(a,-.5f); require(progress(component)==16 && snoozing(component),"Reversal did not reset prior rotation");
+        rotate(a,-1); require(progress(component)==16 && !snoozing(component),"Pause did not reset dismissal rotation");
+        rotate(a,.5f); require(progress(component)==16 && snoozing(component),"Reversal did not reset prior rotation");
         SystemClock.sleep(1750); require(progress(component)==0,"Reversed aura did not clear after idle");
         pass("Idle and reversal reset graphical progress with the original 1500ms gesture pause");
-        rotate(a,-1); rotate(a,-1); require(!ui(a::isFinishing),"Snooze fired before three units");
-        long before=System.currentTimeMillis(); rotate(a,-1); long after=System.currentTimeMillis();
+        rotate(a,1); rotate(a,1); require(!ui(a::isFinishing),"Snooze fired before three units");
+        long before=System.currentTimeMillis(); rotate(a,1); long after=System.currentTimeMillis();
         final long snoozeBefore=before;
         waitUntil(() -> record("bezel-snooze").getLong("snoozeUntil")>=snoozeBefore+15*60000L,3000,"Three-unit bezel snooze did not execute");
         JSONObject changed=record("bezel-snooze"); require(changed.getLong("snoozeUntil")<=after+15*60000L+1000 && changed.getInt("snoozeMinutes")==10,"Bezel snooze did not use occurrence-only 15-minute selection");
         require(prefs("scheduled_occurrences").getLong("bezel-snooze.scheduled",0)==changed.getLong("snoozeUntil"),"Snooze deadline not installed");
-        pass("Original three-unit snooze threshold schedules selected occurrence duration, preserving saved default");
+        pass("Anticlockwise three-unit snooze schedules selected occurrence duration, preserving saved default");
 
-        a=delivered("bezel-dismiss"); component=actions(a); rotate(a,3); require(progress(component)==50&&!snoozing(component),"Half dismissal progress incorrect"); screenshot("04-dismiss-50");
+        a=delivered("bezel-dismiss"); component=actions(a); rotate(a,-3); require(progress(component)==50&&!snoozing(component),"Half dismissal progress incorrect"); screenshot("04-dismiss-50");
         SystemClock.sleep(1750); require(progress(component)==0,"Dismissal aura did not reset between samples");
-        rotate(a,5); require(progress(component)==83&&!snoozing(component),"Five-unit dismissal progress incorrect"); screenshot("05-dismiss-83");
+        rotate(a,-5); require(progress(component)==83&&!snoozing(component),"Five-unit dismissal progress incorrect"); screenshot("05-dismiss-83");
         require(record("bezel-dismiss").getBoolean("enabled"),"Dismiss fired before six units");
-        SystemClock.sleep(1750); rotate(a,3); rotate(a,2); require(record("bezel-dismiss").getBoolean("enabled"),"Dismiss fired before sixth accumulated unit"); rotate(a,1);
+        SystemClock.sleep(1750); rotate(a,-3); rotate(a,-2); require(record("bezel-dismiss").getBoolean("enabled"),"Dismiss fired before sixth accumulated unit"); rotate(a,-1);
         waitUntil(() -> !record("bezel-dismiss").getBoolean("enabled"),3000,"Six-unit dismissal did not disable timer");
         require(prefs("scheduled_occurrences").getLong("bezel-dismiss.scheduled",0)==0,"Dismissed timer remains scheduled");
-        pass("Right aura follows dismissal rotation and original six-unit threshold dismisses exactly");
+        pass("Clockwise dismissal aura follows rotation and original six-unit threshold dismisses exactly");
 
         a=delivered("bezel-duration-bounds"); click(control(a,"Decrease snooze by 5 minutes")); selected(a,5); require(!ui(control(a,"Decrease snooze by 5 minutes")::isEnabled),"Minimum decrease remains enabled");
         for(int i=0;i<11;i++) click(control(a,"Increase snooze by 5 minutes")); selected(a,60); require(!ui(control(a,"Increase snooze by 5 minutes")::isEnabled),"Maximum increase remains enabled");
@@ -243,7 +272,7 @@ public final class BezelUiProbe extends Instrumentation {
         shell("settings put system font_scale 1.3"); SystemClock.sleep(1200);
         waitUntil(() -> ui(() -> resumed!=null && resumed.getClass().getName().equals(RING) && resumed.hasWindowFocus() && resumed.getResources().getConfiguration().fontScale>=1.29f),5000,"Large-type RingActivity not focused at 130 percent");
         a=resumed; selected(a,60); layout(a);
-        rotate(a,1); require(progress(actions(a))==16 && !snoozing(actions(a)),"Large-type layout consumed bezel input instead of showing action progress");
+        rotate(a,-1); require(progress(actions(a))==16 && !snoozing(actions(a)),"Large-type layout consumed bezel input instead of showing action progress");
         displayScreenshot("display-large-type"); screenshot("06-large-type-60"); click(control(a,"Dismiss"));
         waitUntil(() -> !record("bezel-duration-bounds").getBoolean("enabled"),3000,"Touch dismissal failed");
         pass("Larger duration buttons retain 5–60 limits, remain visible at 130 percent font scale, and touch Dismiss works");
@@ -272,7 +301,7 @@ public final class BezelUiProbe extends Instrumentation {
         try { exercise(); result.putBoolean("bezelChecksPassed",true); result.putInt("checks",checks.size()); code=Activity.RESULT_OK; }
         catch(Throwable failure) {
             java.io.StringWriter trace=new java.io.StringWriter(); failure.printStackTrace(new java.io.PrintWriter(trace));
-            result.putString("stream","BEZEL FAILURE: "+trace+"\n");
+            result.putString("stream","BEZEL FAILURE: "+trace+"\n"+failureDiagnostics());
             try { displayScreenshot("failure"); save("failure.txt",trace.toString()); save("failure-activities.txt",shell("dumpsys activity activities")); save("failure-logcat.txt",shell("logcat -d -t 400")); } catch(Exception ignored) { }
         }
         finally {

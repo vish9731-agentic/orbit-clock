@@ -155,12 +155,12 @@ class WatchRingActions(
         paint.color = ColorUtils.setAlphaComponent(accent, ((105 + 130 * progress) * opacity).roundToInt())
         canvas.drawCircle(cx, cy, core, paint)
 
-        // Android's raw scroll axis is negative for clockwise turns: Snooze left,
-        // Dismiss right. Match the arrows without changing the gesture mapping.
+        // Requested watch directions: anticlockwise Snooze, clockwise Dismiss.
+        // RingActivity normalizes the raw encoder axis before accumulation.
         val radius = px(26f + 3f * progress)
         arc.set(cx - radius, cy - radius, cx + radius, cy + radius)
         val start = if (snoozing) 45f else 135f
-        val sweep = if (snoozing) 250f else -250f
+        val sweep = if (snoozing) -250f else 250f
         paint.strokeWidth = px(1.3f)
         paint.strokeCap = Paint.Cap.ROUND
         paint.color = ColorUtils.setAlphaComponent(accent, (100 * opacity).roundToInt())
@@ -173,7 +173,7 @@ class WatchRingActions(
         val end = Math.toRadians((start + sweep).toDouble())
         val x = cx + cos(end).toFloat() * radius
         val y = cy + sin(end).toFloat() * radius
-        val direction = if (snoozing) 1f else -1f
+        val direction = if (snoozing) -1f else 1f
         val tx = -sin(end).toFloat() * direction
         val ty = cos(end).toFloat() * direction
         val length = px(5f)

@@ -211,7 +211,10 @@ class RingActivity : AppCompatActivity() {
     }
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         if (event.action == MotionEvent.ACTION_SCROLL && event.isFromSource(InputDevice.SOURCE_ROTARY_ENCODER)) {
-            val action = gesture.turn(event.getAxisValue(MotionEvent.AXIS_SCROLL), SystemClock.elapsedRealtime())
+            val rawTurn = event.getAxisValue(MotionEvent.AXIS_SCROLL)
+            // Wear's positive raw axis is anticlockwise. Keep the existing
+            // three/six-unit amounts while mapping anticlockwise to Snooze.
+            val action = gesture.turn(if (watch) -rawTurn else rawTurn, SystemClock.elapsedRealtime())
             if (watch) {
                 watchActions?.setProgress(gesture.isSnoozing, gesture.progress())
                 bezelHandler.removeCallbacks(resetBezelFeedback)
