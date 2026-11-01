@@ -11,7 +11,8 @@ OUT=Path('atmosphere-screenshots'); OUT.mkdir(exist_ok=True)
 PKG='dev.orbit.clock'
 
 def adb(*args, binary=False):
-    r=subprocess.run(['adb',*args],check=True,capture_output=True,timeout=40)
+    r=subprocess.run(['adb',*args],capture_output=True,timeout=40)
+    if r.returncode: raise RuntimeError('ADB '+str(args)+': '+r.stdout.decode(errors='replace')+' '+r.stderr.decode(errors='replace'))
     return r.stdout if binary else r.stdout.decode(errors='replace')
 
 def tree():
@@ -46,14 +47,16 @@ def prefs(name):
     return {n.attrib['name']:n.attrib.get('value',n.text or '') for n in ET.fromstring(raw)}
 
 def set_time(milliseconds):
-    adb('shell','cmd','alarm','set-time',str(milliseconds))
+    value=dt.datetime.fromtimestamp(milliseconds/1000,dt.timezone.utc).strftime('%m%d%H%M%Y.%S')
+    print(adb('shell','date','-u',value),flush=True)
+    actual=int(adb('shell','date','+%s').strip())
+    assert abs(actual-milliseconds//1000)<8, ('Clock did not change',actual,milliseconds//1000)
 
 try:
     print(adb('root'),flush=True);adb('wait-for-device')
     adb('shell','settings','put','global','auto_time','0')
     adb('shell','settings','put','global','auto_time_zone','0')
-    print(adb('shell','cmd','alarm','help'),flush=True)
-    adb('shell','cmd','alarm','set-timezone','Etc/UTC')
+    adb('shell','setprop','persist.sys.timezone','Etc/UTC')
     adb('shell','settings','put','system','time_12_24','24')
     adb('shell','settings','put','system','font_scale','1.0')
     for key in ['window_animation_scale','transition_animation_scale','animator_duration_scale']:
