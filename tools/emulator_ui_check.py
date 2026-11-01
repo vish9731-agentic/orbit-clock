@@ -11,7 +11,7 @@ from PIL import Image, ImageChops, ImageStat
 import imageio_ffmpeg
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--scope', choices=['full', 'ringing-motion', 'motion', 'guidance'], default='full')
+parser.add_argument('--scope', choices=['full', 'ringing-motion', 'motion', 'guidance', 'visual-cue'], default='full')
 ARGS = parser.parse_args()
 
 OUT = Path('emulator-results')
@@ -144,7 +144,7 @@ def open_real_ringing_timer(capture=False):
     until = time.monotonic() + 95
     while time.monotonic() < until:
         if capture and recorder is None and alarm['snoozeUntil'] - int(adb('shell', 'date', '+%s').strip()) * 1000 < 3500:
-            recorder = subprocess.Popen(['adb', 'shell', 'screenrecord', '--bit-rate', '2500000', '--time-limit', '9', '/sdcard/orbit-cue.mp4'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            recorder = subprocess.Popen(['adb', 'shell', 'screenrecord', '--bit-rate', '2500000', '--time-limit', '40', '/sdcard/orbit-cue.mp4'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         active = int(preferences('scheduled_occurrences').get(alarm['id'] + '.active', 0))
         if active == alarm['snoozeUntil']: break
         time.sleep(1)
@@ -157,7 +157,7 @@ def open_real_ringing_timer(capture=False):
         click('Timer · 1 min')
     find(desc='Snooze duration: 10 minutes')
     if recorder is not None:
-        recorder.communicate(timeout=15)
+        recorder.communicate(timeout=45)
         adb('pull', '/sdcard/orbit-cue.mp4', str(OUT / 'swipe-cue-internal.mp4'))
         assert int(preferences('visual_hints').get('ring_controls.shown', 0)) == 1
         passed('Finite visual swipe cue appears on the real ringing rail')
@@ -485,7 +485,12 @@ try:
         screenshot('alarms-large-type-dark')
     if ARGS.scope in ['full', 'guidance']: guidance_checks()
     if ARGS.scope in ['full', 'ringing-motion']: ringing_snooze_checks()
-    if ARGS.scope != 'guidance': motion_checks()
+    if ARGS.scope == 'visual-cue':
+        alarm = open_real_ringing_timer(capture=True)
+        assert find('Slide left to snooze · right to stop', optional=True) is None
+        click('Stop'); assert not record(alarm['id'])['enabled']
+        passed('Visual-only ringing cue leaves Stop immediately functional')
+    if ARGS.scope not in ['guidance', 'visual-cue']: motion_checks()
     pid = adb('shell', 'pidof', PKG).strip(); assert pid
     crashes = adb('logcat', '-d', '-b', 'crash'); (OUT / 'crashes.txt').write_text(crashes)
     assert not crashes.strip(), crashes

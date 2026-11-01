@@ -11,6 +11,7 @@ on:
           - ringing-motion
           - motion
           - guidance
+          - visual-cue
   push:
     branches: [main]
     paths:
@@ -27,7 +28,7 @@ permissions:
 jobs:
   emulator:
     env:
-      ORBIT_UI_SCOPE: ${{ inputs.scope || (contains(github.event.head_commit.message, '[ui:ringing-motion]') && 'ringing-motion') || (contains(github.event.head_commit.message, '[ui:motion]') && 'motion') || (contains(github.event.head_commit.message, '[ui:guidance]') && 'guidance') || 'full' }}
+      ORBIT_UI_SCOPE: ${{ inputs.scope || (contains(github.event.head_commit.message, '[ui:visual-cue]') && 'visual-cue') || (contains(github.event.head_commit.message, '[ui:ringing-motion]') && 'ringing-motion') || (contains(github.event.head_commit.message, '[ui:motion]') && 'motion') || (contains(github.event.head_commit.message, '[ui:guidance]') && 'guidance') || 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
