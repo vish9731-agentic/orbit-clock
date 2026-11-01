@@ -55,7 +55,18 @@ def xy(node):
 def tap_xy(point):
     adb('shell', 'input', 'tap', str(point[0]), str(point[1])); time.sleep(.3)
 
-def click(value=None, desc=None): tap_xy(xy(find(value, desc)))
+def stable_node(value=None, desc=None, edit=False):
+    # Read-only settling: never repeat a tap against a moving sheet/IME layout.
+    previous = None
+    for _ in range(4):
+        node = find(value, desc=desc, edit=edit)
+        bounds = node.attrib['bounds']
+        if bounds == previous: return node
+        previous = bounds
+        time.sleep(.35)
+    raise AssertionError('Control did not settle: ' + str(value or desc or 'input'))
+
+def click(value=None, desc=None): tap_xy(xy(stable_node(value, desc)))
 
 def scroll_find(value=None, desc=None):
     for _ in range(5):
@@ -67,7 +78,7 @@ def scroll_find(value=None, desc=None):
     raise AssertionError('Cannot scroll to ' + str(value or desc))
 
 def fill(value, desc=None):
-    node = find(desc=desc) if desc else find(edit=True)
+    node = stable_node(desc=desc) if desc else stable_node(edit=True)
     tap_xy(xy(node)); adb('shell', 'input', 'keyevent', '123')
     for _ in range(len(node.attrib.get('text', '')) + 2): adb('shell', 'input', 'keyevent', '67')
     # Pace hardware-style injection on busy hosted emulators; do not retry edits.
@@ -85,7 +96,8 @@ def fill(value, desc=None):
             if attempt == 2: raise RuntimeError('Keyboard-state probe failed: ' + str(error.stderr)[-1200:]) from error
             time.sleep(.5)
     if re.search(r'(?:mInputShown|mIsInputViewShown|isInputViewShown)=true', ime):
-        adb('shell', 'input', 'keyevent', '4'); time.sleep(.3)
+        adb('shell', 'input', 'keyevent', '4'); time.sleep(.8)
+    stable_node(desc=desc) if desc else stable_node(edit=True)
 
 def passed(name):
     checks.append(name); print('UI PASS: ' + name, flush=True)
