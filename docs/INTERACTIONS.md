@@ -1,6 +1,6 @@
 # Reference-based interaction and guidance system
 
-Keep the approved Google Clock ringing layout and quiet typography. Visual affordances must suggest an available action, and state feedback must reflect observed facts.
+Keep the approved Google Clock ringing layout and quiet typography on phone. Watch ringing uses its own circular action layout. Visual affordances must suggest an available action, and state feedback must reflect observed facts.
 
 ## References and application
 
@@ -44,3 +44,7 @@ Save/delete/start/cancel feedback confirms local state changes. Explicit sync re
 Use full emulator scope for this cross-app change. Focused guidance, ringing-motion, motion or visual-cue scopes are available for subsequent corrections after the unaffected flows are covered. Tests exercise real user interactions, process restart, visual cues, learning, actual alarm delivery, spring interruption, hardware snooze, native back, rapid navigation and reduced motion. Internal transition video checks require an actual intermediate scene blend and a settled destination, without assuming a virtual-display frame rate. Endpoint masking excludes incidental focus feedback.
 
 The visual-cue scope records before real timer delivery and includes notification opening in its 40-second window, so internal review can see the actual two-pass shimmer. A shorter home-screen-only recording is not evidence of the visual effect.
+
+## Watch ringing controls
+
+Use larger 56dp circular duration buttons above small icon-only Snooze/Dismiss actions. Curved arrows and expanding radial auras provide graphical bezel cues without visible action words, instructions or percentages. Anticlockwise turns snooze after the existing three-unit amount; clockwise turns dismiss after six units. The watch normalizes the raw encoder axis into the unchanged RotaryGesture accumulator. Intercept watch rotary events before scroll dispatch so large type never consumes an action detent. Touch targets remain fixed at 48dp while the visible cores and auras expand. Keep the chosen 5–60 minute duration, limits and occurrence-only selection semantics. Native accessibility labels remain available. Phone controls retain their existing rail.
