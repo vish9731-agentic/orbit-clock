@@ -115,6 +115,27 @@ def ringing_snooze_checks():
     adb('shell', 'appops', 'set', PKG, 'USE_FULL_SCREEN_INTENT', 'allow')
     first = open_real_ringing_timer()
     passed('Real alarm delivery opens the ringing snooze controls')
+    adb('shell', 'cmd', 'uimode', 'night', 'no'); time.sleep(1)
+    find('Snooze for'); find('Snooze'); find('Dismiss')
+    screenshot('ringing-material-light')
+    light = Image.open(OUT / 'ringing-material-light.png').convert('RGB').getpixel((10, 200))
+    adb('shell', 'cmd', 'uimode', 'night', 'yes'); time.sleep(1)
+    find('Snooze for'); screenshot('ringing-material-dark')
+    dark = Image.open(OUT / 'ringing-material-dark.png').convert('RGB').getpixel((10, 200))
+    assert sum(light) > sum(dark) + 150, (light, dark)
+    passed('Ringing Material You surface follows light and dark themes')
+    adb('shell', 'settings', 'put', 'system', 'font_scale', '1.3'); time.sleep(1)
+    nodes = [find('Snooze'), find('Dismiss'), find(desc='Decrease snooze by 5 minutes'), find(desc='Increase snooze by 5 minutes')]
+    w, h = map(int, re.search(r'(\d+)x(\d+)', adb('shell', 'wm', 'size')).groups())
+    for node in nodes:
+        l, t, r, b = map(int, re.findall(r'\d+', node.attrib['bounds']))
+        assert 0 <= l < r <= w and 0 <= t < b <= h, node.attrib
+        assert node.attrib['clickable'] == 'true'
+    snooze_bounds, dismiss_bounds = [list(map(int, re.findall(r'\d+', n.attrib['bounds']))) for n in nodes[:2]]
+    assert snooze_bounds[3] <= dismiss_bounds[1]
+    screenshot('ringing-material-large-type')
+    passed('Ringing actions remain visible and separate at 130 percent font scale')
+    adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0'); time.sleep(1)
     minus = xy(find(desc='Decrease snooze by 5 minutes'))
     plus = xy(find(desc='Increase snooze by 5 minutes'))
     tap_xy(minus); find(desc='Snooze duration: 5 minutes')
