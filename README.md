@@ -2,7 +2,7 @@
 
 Native Android phone and Wear OS clock apps with a Material You / Material 3 interface, shared alarms, and rotating-bezel controls for Galaxy Watch 4 Classic.
 
-Both debug APKs build successfully. The project passes 7 Kotlin/JUnit tests and 44 standalone production-policy checks, with phone/watch lint passing. The current interface adds contextual learning hints, continuous Material navigation, interruptible spring swipe feedback and finite connection status. All 48 Android 15 emulator scenarios passed on source `69380559`. See [verification/STATUS.md](verification/STATUS.md) for revision-specific emulator evidence. Physical-device testing remains. This is an initial prototype, not full Google Clock feature parity or a validated alarm replacement.
+Both debug APKs build successfully. The project passes 7 Kotlin/JUnit tests and 44 standalone production-policy checks, with phone/watch lint passing. The current interface replaces prose tips with finite visual light sweeps and explicit edit/remove icons, alongside continuous Material navigation, interruptible spring feedback and finite connection status. See revision-specific evidence below. The phone passed 48 full emulator scenarios, seven fresh-install checks and three focused visual-cue checks; overlapping scopes are not a unique-test total. See [verification/STATUS.md](verification/STATUS.md) for exact sources and runs. Physical-device testing remains. This is an initial prototype, not full Google Clock feature parity or a validated alarm replacement.
 
 Private repository: [vish9731-agentic/orbit-clock](https://github.com/vish9731-agentic/orbit-clock).
 
@@ -55,7 +55,7 @@ The intended flow is: request a change → a coding session with access updates 
 
 The [Android debug workflow](.github/workflows/android-debug.yml) runs on push, pull request or manual dispatch. After a successful default-branch build, it is configured to publish individual APKs to the `debug-latest` prerelease as well as Actions artifacts. **Verified:** [cloud build, tests, lint and publication succeeded](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41104668417). Both phone and watch debug APKs are built and uploaded from the verified revision; the development signing key is unchanged.
 
-Verified download links (version `0.1.30`, version code `31` for this build):
+Verified download links (version `0.1.36`, version code `37` for this build):
 
 - [Phone debug APK](https://github.com/vish9731-agentic/orbit-clock/releases/download/debug-latest/orbit-clock-phone-debug.apk)
 - [Watch debug APK](https://github.com/vish9731-agentic/orbit-clock/releases/download/debug-latest/orbit-clock-watch-debug.apk)
@@ -83,8 +83,8 @@ While the ringing screen is open and focused, either physical volume button snoo
 
 The phone follows the user-selected Google Clock reference: a plain dark green background, large time, saved custom label (or “Alarm” when blank), and a Snooze/Stop rail with a draggable center thumb. A compact minus/minutes/plus row sits above it, with five-minute steps from 5 to 60. Both volume buttons still snooze while the ringing screen is focused. Accessible action labels also support tapping. Watch controls retain their compact dark layout.
 
-## Motion and contextual guidance
+## Motion and visual affordances
 
-The selected dark green ringing layout is preserved, with quieter 24sp Snooze/Stop labels. Persistent navigation surrounds native Material shared-axis transitions; the alarm thumb follows the finger and returns with an interruptible velocity-aware spring. Native components retain their own motion and haptics, and reduced-motion settings resolve controls immediately.
+The selected dark green ringing layout is preserved. A brief outward shimmer suggests both swipe directions without moving the thumb. Soft highlights draw attention to Add, a timer preset, Lap and bedtime controls; alarm times have an edit icon and cities have a visible remove icon with confirmation. There are no explanatory coaching rows or captions.
 
-Hints explain editing, city removal, timer presets, laps, bedtime and ringing shortcuts only when relevant. Learning or dismissal retires them, and a maximum of three visible app-process sessions prevents repeated education. Connection checks report availability/request status with a timeout, without claiming unacknowledged delivery. See [interaction references](docs/INTERACTIONS.md) and [motion policy](docs/MOTION.md).
+Cues run for two passes only, require visible focused controls, respect reduced motion and stop on interaction/detach. Learning retires the relevant cue; otherwise each appears at most once per process across three eligible sessions. Native Material navigation, ripples, press states and haptics remain. Connection status reports availability/request state without claiming delivery. See [interaction references](docs/INTERACTIONS.md) and [motion policy](docs/MOTION.md).

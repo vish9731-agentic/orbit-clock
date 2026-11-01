@@ -1,6 +1,22 @@
 # Verification status
 
-## Current verified interaction update — 0.1.30
+## Visual-only guidance — current revision
+
+The user explicitly rejected explanatory hint text. Do not restore coach-tip rows or ringing captions. Keep normal action labels, validation/permission messages and screen-reader descriptions. The ringing rail shows two outward light sweeps; key controls receive finite highlights, alarm times have a pencil affordance on phone, and city cards have an explicit remove icon with confirmation. Narrow watch city cards stack their contents with the remove action below. No decorative loop or added hint panel is used.
+
+VisualHints uses view overlays with no touch interception, layout changes, alarm actions or timing dependencies. Cues require focused visible controls, stop on interaction/detach and honor disabled animations. They show once per app process across at most three eligible sessions, with learning suppressing relevant cues earlier. The visual preference namespace is separate from the retired prose hints.
+
+Build delivery: release 0.1.36, version code 37; source `ecd61e80b235cb8a43497f149bb78022e1b88a08` (app code unchanged from `b0e27d462de0cc50564c26dbcf53b4f19d4ded94`), [build/tests/lint/publication](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41303204522) passed for both APKs. Seven Kotlin/JUnit tests and 44 production-policy checks pass. Development signing identity is unchanged.
+
+[Full phone emulator run](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41301031850): **48 scenarios passed**, empty crash buffer, on source `149078d3e9d90fc4655ef237b1eab94c682fc707`. The later app changes only adapt narrow-watch geometry. [Focused fresh-install verification](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41302598698): **7 scenarios passed** on source `fea643d6811a34d306621e5ab576080ea3bc8d06`, including no tip rows across all tools, city removal confirmation/cancellation, preset learning, truthful connection feedback, native back draft behavior and no crashes.
+
+[Focused visual-cue run](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41303204615): **3 scenarios passed** on final release source `ecd61e80b235cb8a43497f149bb78022e1b88a08`. Internal frames from the real ringing/notification path were inspected: the rail emits outward light bands, remains readable with its thumb centered, and settles without an ongoing shimmer. Stop remains functional and the crash buffer is empty. The 40-second capture includes notification opening; the initial shorter recording missed the cue and was replaced. Main-screen and large-type ringing captures were also reviewed.
+
+The harness now paces injected text, verifies the actual field before saving, and checks stable control bounds before taps around IME/sheet transitions. Empty alarm preferences on a fresh install are treated as an empty store. These fix observed harness failures without automatically retrying user actions.
+
+Emulator images/video are development feedback only. Do not routinely send downloadable test reports or screenshots. Physical phone/watch key behavior, Wear OS rendering, cross-device delivery, haptics and bezel hardware still need target-device testing. This remains an app that owns its own alarms, without private Google Clock access or full parity.
+
+## Previous verified interaction update — 0.1.30
 
 Source `69380559ed71382174005744801fbcca14e91d4a`, version code 31. [Build/tests/lint/publication](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41291899614) and [full Android 15 emulator suite](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41291899547) passed. Both release APK assets are uploaded; the shared signing identity is unchanged. Seven Kotlin/JUnit tests and 44 production-policy checks pass.
 

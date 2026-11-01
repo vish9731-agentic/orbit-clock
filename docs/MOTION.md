@@ -36,6 +36,7 @@ Main clock, timer and stopwatch numerals use tabular figures to avoid horizontal
 | Snooze-duration adjustment | Value changes immediately, then gives the 180ms value pulse |
 | Slider drag | Thumb follows the finger directly, grows by 4%, tilts up to 8°, and gently dims the opposite action label |
 | Slider threshold | One tick when crossing the threshold per gesture; confirmation haptic on completion |
+| Visual affordances | Two finite light sweeps over existing controls; outward on the alarm rail; no instructional captions or layout movement |
 | Incomplete/canceled slider drag | Native, velocity-aware spring return with bounded travel; labels follow actual spring position and new input interrupts without a jump |
 | Slider completion and volume buttons | Alarm action executes immediately, never waits for animation completion |
 
@@ -55,4 +56,4 @@ See verification/STATUS.md for the observed result and source revision. Emulator
 
 Verification scope defaults to full. After the main flows have been covered on unchanged app code, select ringing-motion or motion for a focused rerun using the workflow input or explicit commit markers [ui:ringing-motion] / [ui:motion]. Focused tests retain the same assertions. Scheduled-deadline reads wait up to five seconds for the main screen’s asynchronous restore to finish; a missing or wrong final schedule still fails.
 
-See [INTERACTIONS.md](INTERACTIONS.md) for reference mapping, contextual education, visible-session caps, native back behavior, and truthful connection feedback. Hints use up to three visible app-process sessions; learning and explicit dismissal retire them sooner. Native page transitions keep the header/navigation/status/FAB mounted. Confirmation feedback reflects local saves and never asserts watch delivery without an acknowledgement.
+See [INTERACTIONS.md](INTERACTIONS.md) for reference mapping, visual affordances, visible-session caps, native back behavior, and truthful connection feedback. Visual light sweeps use up to three focused, visible app-process sessions and retire after use. No explanatory tip text or coach-mark rows are added. Native page transitions keep the header/navigation/status/FAB mounted. Confirmation feedback reflects local saves and never asserts watch delivery without an acknowledgement.

@@ -1,6 +1,6 @@
 # Reference-based interaction and guidance system
 
-Keep the approved Google Clock ringing layout and quiet typography. Hints must explain an available action, and state feedback must reflect observed facts.
+Keep the approved Google Clock ringing layout and quiet typography. Visual affordances must suggest an available action, and state feedback must reflect observed facts.
 
 ## References and application
 
@@ -9,22 +9,20 @@ Keep the approved Google Clock ringing layout and quiet typography. Hints must e
 | [Material 3 motion](https://m3.material.io/styles/motion/overview/how-it-works) | Coordinated spatial transitions; short opacity/color effects; native Material component motion |
 | [Reply motion examples](https://codelabs.developers.google.com/codelabs/material-motion-android) | Continuous context between tools, persistent chrome, shared-axis movement with overlapping fades |
 | [Designing Fluid Interfaces](https://developer.apple.com/videos/play/wwdc2018/803/) | Direct finger tracking, raw-coordinate velocity, interruptible native spring return |
-| [TipKit education principles](https://developer.apple.com/videos/play/wwdc2023/10229/) | Contextual eligibility, learning, dismissal, and a three-visible-process-session cap; implemented natively on Android |
+| [TipKit education principles](https://developer.apple.com/videos/play/wwdc2023/10229/) | Contextual eligibility, learning and a three-visible-process-session cap; no text coaching UI |
 | [Android predictive back](https://developer.android.com/design/ui/mobile/guides/patterns/predictive-back) | Native back opt-in and Material bottom-sheet handling, with older-platform fallback |
 | [Android haptics](https://developer.android.com/develop/ui/views/haptics/haptics-principles) | Normal system ticks for selection/threshold, confirmation on completion, no forced vibration preferences |
 
-## Guidance
+## Visual guidance
 
-- Empty alarms explain that + creates an alarm. Disabled alarms explain how to schedule one.
-- Saved alarms explain tap-to-edit; opening an existing editor retires that hint.
-- World clocks explain long-press removal; confirmed removal retires it.
-- Timer presets/custom entry are explained beneath setup controls; using either retires that hint.
-- Stopwatch guidance sits below Start/Pause and Lap/Reset, so learning cannot move those controls under a finger.
-- Bedtime explains the relationship between sleep goal and wake-up time.
-- Watch alarm pages can explain bezel control without adding another row to the compact ringing controls.
-- Phone ringing first explains slide directions, then offers the volume-button shortcut after touch controls are learned. Successful hardware use retires its hint.
+Explanatory coaching rows/captions are removed. Existing action labels, permission explanations, validation errors and accessibility descriptions remain.
 
-Hints stay local to each device. Explicit dismissal and demonstrated learning take precedence over display limits. Only hints at least half-visible count toward the app-process-session budget; rotations and page rerenders do not consume additional impressions. Essential action labels and accessibility instructions remain after education retires. No modal coach marks interrupt a ringing alarm.
+- The ringing rail receives two outward light sweeps, suggesting both swipe directions without moving its thumb or changing touch behavior.
+- Add, the first timer preset, the running stopwatch Lap action, sleep-goal and wake-up controls receive a brief soft highlight.
+- Alarm times include a small pencil affordance. Cities include a visible 48dp remove icon with confirmation; long press remains available.
+- No cue adds text, consumes input, changes layout, or delays an action. Each lasts 1.8 seconds after a 500ms delay, with no permanent loop.
+- Cues require a focused, visible control and enabled animations. They cancel on interaction, loss of focus or detach, and after demonstrated learning.
+- Each cue displays at most once per app process and across three eligible sessions. New visual preferences are separate from the retired prose-tip preferences.
 
 ## Motion and state
 
@@ -36,4 +34,6 @@ Save/delete/start/cancel feedback confirms local state changes. Explicit sync re
 
 ## Verification
 
-Use full emulator scope for this cross-app change. Focused guidance, ringing-motion or motion scopes are available for subsequent corrections after the unaffected flows are covered. Tests exercise real user interactions, process restart, display caps, dismissal/learning, actual alarm delivery, spring interruption, hardware snooze, native back, rapid navigation and reduced motion. Internal transition video checks need enough actual intermediate frames, not a fixed recording duration: static virtual displays may stop emitting frames when a scene settles.
+Use full emulator scope for this cross-app change. Focused guidance, ringing-motion, motion or visual-cue scopes are available for subsequent corrections after the unaffected flows are covered. Tests exercise real user interactions, process restart, visual cues, learning, actual alarm delivery, spring interruption, hardware snooze, native back, rapid navigation and reduced motion. Internal transition video checks need enough actual intermediate frames, not a fixed recording duration: static virtual displays may stop emitting frames when a scene settles.
+
+The visual-cue scope records before real timer delivery and includes notification opening in its 40-second window, so internal review can see the actual two-pass shimmer. A shorter home-screen-only recording is not evidence of the visual effect.
