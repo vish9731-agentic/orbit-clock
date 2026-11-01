@@ -28,6 +28,10 @@ class RingActivity : AppCompatActivity() {
     private lateinit var increase: MaterialButton
     private lateinit var progress: TextView
     private lateinit var indicator: LinearProgressIndicator
+    private var watchActions: WatchRingActions? = null
+    private val bezelHandler = Handler(Looper.getMainLooper())
+    // Match RotaryGesture's >1500ms pause boundary without changing its thresholds.
+    private val resetBezelFeedback = Runnable { watchActions?.resetProgress() }
     private val changes = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
             val a = Store(c).get(id)
@@ -61,15 +65,15 @@ class RingActivity : AppCompatActivity() {
         }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(if (watch) 28 else 16), dp(8), dp(if (watch) 28 else 16), dp(8))
+            setPadding(dp(if (watch) 20 else 16), dp(8), dp(if (watch) 20 else 16), dp(8))
             isFocusableInTouchMode = true
         }
         val now = LocalTime.now()
         val time = now.format(DateTimeFormatter.ofPattern(if (android.text.format.DateFormat.is24HourFormat(this)) "HH:mm" else "h:mm"))
         if (watch) {
             body.gravity = Gravity.CENTER
-            progress = label("$time · $name", 16f).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
-            body.addView(progress, LinearLayout.LayoutParams(dp(128), -2).apply { bottomMargin = dp(10) })
+            val heading = label("$time · $name", 16f).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+            body.addView(heading, LinearLayout.LayoutParams(dp(136), -2).apply { bottomMargin = dp(8) })
         } else {
             body.addView(Space(this), LinearLayout.LayoutParams(1, 0, 3.3f))
             body.addView(label(time, 144f).apply {
@@ -93,19 +97,24 @@ class RingActivity : AppCompatActivity() {
         val stepper = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         decrease = control("−") { selectedMinutes = SnoozeDuration.decrease(selectedMinutes); RingControls.select(this, id, at, selectedMinutes); updateDuration() }.apply { contentDescription = "Decrease snooze by 5 minutes" }
         increase = control("+") { selectedMinutes = SnoozeDuration.increase(selectedMinutes); RingControls.select(this, id, at, selectedMinutes); updateDuration() }.apply { contentDescription = "Increase snooze by 5 minutes" }
-        duration = label("", if (watch) 18f else 16f).apply { typeface = Typeface.create(typeface, 500, false); accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
-        val size = dp(if (watch) 40 else 48)
+        if (watch) {
+            decrease.textSize = 28f; increase.textSize = 28f
+            decrease.cornerRadius = dp(24); increase.cornerRadius = dp(24)
+        }
+        duration = label("", if (watch) 20f else 16f).apply {
+            typeface = Typeface.create(typeface, 500, false); accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+            if (watch) { maxLines = 1; setAutoSizeTextTypeUniformWithConfiguration(14, 20, 1, android.util.TypedValue.COMPLEX_UNIT_SP) }
+        }
+        val size = dp(48)
         stepper.addView(decrease, LinearLayout.LayoutParams(size, size))
         stepper.addView(duration, LinearLayout.LayoutParams(dp(if (watch) 68 else 96), size))
         stepper.addView(increase, LinearLayout.LayoutParams(size, size))
-        body.addView(stepper, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(if (watch) 8 else 16) })
+        body.addView(stepper, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(if (watch) 4 else 16) })
         updateDuration()
         if (watch) {
-            body.addView(control("Snooze") { act(true) }.apply {
-                textSize = 16f; backgroundTintList = ColorStateList.valueOf(colors.primary); setTextColor(colors.onPrimary)
-            }, LinearLayout.LayoutParams(-1, dp(44)))
-            body.addView(control("Stop") { act(false) }.apply { textSize = 16f },
-                LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(8) })
+            val actions = WatchRingActions(this, colors, { act(true) }, { act(false) })
+            watchActions = actions
+            body.addView(actions, LinearLayout.LayoutParams(-1, dp(80)))
         } else {
             body.addView(AlarmSlideControl(this,
                 { VisualHints.learn(this, "ring_controls"); act(true) },
@@ -114,8 +123,10 @@ class RingActivity : AppCompatActivity() {
             progress = label("", 12f).apply { visibility = View.GONE }
             body.addView(progress, LinearLayout.LayoutParams(-1, -2))
         }
-        indicator = LinearProgressIndicator(this).apply { max = 100; visibility = View.GONE; trackCornerRadius = dp(3); setIndicatorColor(accent) }
-        body.addView(indicator, LinearLayout.LayoutParams(-1, dp(4)))
+        if (!watch) {
+            indicator = LinearProgressIndicator(this).apply { max = 100; visibility = View.GONE; trackCornerRadius = dp(3); setIndicatorColor(accent) }
+            body.addView(indicator, LinearLayout.LayoutParams(-1, dp(4)))
+        }
         val scroller = ScrollView(this).apply {
             isFillViewport = true
             if (watch) setBackgroundColor(background) else this.background = android.graphics.drawable.GradientDrawable(
@@ -188,14 +199,20 @@ class RingActivity : AppCompatActivity() {
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         if (event.action == MotionEvent.ACTION_SCROLL && event.isFromSource(InputDevice.SOURCE_ROTARY_ENCODER)) {
             val action = gesture.turn(event.getAxisValue(MotionEvent.AXIS_SCROLL), SystemClock.elapsedRealtime())
-            progress.text = "${if (gesture.isSnoozing) "Snooze" else "Stop"} ${gesture.progress()}%"
-            progress.visibility = View.VISIBLE
-            if (!watch) { indicator.visibility = View.VISIBLE; indicator.setProgressCompat(gesture.progress(), true) }
+            if (watch) {
+                watchActions?.setProgress(gesture.isSnoozing, gesture.progress())
+                bezelHandler.removeCallbacks(resetBezelFeedback)
+                bezelHandler.postDelayed(resetBezelFeedback, 1501)
+            } else {
+                progress.text = "${if (gesture.isSnoozing) "Snooze" else "Stop"} ${gesture.progress()}%"
+                progress.visibility = View.VISIBLE
+                indicator.visibility = View.VISIBLE; indicator.setProgressCompat(gesture.progress(), true)
+            }
             window.decorView.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
             when (action) { RotaryGesture.Action.SNOOZE -> { VisualHints.learn(this, "watch_bezel"); act(true) }; RotaryGesture.Action.DISMISS -> { VisualHints.learn(this, "watch_bezel"); act(false) }; else -> Unit }
             return true
         }
         return super.onGenericMotionEvent(event)
     }
-    override fun onDestroy() { unregisterReceiver(changes); super.onDestroy() }
+    override fun onDestroy() { bezelHandler.removeCallbacks(resetBezelFeedback); unregisterReceiver(changes); super.onDestroy() }
 }

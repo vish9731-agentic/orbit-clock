@@ -6,6 +6,12 @@ The user wants a personal Android phone + Galaxy Watch 4 Classic clock app inspi
 
 The user authorized creating the private personal repository, uploading this project, fixing build failures, running tests and publishing debug APK downloads. Login and account authorization are completed by the user. Do not use Bytebeam repositories for this project.
 
+## Watch bezel ringing controls — current change
+
+The user requested a distinct watch ringing UI: larger circular plus/minus controls with the snooze duration intact, and small circular Snooze/Dismiss icon buttons that expand outward through an aura during bezel rotation. No visible bezel instructions, action words or percentage text. The time/alarm heading remains stable. Native 48dp action touch targets stay fixed while the visible cores grow from 32dp to 44dp and layered radial halos spread from both sides. Curved arrows indicate anticlockwise Snooze and clockwise Dismiss. Direct progress, reversal and idle reset are graphical, with no decorative animation loop or action tied to animation completion.
+
+RotaryGesture is unchanged: negative three units snoozes, positive six dismisses, reversal/pause semantics remain, and saved/per-occurrence duration behavior is preserved. The watch duration buttons increase from 40dp to 48dp, with larger +/- glyphs. The phone retains its existing rail and duration layout. Build and Wear OS bezel scenarios are pending CI; physical bezel behavior still needs the user's watch.
+
 ## Watch exact-alarm permission
 
 The user installed Orbit on a Galaxy Watch 4 Classic but Samsung Settings > Alarms and reminders spins indefinitely. They report software version 6.0 (possibly One UI Watch; exact Android API level was not captured). The watch manifest now uses USE_EXACT_ALARM for API 33+ and limits inherited SCHEDULE_EXACT_ALARM to API 32. Orbit is a dedicated alarm/timer app. This avoids manual precise-alarm approval on Android 13 / Wear OS 4 and newer while preserving the older-OS flow. The phone manifest and permission behavior are unchanged. Keep the shared signing key so an in-place watch APK update preserves records; reopening the app runs its existing schedule restoration.
