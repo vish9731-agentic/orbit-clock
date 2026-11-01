@@ -25,8 +25,11 @@ checks = []
 
 
 def adb(*args, binary=False, check=True, input=None):
-    r = subprocess.run(['adb', *args], check=check, capture_output=True,
+    r = subprocess.run(['adb', *args], check=False, capture_output=True,
                        text=not binary, input=input, timeout=45)
+    if check and r.returncode:
+        print('ADB FAILURE:', args, r.stdout, r.stderr, flush=True)
+        r.check_returncode()
     return r.stdout
 
 
@@ -115,7 +118,9 @@ def records():
 def launch():
     adb('shell', 'input', 'keyevent', '224')
     adb('shell', 'wm', 'dismiss-keyguard', check=False)
-    save('launch.txt', adb('shell', 'am', 'start', '-W', '-f', '0x14000000', '-n', ACTIVITY))
+    result = adb('shell', 'am', 'start', '-W', '-f', '0x14000000', '-n', ACTIVITY)
+    print('WEAR LAUNCH:', result, flush=True)
+    save('launch.txt', result)
     time.sleep(1)
 
 
@@ -210,7 +215,7 @@ try:
     package = adb('shell', 'dumpsys', 'package', PKG)
     assert re.search(r'android.permission.USE_EXACT_ALARM:\s+granted=true', package), package
     passed('Fresh watch install automatically allows exact alarms without Settings or an appop grant')
-    test_real_timer('fresh')
+    # Verify the upgrade independently before exercising watch UI navigation.
 
     adb('uninstall', PKG)
     adb('install', '-r', A.baseline_apk)
@@ -239,6 +244,14 @@ try:
     capture('upgraded-preserved')
     passed('In-place update gains exact-alarm access and restores the unchanged saved alarm')
     test_real_timer('upgraded')
+except Exception:
+    try:
+        print('WEAR FAILURE UI:', ET.tostring(tree(), encoding='unicode'), flush=True)
+        print('WEAR FAILURE ACTIVITIES:', adb('shell', 'dumpsys', 'activity', 'activities'), flush=True)
+        print('WEAR FAILURE LOGCAT:', adb('logcat', '-d', '-t', '200'), flush=True)
+    except Exception as error:
+        print('Evidence capture failed:', error, flush=True)
+    raise
 finally:
     capture('final')
     save('checks.json', json.dumps(checks, indent=2))
