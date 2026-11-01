@@ -1,5 +1,10 @@
 # Orbit Clock handoff
 
+## Blue-hour stars and cloud wisps
+
+21:00 blue hour now includes five faint stars at 65% of deep-night strength, without the moon. Daylight corner scenes gain three soft, narrow cloud wisps made from cached gradients. The black main field, current-local-time selection and snooze behavior are preserved. Build and emulator verification are pending for this change.
+
+
 ## Goal and authorization
 
 The user wants a personal Android phone + Galaxy Watch 4 Classic clock app inspired by Google Clock, with shared alarms and rotary-bezel snooze/dismiss. They want to request changes from their phone and receive downloadable debug APKs without keeping a Mac running.

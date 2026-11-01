@@ -38,7 +38,7 @@ public final class RingAtmosphere {
     private static final Scene SUNSET = new Scene("sunset", 0xffff702f, 0xffae466e,
         0xffffba74, .965f, .035f, .85f, 0f, 0f);
     private static final Scene BLUE_HOUR = new Scene("blue-hour", 0xff3a66ae, 0xff304b9b,
-        0xff90b5ee, .035f, .018f, 0f, 0f, 0f);
+        0xff90b5ee, .035f, .018f, 0f, .65f, 0f);
 
     // Scene anchors are local wall time, never the original alarm's scheduled hour.
     private static final int[] MINUTES = {0, 180, 330, 480, 720, 900, 1080, 1260, 1380, 1440};

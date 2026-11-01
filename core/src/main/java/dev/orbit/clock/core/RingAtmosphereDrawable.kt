@@ -76,6 +76,17 @@ class RingAtmosphereDrawable(minute: Int) : Drawable() {
                 y + h * .10f, w * .55f, h * .18f)
             addLight(scene.sunColor, weight * scene.sun, x + inward * w * .035f,
                 y + h * .055f, w * .14f, h * .07f, core = true)
+            // Three feathered horizontal wisps stay within the lit corner.
+            // Cached gradients give cloud texture without a frame loop or hard outlines.
+            if (scene.sun > 0f) {
+                val cloud = 0xffdce4e9.toInt()
+                addLight(cloud, weight * .22f, x + inward * w * .13f,
+                    y + h * .13f, w * .22f, h * .014f)
+                addLight(cloud, weight * .16f, x + inward * w * .24f,
+                    y + h * .15f, w * .18f, h * .010f)
+                addLight(cloud, weight * .12f, x + inward * w * .09f,
+                    y + h * .19f, w * .16f, h * .012f)
+            }
             if (scene.stars > 0f || scene.moon > 0f) nextCelestial += Celestial(scene, weight)
         }
         if (frame.from === frame.to) scene(frame.from, 1f)
