@@ -17,7 +17,7 @@ final class ProbeController {
  private String events="";
  private boolean closed=false;
  private Boolean lastPlaying=null;
- private final Runnable sample=new Runnable(){public void run(){if(!closed){write();handler.postDelayed(this,100);}}};
+ private final Runnable sample=new Runnable(){public void run(){if(!closed){write();handler.postDelayed(this,250);}}};
  ProbeController(Context c,Player p,String mode) {
   context=c;player=p;manager=c.getSystemService(AudioManager.class);
   c.getSharedPreferences("probe",0).edit().clear().putString("mode",mode).commit();
@@ -46,7 +46,7 @@ final class ProbeController {
  private void event(String e){events+=e+";";write();}
  private void write(){
   boolean playing=player.playing();int position=player.position();
-  context.getSharedPreferences("probe",0).edit().putBoolean("playing",playing).putInt("position",position).putString("events",events).commit();
+  context.getSharedPreferences("probe",0).edit().putBoolean("playing",playing).putInt("position",position).putString("events",events).apply();
   if(lastPlaying==null || lastPlaying!=playing){
    session.setPlaybackState(new PlaybackState.Builder().setActions(PlaybackState.ACTION_PLAY|PlaybackState.ACTION_PAUSE|PlaybackState.ACTION_PLAY_PAUSE)
     .setState(playing?PlaybackState.STATE_PLAYING:PlaybackState.STATE_PAUSED,position,playing?1:0).build());

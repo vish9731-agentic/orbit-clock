@@ -38,8 +38,8 @@ def run(ui):
         adb('shell','am','start','-W','-f','0x10008000','-n',PROBE+'/.ProbeActivity','--es','mode',mode)
         await_player(lambda p:p.get('mode')==mode and p.get('playing')=='true',mode+' did not play')
     def advancing(mode):
-        before=player();time.sleep(.65);after=player()
-        assert after.get('playing')=='true' and int(after.get('position','0'))!=int(before.get('position','0')), (before,after)
+        before=player()
+        await_player(lambda p:p.get('playing')=='true' and int(p.get('position','0'))!=int(before.get('position','0')),mode+' playback did not advance')
         passed(('Background music' if mode=='music' else 'Foreground video')+' plays and advances before the alarm')
     def new_timer(before):
         until=time.monotonic()+8
