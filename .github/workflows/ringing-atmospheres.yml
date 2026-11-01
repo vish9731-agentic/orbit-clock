@@ -68,6 +68,8 @@ jobs:
             adb shell pm disable-user --user 0 com.google.android.settings.intelligence || true
             adb shell wm size 720x1600
             adb shell wm density 280
+            adb shell settings put system haptic_feedback_enabled 0
+            adb shell svc power stayon true
             adb install phone/build/outputs/apk/debug/phone-debug.apk
             adb shell pm grant dev.orbit.clock android.permission.POST_NOTIFICATIONS
             adb shell appops set dev.orbit.clock SCHEDULE_EXACT_ALARM allow

@@ -92,8 +92,8 @@ def await_record(alarm_id,predicate,label):
         if predicate(a):return a
         time.sleep(.15)
     raise AssertionError(label+': '+str(a))
-def await_alarm(alarm_id,at):
-    until=time.monotonic()+55
+def await_alarm(alarm_id,at,timeout=55):
+    until=time.monotonic()+timeout
     while time.monotonic()<until:
         if int(prefs('scheduled_occurrences').get(alarm_id+'.active',0))==at:return
         time.sleep(.3)
@@ -186,7 +186,7 @@ try:
     adb('shell','input','keyevent','224');adb('shell','wm','dismiss-keyguard')
     adb('shell','am','start','-W','-n',PKG+'/dev.orbit.clock.phone.MainActivity')
     before={a['id'] for a in records()}
-    tap(desc='Add alarm');find('New alarm');tap(desc='Alarm sound');tap('Save alarm')
+    tap(desc='Add alarm');find('New alarm');tap(desc='Alarm sound');tap(desc='Vibration');tap('Save alarm')
     until=time.monotonic()+8;alarm=None
     while time.monotonic()<until:
         added=[a for a in records() if a['id'] not in before and a['enabled'] and not a.get('timer') and not a['deleted']]
@@ -199,8 +199,10 @@ try:
         if at:break
         time.sleep(.1)
     assert at,'Saved alarm was not scheduled'
-    set_time(at-15000)
-    await_alarm(alarm['id'],at)
+    # Let the first cold-start alarm fire naturally, without a nearby TIME_SET
+    # restoration competing with initial app and system startup.
+    assert not alarm['sound'] and not alarm['vibrate'],'Visual fixture must not use emulated audio/haptics'
+    await_alarm(alarm['id'],at,timeout=180)
     if find(desc='Alarm label: Alarm',optional=True) is None:fresh_ring(alarm['id'],at)
     find(desc='Snooze duration: 10 minutes')
     day=dt.datetime.fromtimestamp(at/1000,dt.timezone.utc).replace(hour=0,minute=0,second=0,microsecond=0)
