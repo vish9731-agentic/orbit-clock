@@ -153,8 +153,24 @@ def ringing_snooze_checks():
     assert second['id'] + '.scheduled' not in preferences('scheduled_occurrences')
     assert int(preferences('scheduled_occurrences')[first['id'] + '.scheduled']) == snoozed['snoozeUntil']
     passed('Dismiss ignores duration and leaves another snoozed alarm intact')
+    for key, target, hold in [(24, 15, True), (25, 5, False)]:
+        volume_alarm = open_real_ringing_timer()
+        click(desc='Increase snooze by 5 minutes' if target > 10 else 'Decrease snooze by 5 minutes')
+        find(desc=f'Snooze duration: {target} minutes')
+        before = int(adb('shell', 'date', '+%s').strip()) * 1000
+        if hold: adb('shell', 'input', 'keyevent', '--longpress', str(key))
+        else: adb('shell', 'input', 'keyevent', str(key))
+        after = int(adb('shell', 'date', '+%s').strip()) * 1000
+        snoozed_by_key = record(volume_alarm['id'])
+        assert before + target * 60000 <= snoozed_by_key['snoozeUntil'] <= after + target * 60000 + 1000
+        assert snoozed_by_key['enabled'] and snoozed_by_key['skipThrough'] == volume_alarm['snoozeUntil']
+        assert snoozed_by_key['snoozeMinutes'] == volume_alarm['snoozeMinutes']
+        assert int(preferences('scheduled_occurrences')[volume_alarm['id'] + '.scheduled']) == snoozed_by_key['snoozeUntil']
+        passed(('Held volume up' if key == 24 else 'Volume down') + ' snoozes for the selected duration')
     adb('shell', 'am', 'start', '-W', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
-    click('Timer'); tap_xy(xy(scroll_find('Cancel timer')))
+    click('Timer')
+    # Remove each snoozed fixture, keeping the app open for the final crash check.
+    for _ in range(3): tap_xy(xy(scroll_find('Cancel timer')))
 
 try:
     adb('shell', 'cmd', 'uimode', 'night', 'no')

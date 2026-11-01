@@ -21,6 +21,7 @@ class RingActivity : AppCompatActivity() {
     private var at = 0L
     private var watch = false
     private var selectedMinutes = 10
+    private var volumeKey = KeyEvent.KEYCODE_UNKNOWN
     private val gesture = RotaryGesture()
     private lateinit var duration: TextView
     private lateinit var decrease: MaterialButton
@@ -124,6 +125,28 @@ class RingActivity : AppCompatActivity() {
     private fun act(snooze: Boolean) {
         Scheduler.act(this, id, at, snooze, snoozeMinutesOverride = if (snooze) selectedMinutes else null)
         finish()
+    }
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            // Consume the whole press, including repeats. Act on release so holding a key
+            // cannot spill volume-change events into the screen beneath the alarm.
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 && volumeKey == KeyEvent.KEYCODE_UNKNOWN) {
+                volumeKey = event.keyCode
+            } else if (event.action == KeyEvent.ACTION_UP && volumeKey == event.keyCode) {
+                volumeKey = KeyEvent.KEYCODE_UNKNOWN
+                if (!event.isCanceled) act(true)
+            }
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        if (!hasFocus) volumeKey = KeyEvent.KEYCODE_UNKNOWN
+        super.onWindowFocusChanged(hasFocus)
+    }
+    override fun onPause() {
+        volumeKey = KeyEvent.KEYCODE_UNKNOWN
+        super.onPause()
     }
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         if (event.action == MotionEvent.ACTION_SCROLL && event.isFromSource(InputDevice.SOURCE_ROTARY_ENCODER)) {
