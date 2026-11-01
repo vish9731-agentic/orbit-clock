@@ -172,10 +172,13 @@ def test_real_timer(name):
     until = time.monotonic() + 8
     while time.monotonic() < until:
         service = adb('shell', 'dumpsys', 'activity', 'services', PKG)
-        if 'dev.orbit.clock.core.RingingService' in service:
+        save(name + '-ringing-services.txt', service)
+        # dumpsys prints ComponentName in short form when package prefixes match.
+        if re.search(r'ServiceRecord\{[^\n]*dev\.orbit\.clock/(?:dev\.orbit\.clock)?\.core\.RingingService', service) and 'isForeground=true' in service:
             break
         time.sleep(.2)
     else:
+        print('WEAR RINGING SERVICES:', service, flush=True)
         raise AssertionError('Timer delivered but RingingService did not run')
     crash = adb('logcat', '-d', '-b', 'crash')
     assert 'Process: ' + PKG not in crash, crash
