@@ -2,6 +2,7 @@
 import argparse
 import datetime as dt
 import json
+import io
 from pathlib import Path
 import re
 import subprocess
@@ -28,21 +29,21 @@ def checkpoint():
     (OUT/'batch-summary.json').write_text(json.dumps(batch,indent=2))
 checkpoint()
 
-def adb(*args, binary=False):
-    r=subprocess.run(['adb',*args],capture_output=True,timeout=40)
+def adb(*args, binary=False, timeout=40):
+    r=subprocess.run(['adb',*args],capture_output=True,timeout=timeout)
     if r.returncode: raise RuntimeError('ADB '+str(args)+': '+r.stdout.decode(errors='replace')+' '+r.stderr.decode(errors='replace'))
     return r.stdout if binary else r.stdout.decode(errors='replace')
 
-def tree():
+def tree(attempts=5,timeout=40):
     # Window transitions can temporarily return no root. Retry only fresh reads.
     last=''
-    for attempt in range(5):
+    for attempt in range(attempts):
         try:
-            adb('shell','rm','-f','/sdcard/orbit-atmosphere.xml')
-            last=adb('shell','uiautomator','dump','/sdcard/orbit-atmosphere.xml')
-            return ET.fromstring(adb('exec-out','cat','/sdcard/orbit-atmosphere.xml'))
+            adb('shell','rm','-f','/sdcard/orbit-atmosphere.xml',timeout=timeout)
+            last=adb('shell','uiautomator','dump','/sdcard/orbit-atmosphere.xml',timeout=timeout)
+            return ET.fromstring(adb('exec-out','cat','/sdcard/orbit-atmosphere.xml',timeout=timeout))
         except (RuntimeError, subprocess.SubprocessError, ET.ParseError) as error:
-            if attempt==4: raise RuntimeError('No fresh UI hierarchy: '+last+' '+str(error)) from error
+            if attempt==attempts-1: raise RuntimeError('No fresh UI hierarchy: '+last+' '+str(error)) from error
             time.sleep(.6)
 
 def find(text=None,desc=None,res=None,optional=False,prefix=None):
@@ -67,6 +68,33 @@ def tap(text=None,desc=None,res=None):
     else:raise AssertionError('UI bounds did not settle: '+str(text or desc or res))
     x1,y1,x2,y2=map(int,re.findall(r'\d+',bounds))
     adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2));time.sleep(.4)
+
+def await_main_ready():
+    until=time.monotonic()+35;waited=False;last=[]
+    while time.monotonic()<until:
+        try:doc=tree(attempts=1,timeout=8)
+        except (RuntimeError,subprocess.SubprocessError):time.sleep(.3);continue
+        nodes=list(doc.iter('node'));last=[n.attrib.get('text','') for n in nodes]
+        # Only unrelated, explicitly identified system/launcher ANRs may be waited
+        # through once. An Orbit ANR is a real failure and must never be dismissed.
+        for text in last:
+            lower=text.casefold()
+            if 'orbit clock' in lower and 'responding' in lower:raise AssertionError('Orbit ANR: '+text)
+        system_anr=any('responding' in text.casefold() and any(name in text.casefold()
+                      for name in ['system ui','systemui','pixel launcher']) for text in last)
+        if system_anr:
+            assert not waited,('Repeated unrelated system ANR',last)
+            button=next((n for n in nodes if n.attrib.get('resource-id')=='android:id/aerr_wait'
+                         or n.attrib.get('text')=='Wait'),None)
+            assert button is not None,('System ANR has no Wait action',last)
+            bounds=list(map(int,re.findall(r'\d+',button.attrib.get('bounds',''))))
+            assert len(bounds)==4
+            x1,y1,x2,y2=bounds
+            adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2),timeout=8)
+            waited=True;print('READINESS: waited once for unrelated SystemUI/Pixel Launcher ANR',flush=True)
+        elif any(n.attrib.get('content-desc')=='Add alarm' for n in nodes):return
+        time.sleep(.3)
+    raise AssertionError('Main screen did not become ready: '+str(last))
 
 def prefs(name):
     last=''
@@ -108,11 +136,35 @@ def fresh_ring(alarm_id,at):
     time.sleep(.5)
     find(desc='Alarm label: Alarm')
 
+def heads_up_fraction(im):
+    # The pinned API33 fixture uses light SystemUI. Its notification card is a
+    # wide, near-white neutral patch; the app's localized glows never approach
+    # this neutral brightness over a broad region. Stars/moon are only pinpoints.
+    w,h=im.size
+    points=[im.getpixel((int(w*x/100),int(h*y/100)))
+            for y in range(4,21,2) for x in range(4,97,4)]
+    return sum(min(p)>210 and max(p)-min(p)<24 for p in points)/len(points)
+
 def capture(name):
-    path=OUT/(name+'.png')
-    path.write_bytes(adb('exec-out','screencap','-p',binary=True))
-    assert_rendered_controls(path)
-    return path
+    path=OUT/(name+'.png');until=time.monotonic()+20;reported=False
+    while True:
+        raw=adb('exec-out','screencap','-p',binary=True)
+        im=Image.open(io.BytesIO(raw)).convert('RGB')
+        fraction=heads_up_fraction(im)
+        if fraction<.06:
+            path.write_bytes(raw);assert_rendered_controls(path);return path
+        if not reported:
+            # UiAutomator may return the underlying app even while SystemUI's
+            # heads-up is visible, so absence of notification nodes is insufficient.
+            print('CAPTURE WAIT '+json.dumps({'file':path.name,'system_card_fraction':round(fraction,3)}),flush=True)
+            reported=True
+        if time.monotonic()>=until:
+            path.write_bytes(raw)
+            try:(OUT/(name+'-overlay.xml')).write_text(ET.tostring(tree(attempts=1,timeout=8),encoding='unicode'))
+            except Exception as error:print('Overlay hierarchy:',error,flush=True)
+            raise AssertionError('SystemUI heads-up still obscures the atmosphere after 20 seconds: '+str(path))
+        # Observe its natural timeout. Do not dismiss the alarm or its notification.
+        time.sleep(.5)
 
 def assert_rendered_controls(path):
     # Semantic nodes alone cannot detect dropped text drawing. On this fixed CI
@@ -176,6 +228,7 @@ try:
     adb('shell','setprop','persist.sys.timezone','Etc/UTC')
     adb('shell','settings','put','system','time_12_24','24')
     adb('shell','settings','put','system','font_scale','1.0')
+    adb('shell','cmd','uimode','night','no')
     for key in ['window_animation_scale','transition_animation_scale','animator_duration_scale']:
         adb('shell','settings','put','global',key,'1')
     # Start shortly before the fixture alarm, avoiding a next-day forward jump
@@ -184,7 +237,8 @@ try:
     today=dt.datetime.fromtimestamp(epoch,dt.timezone.utc).replace(hour=6,minute=58,second=0,microsecond=0)
     set_time(int(today.timestamp()*1000),notify=False)
     adb('shell','input','keyevent','224');adb('shell','wm','dismiss-keyguard')
-    adb('shell','am','start','-W','-n',PKG+'/dev.orbit.clock.phone.MainActivity')
+    adb('shell','am','start','-n',PKG+'/dev.orbit.clock.phone.MainActivity')
+    await_main_ready()
     before={a['id'] for a in records()}
     tap(desc='Add alarm');find('New alarm');tap(desc='Alarm sound');tap(desc='Vibration');tap('Save alarm')
     until=time.monotonic()+8;alarm=None
