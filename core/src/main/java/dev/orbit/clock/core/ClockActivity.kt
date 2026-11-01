@@ -337,9 +337,11 @@ open class ClockActivity : AppCompatActivity() {
                 contentDescription = "Edit ${alarm.label} at ${time(alarm.hour, alarm.minute)} ${period(alarm.hour)}"
                 setOnClickListener { OrbitMotion.tick(this); editAlarm(alarm) }
             }
-            clock.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, R.drawable.ic_edit, 0)
-            clock.compoundDrawablePadding = dp(10)
-            clock.compoundDrawablesRelative[2]?.setTint(colors.muted)
+            if (!watch) {
+                clock.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, R.drawable.ic_edit, 0)
+                clock.compoundDrawablePadding = dp(10)
+                clock.compoundDrawablesRelative[2]?.setTint(colors.muted)
+            }
             line.addView(clock, LinearLayout.LayoutParams(0, dp(if (watch) 52 else 72), 1f))
             line.addView(MaterialSwitch(this).apply {
                 isChecked = alarm.enabled; contentDescription = "${alarm.label} enabled"
@@ -476,21 +478,23 @@ open class ClockActivity : AppCompatActivity() {
         val date = text("", 14f, colors.muted); hero.addView(now); space(hero, 8); hero.addView(date)
         val zones = prefs.getStringSet("zones", setOf("Europe/London", "America/New_York", "Asia/Tokyo"))!!.sorted()
         val displays = zones.map { id ->
-            val c = card(padding = 20); (c.parent as View).tag = "item:city:$id"; val line = row(); val city = column()
+            val c = card(padding = 20); (c.parent as View).tag = "item:city:$id"; val line = row().apply { if (watch) orientation = LinearLayout.VERTICAL }; val city = column()
             city.addView(text(id.substringAfterLast('/').replace('_', ' '), 18f)); space(city, 8)
-            val info = text("", 12f, colors.muted); city.addView(info); line.addView(city, LinearLayout.LayoutParams(0, -2, 1f))
+            val info = text("", 12f, colors.muted); city.addView(info); line.addView(city, if (watch) LinearLayout.LayoutParams(-1, -2) else LinearLayout.LayoutParams(0, -2, 1f))
             val value = text("", if (watch) 24f else 30f); line.addView(value); c.addView(line)
             (c.parent as View).stateDescription = "Touch and hold to remove city"
             fun removeCity() {
                 MaterialAlertDialogBuilder(this).setTitle("Remove this city?").setNegativeButton("Keep", null).setPositiveButton("Remove") { _, _ -> VisualHints.learn(this@ClockActivity, "city_remove"); pendingFeedback = "City removed"; prefs.edit().putStringSet("zones", zones.filterNot { it == id }.toSet()).apply(); render() }.show()
             }
             (c.parent as View).setOnLongClickListener { removeCity(); true }
-            line.addView(MaterialButton(this, null, com.google.android.material.R.attr.materialIconButtonStyle).apply {
+            val removeIcon = MaterialButton(this, null, com.google.android.material.R.attr.materialIconButtonStyle).apply {
                 setIconResource(R.drawable.ic_close); iconTint = ColorStateList.valueOf(colors.muted)
                 text = ""; iconPadding = 0; contentDescription = "Remove ${id.substringAfterLast('/').replace('_', ' ')}"
                 setOnClickListener { OrbitMotion.tick(this); removeCity() }
                 VisualHints.bind(this, "city_remove")
-            }, LinearLayout.LayoutParams(dp(48), dp(48)))
+            }
+            val removeParams = LinearLayout.LayoutParams(dp(48), dp(48)).apply { gravity = Gravity.END }
+            if (watch) c.addView(removeIcon, removeParams) else line.addView(removeIcon, removeParams)
             Triple(id, value, info)
         }
         ticker = {
