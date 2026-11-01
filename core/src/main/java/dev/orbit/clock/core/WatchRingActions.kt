@@ -194,12 +194,12 @@ class WatchRingActions(
             canvas.translate(bounds.left.toFloat(), bounds.top.toFloat())
             canvas.scale(bounds.width() / 24f, bounds.height() / 24f)
             if (snoozing) {
-                canvas.drawCircle(12f, 12f, 7f, paint)
+                canvas.drawCircle(12f, 12f, 8.5f, paint)
                 canvas.drawLine(12f, 8f, 12f, 12f, paint)
                 canvas.drawLine(12f, 12f, 15f, 12f, paint)
             } else {
-                canvas.drawLine(8f, 8f, 16f, 16f, paint)
-                canvas.drawLine(16f, 8f, 8f, 16f, paint)
+                canvas.drawLine(6f, 6f, 18f, 18f, paint)
+                canvas.drawLine(18f, 6f, 6f, 18f, paint)
             }
             canvas.restoreToCount(checkpoint)
         }
