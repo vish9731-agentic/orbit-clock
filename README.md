@@ -63,7 +63,7 @@ The intended flow is: request a change → a coding session with access updates 
 
 The [Android debug workflow](.github/workflows/android-debug.yml) runs on push, pull request or manual dispatch. After a successful default-branch build, it is configured to publish individual APKs to the `debug-latest` prerelease as well as Actions artifacts. **Verified:** [cloud build, tests, lint and publication succeeded](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41104668417). Both phone and watch debug APKs are built and uploaded from the verified revision; the development signing key is unchanged.
 
-Verified download links (version `0.1.42`, version code `43` for this build):
+Latest debug APK links (updated after successful main-branch builds; see verification/STATUS.md for revision-specific UI evidence):
 
 - [Phone debug APK](https://github.com/vish9731-agentic/orbit-clock/releases/download/debug-latest/orbit-clock-phone-debug.apk)
 - [Watch debug APK](https://github.com/vish9731-agentic/orbit-clock/releases/download/debug-latest/orbit-clock-watch-debug.apk)
