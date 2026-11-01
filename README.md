@@ -55,7 +55,7 @@ The intended flow is: request a change → a coding session with access updates 
 
 The [Android debug workflow](.github/workflows/android-debug.yml) runs on push, pull request or manual dispatch. After a successful default-branch build, it is configured to publish individual APKs to the `debug-latest` prerelease as well as Actions artifacts. **Verified:** [cloud build, tests, lint and publication succeeded](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41104668417). Both phone and watch debug APKs are built and uploaded from the verified revision; the development signing key is unchanged.
 
-Verified download links (version `0.1.18`, version code `19` for this build):
+Verified download links (version `0.1.20`, version code `21` for this build):
 
 - [Phone debug APK](https://github.com/vish9731-agentic/orbit-clock/releases/download/debug-latest/orbit-clock-phone-debug.apk)
 - [Watch debug APK](https://github.com/vish9731-agentic/orbit-clock/releases/download/debug-latest/orbit-clock-watch-debug.apk)
@@ -79,6 +79,6 @@ OS policy controls full-screen presentation, and force-stopping an app prevents 
 
 While the ringing screen is open and focused, either physical volume button snoozes on release using the selected duration. Held/repeated presses are consumed; other screens retain normal volume behavior. This shortcut does not intercept volume keys globally when only a notification is visible.
 
-## Material You ringing screen
+## Ringing screen
 
-The phone ringing screen follows wallpaper colors on Android 12+ and system light/dark mode. A large scalloped clock face, clear alarm label and bottom snooze card keep the screen simple. Five-minute duration controls, touch actions and both volume-button shortcuts remain available. The watch keeps a compact dark layout.
+The phone follows the user-selected Google Clock reference: a plain dark green background, large time, saved custom label (or “Alarm” when blank), and a Snooze/Stop rail with a draggable center thumb. A compact minus/minutes/plus row sits above it, with five-minute steps from 5 to 60. Both volume buttons still snooze while the ringing screen is focused. Accessible action labels also support tapping. Watch controls retain their compact dark layout.
