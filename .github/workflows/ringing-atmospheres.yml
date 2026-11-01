@@ -6,10 +6,14 @@ on:
     paths:
       - '.github/workflows/ringing-atmospheres.yml'
       - 'tools/capture-ringing-atmospheres.py'
+      - 'core/src/main/java/dev/orbit/clock/core/RingAtmosphere.java'
+      - 'core/src/main/java/dev/orbit/clock/core/RingAtmosphereDrawable.kt'
+      - 'core/src/main/java/dev/orbit/clock/core/RingActivity.kt'
 permissions:
   contents: read
 jobs:
   capture:
+    if: ${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[ui:atmospheres]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -23,13 +27,14 @@ jobs:
           packages: 'platform-tools platforms;android-35 build-tools;34.0.0'
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
-      - name: Build unchanged phone UI
+      - run: python -m pip install pillow
+      - name: Build phone UI
         run: ./gradlew --no-daemon :phone:assembleDebug
       - name: Prepare runner
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android/sdk/ndk
           sudo chmod 666 /dev/kvm
-      - name: Capture six local times
+      - name: Verify seven atmospheres and eight real snoozes
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -42,6 +47,7 @@ jobs:
             adb shell settings put global device_provisioned 1
             adb shell settings put secure user_setup_complete 1
             adb shell pm disable-user --user 0 com.google.android.googlesdksetup || true
+            adb shell am force-stop com.google.android.apps.nexuslauncher
             adb install phone/build/outputs/apk/debug/phone-debug.apk
             adb shell pm grant dev.orbit.clock android.permission.POST_NOTIFICATIONS
             adb shell appops set dev.orbit.clock SCHEDULE_EXACT_ALARM allow

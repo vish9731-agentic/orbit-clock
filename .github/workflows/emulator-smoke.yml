@@ -28,7 +28,7 @@ permissions:
   contents: read
 jobs:
   emulator:
-    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[ui:media-focus]') }}
+    if: ${{ github.event_name != 'push' || (!contains(github.event.head_commit.message, '[ui:media-focus]') && !contains(github.event.head_commit.message, '[ui:atmospheres]')) }}
     env:
       ORBIT_UI_SCOPE: ${{ inputs.scope || (contains(github.event.head_commit.message, '[ui:notifications]') && 'notifications') || (contains(github.event.head_commit.message, '[ui:visual-cue]') && 'visual-cue') || (contains(github.event.head_commit.message, '[ui:ringing-motion]') && 'ringing-motion') || (contains(github.event.head_commit.message, '[ui:motion]') && 'motion') || (contains(github.event.head_commit.message, '[ui:guidance]') && 'guidance') || 'full' }}
     runs-on: ubuntu-latest

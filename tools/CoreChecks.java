@@ -18,28 +18,57 @@ public class CoreChecks {
     }
     static void at(String name, String expected, Instant actual) { eq(name,Instant.parse(expected),actual); }
     public static void main(String[] args) {
-        int midnight = RingAtmosphere.tint(0), dawn = RingAtmosphere.tint(420), morning = RingAtmosphere.tint(600);
-        int afternoon = RingAtmosphere.tint(840), evening = RingAtmosphere.tint(1110), night = RingAtmosphere.tint(1320);
-        eq("deep-night blue hint", true, (midnight & 255) > (midnight >> 16 & 255));
-        eq("dawn rose hint", true, (dawn >> 16 & 255) > (dawn & 255));
-        eq("morning sage hint", true, (morning >> 8 & 255) > (morning >> 16 & 255));
-        eq("afternoon warm hint", true, (afternoon >> 16 & 255) > (afternoon >> 8 & 255) && (afternoon >> 8 & 255) > (afternoon & 255));
-        eq("evening violet hint", true, (evening & 255) > (evening >> 16 & 255) && (evening >> 16 & 255) > (evening >> 8 & 255));
-        eq("night indigo hint", true, (night & 255) > (night >> 16 & 255));
-        eq("atmosphere midnight wraps", RingAtmosphere.tint(0), RingAtmosphere.tint(1440));
-        eq("atmosphere negative minute wraps", RingAtmosphere.tint(1439), RingAtmosphere.tint(-1));
-        boolean dark = true, smooth = true;
-        for (int minute=0; minute<1440; minute++) {
-            int color=RingAtmosphere.tint(minute), nextColor=RingAtmosphere.tint(minute+1);
-            dark &= (color >>> 24)==255;
-            for (int shift : new int[]{16,8,0}) {
-                int channel=color >> shift & 255;
-                dark &= channel <= 20;
-                smooth &= Math.abs(channel-(nextColor >> shift & 255)) <= 1;
+        String[] periods={"dawn","morning","noon","afternoon","sunset","blue-hour","night"};
+        int[] sampleMinutes={360,480,720,900,1080,1260,60};
+        for(int i=0;i<periods.length;i++) eq("local atmosphere "+periods[i],periods[i],RingAtmosphere.period(sampleMinutes[i]));
+        RingAtmosphere.Scene dawn=RingAtmosphere.sample(330).from, morning=RingAtmosphere.sample(480).from;
+        RingAtmosphere.Scene noon=RingAtmosphere.sample(720).from, afternoon=RingAtmosphere.sample(900).from;
+        RingAtmosphere.Scene sunset=RingAtmosphere.sample(1080).from, blue=RingAtmosphere.sample(1260).from;
+        RingAtmosphere.Scene night=RingAtmosphere.sample(1380).from;
+        eq("dawn combines warm horizon with cool sky",true,(dawn.glowColor>>16&255)>(dawn.glowColor&255) && (dawn.skyColor&255)>(dawn.skyColor>>16&255));
+        eq("morning sunlight is yellow",true,(morning.sunColor>>16&255)>(morning.sunColor&255) && (morning.sunColor>>8&255)>(morning.sunColor&255));
+        eq("noon sky is blue",true,(noon.skyColor&255)>(noon.skyColor>>8&255) && (noon.skyColor>>8&255)>(noon.skyColor>>16&255));
+        eq("afternoon warmth remains distinct from noon",true,afternoon.glowColor!=noon.glowColor && (afternoon.glowColor>>16&255)>(afternoon.glowColor&255));
+        eq("sunset glow is orange",true,(sunset.glowColor>>16&255)>(sunset.glowColor>>8&255) && (sunset.glowColor>>8&255)>(sunset.glowColor&255));
+        eq("blue hour has no hot sun",true,blue.sun==0 && (blue.skyColor&255)>(blue.skyColor>>16&255));
+        eq("night has restrained stars and moon",true,night.sun==0 && night.stars>0 && night.moon>0);
+        eq("daylight has no stars or moon",true,morning.stars==0 && morning.moon==0 && noon.stars==0 && noon.moon==0);
+        eq("atmosphere midnight wraps",RingAtmosphere.period(0),RingAtmosphere.period(1440));
+        eq("atmosphere negative minute wraps",RingAtmosphere.period(1439),RingAtmosphere.period(-1));
+        eq("atmosphere blend wraps",RingAtmosphere.sample(1439).blend,RingAtmosphere.sample(-1).blend);
+        boolean black=true,smooth=true,corner=true,weights=true,sourceColors=true;
+        for(int minute=0;minute<1440;minute++) {
+            int base=RingAtmosphere.tint(minute);
+            RingAtmosphere.Frame frame=RingAtmosphere.sample(minute),nextFrame=RingAtmosphere.sample(minute+1);
+            black &= (base>>>24)==255;
+            weights &= frame.minute==minute && frame.blend>=0 && frame.blend<=1;
+            for(int shift:new int[]{16,8,0}) black &= (base>>shift&255)<=8;
+            for(RingAtmosphere.Scene scene:new RingAtmosphere.Scene[]{frame.from,frame.to}) {
+                corner &= (scene.cornerX<=.15f || scene.cornerX>=.85f) && scene.cornerY>=0 && scene.cornerY<=.10f;
+                for(int c:new int[]{scene.glowColor,scene.skyColor,scene.sunColor}) sourceColors &= (c>>>24)==255;
+            }
+            int[] hereFrom={frame.from.glowColor,frame.from.skyColor,frame.from.sunColor};
+            int[] hereTo={frame.to.glowColor,frame.to.skyColor,frame.to.sunColor};
+            int[] nextFrom={nextFrame.from.glowColor,nextFrame.from.skyColor,nextFrame.from.sunColor};
+            int[] nextTo={nextFrame.to.glowColor,nextFrame.to.skyColor,nextFrame.to.sunColor};
+            for(int role=0;role<3;role++) for(int shift:new int[]{16,8,0}) {
+                float here=(hereFrom[role]>>shift&255)*(1-frame.blend)+(hereTo[role]>>shift&255)*frame.blend;
+                float there=(nextFrom[role]>>shift&255)*(1-nextFrame.blend)+(nextTo[role]>>shift&255)*nextFrame.blend;
+                smooth &= Math.abs(here-there)<4f;
             }
         }
-        eq("all-day tint stays near black", true, dark);
-        eq("all-day tint blends without boundary jumps", true, smooth);
+        eq("main field stays black throughout the day",true,black);
+        eq("corner scenes never traverse the clock or controls",true,corner);
+        eq("all-day palettes blend without flashes",true,smooth);
+        eq("all-day blend weights are valid",true,weights);
+        eq("localized color sources are opaque",true,sourceColors);
+        LocalDateTime original=LocalDateTime.of(2026,11,1,15,0), ringing=original;
+        eq("original afternoon ringing atmosphere","afternoon",RingAtmosphere.period(ringing.getHour()*60+ringing.getMinute()));
+        for(int i=0;i<8;i++) ringing=ringing.plusMinutes(60);
+        eq("eight hourly snoozes reach 23:00",LocalTime.of(23,0),ringing.toLocalTime());
+        eq("later ringing selects current night despite afternoon original","night",RingAtmosphere.period(ringing.getHour()*60+ringing.getMinute()));
+        ZonedDateTime localNight=Instant.parse("2026-11-01T17:30:00Z").atZone(ZoneId.of("Asia/Kolkata"));
+        eq("time of day follows local zone","night",RingAtmosphere.period(localNight.getHour()*60+localNight.getMinute()));
         at("one-shot today","2026-10-30T07:00:00Z",next(7,0,Set.of(),"2026-10-30T06:00:00Z","UTC",0,0));
         at("one-shot tomorrow","2026-10-31T07:00:00Z",next(7,0,Set.of(),"2026-10-30T08:00:00Z","UTC",0,0));
         at("weekend skipped","2026-11-02T07:00:00Z",next(7,0,Set.of(1,2,3,4,5),"2026-10-30T08:00:00Z","UTC",0,0));
