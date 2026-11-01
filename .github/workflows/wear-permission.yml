@@ -59,6 +59,11 @@ jobs:
             adb shell settings put global device_provisioned 1
             adb shell settings put secure user_setup_complete 1
             adb shell settings put secure user_setup_pairing 1
+            # The emulator starts on a charger. Its charging activity can cover
+            # Orbit asynchronously and make UI assertions inspect the wrong app.
+            adb shell dumpsys battery unplug
+            adb shell dumpsys battery set status 3
+            adb shell settings put system screen_off_timeout 1800000
             adb shell input keyevent 224
             python tools/wear-permission/wear_permission_check.py --apk wear/build/outputs/apk/debug/wear-debug.apk --baseline-apk previous-src/wear/build/outputs/apk/debug/wear-debug.apk --probe-apk build/wear-permission-probe/probe.apk
       - name: Save Wear OS verification evidence
