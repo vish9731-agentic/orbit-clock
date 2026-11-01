@@ -5,6 +5,9 @@ on:
     paths:
       - 'core/src/main/java/dev/orbit/clock/core/RingActivity.kt'
       - 'core/src/main/java/dev/orbit/clock/core/WatchRingActions.kt'
+      - 'core/src/main/java/dev/orbit/clock/core/RingingService.kt'
+      - 'core/src/main/java/dev/orbit/clock/core/Scheduler.kt'
+      - 'core/src/main/java/dev/orbit/clock/core/RingControls.kt'
       - 'tools/wear-bezel/**'
       - '.github/workflows/wear-bezel.yml'
   push:
@@ -12,6 +15,9 @@ on:
     paths:
       - 'core/src/main/java/dev/orbit/clock/core/RingActivity.kt'
       - 'core/src/main/java/dev/orbit/clock/core/WatchRingActions.kt'
+      - 'core/src/main/java/dev/orbit/clock/core/RingingService.kt'
+      - 'core/src/main/java/dev/orbit/clock/core/Scheduler.kt'
+      - 'core/src/main/java/dev/orbit/clock/core/RingControls.kt'
       - 'tools/wear-bezel/**'
       - '.github/workflows/wear-bezel.yml'
 permissions:

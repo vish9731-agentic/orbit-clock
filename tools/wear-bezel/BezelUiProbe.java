@@ -191,19 +191,21 @@ public final class BezelUiProbe extends Instrumentation {
                 target.startActivity(new Intent().setClassName(PKG,MAIN).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP));
             return null;
         });
-        waitUntil(() -> ui(() -> resumed!=null && resumed.getClass().getName().equals(MAIN) && !resumed.isFinishing() && resumed.hasWindowFocus() && resumed.getWindow().getDecorView().isLaidOut()),15000,"MainActivity did not become ready for timer creation");
-        waitForIdleSync();
+        long readinessStarted=SystemClock.elapsedRealtime();
         long stableSince=SystemClock.elapsedRealtime();
         String stableConfiguration="";
-        long until=SystemClock.elapsedRealtime()+10000;
+        // Fresh Wear OS images show TrayInitializationOverlay ("Starting...")
+        // after boot_completed. Wait for OS readiness before choosing a deadline.
+        long until=SystemClock.elapsedRealtime()+90000;
         while(SystemClock.elapsedRealtime()<until) {
-            String configuration=ui(() -> resumed!=null && resumed.getClass().getName().equals(MAIN) && !resumed.isFinishing() && resumed.hasWindowFocus()
+            String configuration=ui(() -> resumed!=null && resumed.getClass().getName().equals(MAIN) && !resumed.isFinishing() && resumed.hasWindowFocus() && resumed.getWindow().getDecorView().isLaidOut()
                 ? System.identityHashCode(resumed)+":"+resumed.getResources().getConfiguration().toString() : "");
             if(configuration.isEmpty() || !configuration.equals(stableConfiguration)) { stableConfiguration=configuration; stableSince=SystemClock.elapsedRealtime(); }
-            else if(SystemClock.elapsedRealtime()-stableSince>=500) break;
-            SystemClock.sleep(25);
+            else if(SystemClock.elapsedRealtime()-stableSince>=2000) break;
+            SystemClock.sleep(100);
         }
-        require(!stableConfiguration.isEmpty() && SystemClock.elapsedRealtime()-stableSince>=500,"MainActivity configuration did not settle");
+        require(!stableConfiguration.isEmpty() && SystemClock.elapsedRealtime()-stableSince>=2000,"Wear OS startup did not release a focused, stable MainActivity");
+        Bundle setup=new Bundle(); setup.putString("stream","BEZEL SETUP Main ready after "+(SystemClock.elapsedRealtime()-readinessStarted)+" ms\n"); sendStatus(0,setup);
         long at=ui(() -> {
             long deadline=System.currentTimeMillis()+12000;
             fixtureId=id; fixtureAt=deadline;
