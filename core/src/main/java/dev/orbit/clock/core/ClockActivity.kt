@@ -72,11 +72,11 @@ open class ClockActivity : AppCompatActivity() {
         tab = state?.getString("tab") ?: "Alarms"
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(changes, IntentFilter(Store.CHANGED), RECEIVER_NOT_EXPORTED)
         else registerReceiver(changes, IntentFilter(Store.CHANGED))
-        render(); Sync.refresh(this)
+        Sync.refresh(this)
     }
     override fun onResume() {
         super.onResume(); foreground = true; Scheduler.restore(this)
-        if (::root.isInitialized) render()
+        render()
         handler.removeCallbacks(tick); handler.post(tick)
     }
     override fun onPause() { foreground = false; handler.removeCallbacks(tick); handler.removeCallbacks(refresh); super.onPause() }
