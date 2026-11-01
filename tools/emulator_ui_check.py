@@ -198,11 +198,22 @@ def motion_checks():
     # Static virtual displays can stop emitting frames once the transition settles.
     # Inspect the card region, excluding status/navigation bars and their native ripple.
     crops = [f.crop((0, int(f.height*.13), f.width, int(f.height*.83))) for f in frames]
-    changes = [ImageStat.Stat(ImageChops.difference(a, b)).mean for a, b in zip(crops, crops[1:])]
-    assert sum(sum(v) > .8 for v in changes) >= 4, 'Transition jumped between static screens'
-    # Pick six frames around the first visible content movement for review.
-    first = next(i for i,v in enumerate(changes) if sum(v) > .8)
-    samples = [max(0, first-1), first+1, first+3, first+5, first+8, min(len(frames)-1, first+18)]
+    # Prove a real blend between source/destination, not a guest-dependent frame rate.
+    # Mask only pixels that actually change between tools: input-focus fades cannot fake it.
+    endpoint = ImageChops.difference(crops[0], crops[-1])
+    mask = endpoint.convert('L').point(lambda value: 255 if value > 40 else 0)
+    distance = sum(ImageStat.Stat(endpoint, mask=mask).mean)
+    assert distance > 10, 'Recording missed the requested content change'
+    intermediate = []
+    for index, frame in enumerate(crops):
+        from_start = sum(ImageStat.Stat(ImageChops.difference(frame, crops[0]), mask=mask).mean)
+        from_end = sum(ImageStat.Stat(ImageChops.difference(frame, crops[-1]), mask=mask).mean)
+        if from_start > distance * .03 and from_end > distance * .03: intermediate.append(index)
+    assert intermediate, 'Transition has no visible intermediate content blend'
+    assert all(sum(ImageStat.Stat(ImageChops.difference(f, crops[-1])).mean) < .8 for f in crops[-3:]), 'Transition did not settle'
+    find('Start')  # The destination is the paused Stopwatch, not another Timer frame.
+    first = intermediate[0]
+    samples = [max(0, first-5), max(0,first-2), first, first+1, first+3, len(frames)-1]
     strip = Image.new('RGB', (frames[0].width*len(samples), frames[0].height))
     for i,index in enumerate(samples): strip.paste(frames[min(index,len(frames)-1)], (i*frames[0].width,0))
     strip.save(OUT / 'motion-strip.png')
@@ -212,7 +223,7 @@ def motion_checks():
     print('ORBIT_SCREENSHOT_BEGIN motion-strip', flush=True)
     for start in range(0,len(encoded),100): print(encoded[start:start+100], flush=True)
     print('ORBIT_SCREENSHOT_END motion-strip', flush=True)
-    passed('Enabled animations produce multiple intermediate content frames and settle')
+    passed('Enabled animations include a visible intermediate content blend and settle')
     # Rapid tab changes must leave the last selected tool usable, with no stale callbacks.
     positions = {name: xy(find(desc=name)) for name in ['Alarm', 'Clock', 'Timer', 'Stopwatch', 'Bedtime']}
     for name in ['Alarm', 'Bedtime', 'Clock', 'Timer', 'Stopwatch', 'Timer']:
