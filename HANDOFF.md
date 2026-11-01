@@ -6,6 +6,12 @@ The user wants a personal Android phone + Galaxy Watch 4 Classic clock app inspi
 
 The user authorized creating the private personal repository, uploading this project, fixing build failures, running tests and publishing debug APK downloads. Login and account authorization are completed by the user. Do not use Bytebeam repositories for this project.
 
+## Watch exact-alarm permission
+
+The user installed Orbit on a Galaxy Watch 4 Classic but Samsung Settings > Alarms and reminders spins indefinitely. They report software version 6.0 (possibly One UI Watch; exact Android API level was not captured). The watch manifest now uses USE_EXACT_ALARM for API 33+ and limits inherited SCHEDULE_EXACT_ALARM to API 32. Orbit is a dedicated alarm/timer app. This avoids manual precise-alarm approval on Android 13 / Wear OS 4 and newer while preserving the older-OS flow. The phone manifest and permission behavior are unchanged. Keep the shared signing key so an in-place watch APK update preserves records; reopening the app runs its existing schedule restoration.
+
+This change avoids the affected Settings page; it does not repair Samsung Settings. The focused Wear OS permission workflow checks install/update and actual alarm delivery where the hosted image is available. Physical Watch 4 Classic behavior and the user's exact OS build still require device confirmation. Notification and full-screen permissions are separate.
+
 ## Visual-only guidance — current revision
 
 The user explicitly rejected explanatory hint text. Do not restore coach-tip rows or ringing captions. Keep normal action labels, validation/permission messages and screen-reader descriptions. The ringing rail shows two outward light sweeps; key controls receive finite highlights, alarm times have a pencil affordance on phone, and city cards have an explicit remove icon with confirmation. Narrow watch city cards stack their contents with the remove action below. No decorative loop or added hint panel is used.

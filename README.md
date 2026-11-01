@@ -47,7 +47,7 @@ The verified local outputs are:
 
 Install the phone APK on the phone and the wear APK on the watch. Android will ask you to allow installation from the download/browser app. Watch installation requires separate Wear OS tooling or wireless ADB; downloading the watch APK to a phone does not install it on the watch.
 
-Pair the watch using Galaxy Wearable, open both apps, and grant precise-alarm and notification permissions. On Android 14+, allow the ringing screen/full-screen intent if requested. Confirm an alarm appears on both devices before testing it. A debug APK is installable with debugging enabled; it does not automatically attach a live debugger.
+Pair the watch using Galaxy Wearable and open both apps. Grant notifications on both devices. On watches running Android 13 / Wear OS 4 or newer, the watch APK uses the dedicated-alarm permission granted during installation, so precise-alarm setup does not need the system Alarms and reminders page. Older watches and the phone app still use the precise-alarm approval flow. Install the watch update over the existing app to preserve saved alarms; reopen Orbit afterward to restore their schedules. On Android 14+, allow the ringing screen/full-screen intent if requested. Confirm an alarm appears on both devices before testing it. A debug APK is installable with debugging enabled; it does not automatically attach a live debugger.
 
 ## Request changes and builds from a phone
 

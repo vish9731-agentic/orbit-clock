@@ -1,0 +1,70 @@
+name: Wear OS exact-alarm permission verification
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'wear/src/main/AndroidManifest.xml'
+      - 'tools/wear-permission/**'
+      - '.github/workflows/wear-permission.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'wear/src/main/AndroidManifest.xml'
+      - 'tools/wear-permission/**'
+      - '.github/workflows/wear-permission.yml'
+permissions:
+  contents: read
+jobs:
+  wear-permission:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out previous permission implementation
+        uses: actions/checkout@v4
+        with:
+          ref: 336ca5c9f0ff18c1669613846ffe0f3869e3f000
+          path: previous-src
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;34.0.0'
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build previous and fixed watch APKs
+        run: |
+          ./gradlew -p previous-src --no-daemon :wear:assembleDebug
+          ./gradlew --no-daemon :wear:assembleDebug :phone:assembleDebug
+          python tools/wear-permission/check_manifests.py
+          bash tools/wear-permission/build-permission-probe.sh
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android/sdk/ndk
+      - name: Enable emulator acceleration
+        run: sudo chmod 666 /dev/kvm
+      - name: Verify on Wear OS 4
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: android-wear
+          arch: x86_64
+          profile: wearos_large_round
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -memory 2048
+          script: |
+            mkdir -p wear-permission-results
+            adb shell settings put global device_provisioned 1
+            adb shell settings put secure user_setup_complete 1
+            adb shell settings put secure user_setup_pairing 1
+            adb shell input keyevent 224
+            python tools/wear-permission/wear_permission_check.py --apk wear/build/outputs/apk/debug/wear-debug.apk --baseline-apk previous-src/wear/build/outputs/apk/debug/wear-debug.apk --probe-apk build/wear-permission-probe/probe.apk
+      - name: Save Wear OS verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wear-permission-results
+          retention-days: 3
+          path: wear-permission-results/
