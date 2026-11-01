@@ -280,7 +280,21 @@ open class ClockActivity : AppCompatActivity() {
     private fun input(parent: LinearLayout, label: String, value: String, numeric: Boolean = false): TextInputEditText {
         val box = TextInputLayout(this, null, com.google.android.material.R.attr.textInputOutlinedStyle).apply { hint = label }
         val edit = TextInputEditText(box.context).apply { setText(value); isSingleLine = true; if (numeric) inputType = android.text.InputType.TYPE_CLASS_NUMBER }
-        box.addView(edit); parent.addView(box, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) }); return edit
+        box.addView(edit); parent.addView(box, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
+        edit.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { if (box.error != null) box.error = null }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
+        return edit
+    }
+    private fun inputError(field: TextInputEditText, message: String) {
+        var parent = field.parent
+        while (parent is View) {
+            if (parent is TextInputLayout) { parent.error = message; OrbitMotion.reject(field); return }
+            parent = parent.parent
+        }
+        field.error = message; OrbitMotion.reject(field)
     }
     private fun editAlarm(original: Alarm) {
         var hour = original.hour; var minute = original.minute
@@ -329,7 +343,7 @@ open class ClockActivity : AppCompatActivity() {
         actions.addView(button("Cancel", tonal = true) { sheet.dismiss() }, LinearLayout.LayoutParams(0, dp(52), 1f).apply { marginEnd = dp(12) })
         actions.addView(button("Save alarm") {
             val length = snooze.text.toString().toIntOrNull()
-            if (length == null || length !in 1..60) { snooze.error = "Enter 1–60 minutes"; OrbitMotion.reject(snooze); return@button }
+            if (length == null || length !in 1..60) { inputError(snooze, "Enter 1–60 minutes"); return@button }
             Store(this).save(original.copy(hour = hour, minute = minute, label = label.text.toString().trim().ifEmpty { "Alarm" }, days = selected.toSet(), sound = sound.isChecked, vibrate = vibrate.isChecked, snoozeMinutes = length, enabled = true, snoozeUntil = 0, skipThrough = 0))
             sheet.dismiss()
         }, LinearLayout.LayoutParams(0, dp(52), 1.4f))
@@ -430,13 +444,13 @@ open class ClockActivity : AppCompatActivity() {
         selectPreset(false)
         minutes.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { selectPreset(true); if (minutes.error != null) minutes.error = null }
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { selectPreset(true) }
             override fun afterTextChanged(s: Editable?) = Unit
         })
         setup.addView(presets); space(setup, 20)
         setup.addView(button("Start timer", icon = R.drawable.ic_play) {
             val count = minutes.text.toString().toLongOrNull()
-            if (count == null || count !in 1..1440) { minutes.error = "Enter 1–1440 minutes"; OrbitMotion.reject(minutes); return@button }
+            if (count == null || count !in 1..1440) { inputError(minutes, "Enter 1–1440 minutes"); return@button }
             if (!Scheduler.allowed(this)) { permissions(); return@button }
             Store(this).save(Alarm(timer = true, label = "Timer · $count min", snoozeUntil = System.currentTimeMillis() + count * 60_000))
         }, LinearLayout.LayoutParams(-1, dp(56)))

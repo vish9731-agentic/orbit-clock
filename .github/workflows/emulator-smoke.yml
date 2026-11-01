@@ -9,6 +9,7 @@ on:
         options:
           - full
           - ringing-motion
+          - motion
   push:
     branches: [main]
     paths:
@@ -25,7 +26,7 @@ permissions:
 jobs:
   emulator:
     env:
-      ORBIT_UI_SCOPE: ${{ inputs.scope || (contains(github.event.head_commit.message, '[ui:ringing-motion]') && 'ringing-motion') || 'full' }}
+      ORBIT_UI_SCOPE: ${{ inputs.scope || (contains(github.event.head_commit.message, '[ui:ringing-motion]') && 'ringing-motion') || (contains(github.event.head_commit.message, '[ui:motion]') && 'motion') || 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

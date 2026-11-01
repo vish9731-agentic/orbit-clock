@@ -11,7 +11,7 @@ from PIL import Image, ImageChops, ImageStat
 import imageio_ffmpeg
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--scope', choices=['full', 'ringing-motion'], default='full')
+parser.add_argument('--scope', choices=['full', 'ringing-motion', 'motion'], default='full')
 ARGS = parser.parse_args()
 
 OUT = Path('emulator-results')
@@ -144,8 +144,15 @@ def slide_alarm(direction, short=False):
     time.sleep(.5)
 
 def motion_checks():
+    # Inline Material captions must recover without covering the preset controls.
+    click('Timer'); fill('0', desc='Timer minutes'); click('Start timer')
+    find('Enter 1–1440 minutes'); assert find('Cancel timer', optional=True) is None
+    screenshot('timer-inline-error-motion')
+    click(desc='Timer preset: 1 min')
+    assert find(desc='Timer minutes').attrib['text'] == '1'
+    assert find('Enter 1–1440 minutes', optional=True) is None
+    passed('Material inline error feedback clears on correction without blocking presets')
     # Static Timer -> paused Stopwatch: no ticking content can fake transition frames.
-    click('Timer')
     target = xy(find('Stopwatch'))
     video = OUT / 'motion-internal.mp4'
     recorder = subprocess.Popen(['adb', 'shell', 'screenrecord', '--bit-rate', '2500000', '--time-limit', '3', '/sdcard/orbit-motion.mp4'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -378,7 +385,7 @@ try:
         find('Alarms'); find('Stopwatch')
         passed('Header and navigation remain visible with large text')
         screenshot('alarms-large-type-dark')
-    ringing_snooze_checks()
+    if ARGS.scope != 'motion': ringing_snooze_checks()
     motion_checks()
     pid = adb('shell', 'pidof', PKG).strip(); assert pid
     crashes = adb('logcat', '-d', '-b', 'crash'); (OUT / 'crashes.txt').write_text(crashes)

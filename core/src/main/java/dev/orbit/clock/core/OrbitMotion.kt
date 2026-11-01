@@ -47,7 +47,8 @@ object OrbitMotion {
     fun enter(view: View, delay: Long = 0, direction: Int = 0) {
         bind(view); view.animate().cancel()
         if (!enabled()) { view.alpha = 1f; view.translationX = 0f; view.translationY = 0f; return }
-        view.alpha = 0f
+        // Keep the incoming state legible even if a device misses an early frame.
+        view.alpha = .35f
         if (direction == 0) view.translationY = px(view, 10f) else view.translationX = px(view, 18f * direction)
         view.animate().alpha(1f).translationX(0f).translationY(0f).setStartDelay(delay)
             .setDuration(220).setInterpolator(ease).withEndAction(null).start()
