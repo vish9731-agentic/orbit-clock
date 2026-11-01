@@ -62,9 +62,21 @@ def run(ui):
         (out/(mode+'-audio-focus.txt')).write_text(adb('shell','dumpsys','audio'))
         passed(('Music' if mode=='music' else 'Video')+' pauses on alarm focus loss and receives the native Pause command')
     def stop_banner(snooze=False):
-        adb('shell','cmd','statusbar','expand-notifications')
-        click(desc='Snooze alarm for 10 minutes' if snooze else 'Stop alarm')
-        adb('shell','cmd','statusbar','collapse')
+        # SystemUI shade commands animate asynchronously. Settle the previous
+        # collapse before opening again; never retry an alarm action tap.
+        adb('shell','cmd','statusbar','collapse');time.sleep(1)
+        adb('shell','cmd','statusbar','expand-notifications');time.sleep(1)
+        desc='Snooze alarm for 10 minutes' if snooze else 'Stop alarm'
+        node=find(desc=desc,optional=True)
+        if node is None:
+            w,h=map(int,re.search(r'(\d+)x(\d+)',adb('shell','wm','size')).groups())
+            adb('shell','input','swipe',str(w//2),'1',str(w//2),str(int(h*.75)),'500')
+            time.sleep(1);node=find(desc=desc,optional=True)
+        if node is None:
+            (out/'notification-action-missing.txt').write_text(adb('shell','dumpsys','notification','--noredact'))
+            raise AssertionError('Ringing notification action missing: '+desc)
+        tap(xy(node))
+        adb('shell','cmd','statusbar','collapse');time.sleep(1)
     def resumed(mode):
         p=await_player(lambda p:p.get('mode')==mode and p.get('playing')=='true' and 'focus:1;' in p.get('events',''),mode+' did not regain focus')
         (out/(mode+'-resumed.txt')).write_text(str(p))
