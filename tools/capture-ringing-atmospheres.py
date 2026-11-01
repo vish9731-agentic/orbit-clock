@@ -79,6 +79,8 @@ def await_alarm(alarm_id,at):
     while time.monotonic()<until:
         if int(prefs('scheduled_occurrences').get(alarm_id+'.active',0))==at:return
         time.sleep(.3)
+    (OUT/'alarm-debug.json').write_text(json.dumps({'expected':at,'state':prefs('scheduled_occurrences'),'records':records()},indent=2))
+    (OUT/'alarm-manager.txt').write_text(adb('shell','dumpsys','alarm'))
     raise AssertionError('Alarm was not delivered: '+str(at))
 
 def fresh_ring(alarm_id,at):
@@ -111,14 +113,19 @@ def visual_difference(a,b):
 
 
 def set_time(milliseconds,notify=True):
-    value=dt.datetime.fromtimestamp(milliseconds/1000,dt.timezone.utc).strftime('%m%d%H%M%Y.%S')
-    print(adb('shell','date','-u',value),flush=True)
+    # Disposable rooted API33 emulator: IAlarmManager.aidl transaction2 is setTime.
+    # Use the framework clock path so the kernel alarm driver rebatches RTC alarms
+    # and Android sends its real TIME_SET broadcast. Changing toybox date alone
+    # can leave previously-converted elapsed deadlines unchanged on this image.
+    result=adb('shell','service','call','alarm','2','i64',str(milliseconds))
+    assert '00000001' in result,('Framework clock update failed',result)
     actual=int(adb('shell','date','+%s').strip())
-    assert abs(actual-milliseconds//1000)<8, ('Clock did not change',actual,milliseconds//1000)
-    if notify:adb('shell','am','broadcast','--async','-a','android.intent.action.TIME_SET','-p',PKG)
+    assert abs(actual-milliseconds//1000)<8,('Clock did not change',actual,milliseconds//1000)
+    print('CLOCK '+dt.datetime.fromtimestamp(actual,dt.timezone.utc).isoformat(),flush=True)
 
 try:
     print(adb('root'),flush=True);adb('wait-for-device')
+    assert adb('shell','getprop','ro.build.version.sdk').strip()=='33','Framework clock transaction is pinned to the API33 AIDL contract'
     adb('shell','settings','put','global','auto_time','0')
     adb('shell','settings','put','global','auto_time_zone','0')
     adb('shell','setprop','persist.sys.timezone','Etc/UTC')
