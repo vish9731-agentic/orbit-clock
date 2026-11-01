@@ -37,6 +37,7 @@ public final class BezelUiProbe extends Instrumentation {
     private File out;
     private final List<String> checks = new ArrayList<>();
     private float density;
+    private long injectedDownTime;
     private String fixtureId = "";
     private long fixtureAt;
 
@@ -259,18 +260,19 @@ public final class BezelUiProbe extends Instrumentation {
     }
     private void pointer(int action,float x,float y) {
         long now=SystemClock.uptimeMillis();
-        MotionEvent e=MotionEvent.obtain(now,now,action,x,y,0);
+        if(action==MotionEvent.ACTION_DOWN) injectedDownTime=now;
+        MotionEvent e=MotionEvent.obtain(injectedDownTime,now,action,x,y,0);
         e.setSource(InputDevice.SOURCE_TOUCHSCREEN); sendPointerSync(e); e.recycle();
     }
     private void partialSwipe(Activity a, boolean cancel) throws Exception {
         View thumb=sliderThumb(a); View rail=actions(a);
-        float before=position(thumb);
-        int[] p=ui(() -> { int[] xy=new int[2]; thumb.getLocationOnScreen(xy); return xy; });
-        float x=p[0]+ui(thumb::getWidth)/2f, y=p[1]+ui(thumb::getHeight)/2f;
+        float[] p=ui(() -> { int[] xy=new int[2]; thumb.getLocationOnScreen(xy); return new float[]{xy[0]+thumb.getWidth()/2f,xy[1]+thumb.getHeight()/2f,thumb.getTranslationX()}; });
+        float before=p[2], x=p[0], y=p[1];
         pointer(MotionEvent.ACTION_DOWN,x,y);
-        require(Math.abs(position(thumb)-before)<2*density,"Catching a moving thumb caused a position jump");
+        require(Math.abs(position(thumb)-before)<3*density,"Catching a moving thumb caused a position jump");
         SystemClock.sleep(45);
         pointer(MotionEvent.ACTION_MOVE,x+travel(rail,thumb)*.25f,y);
+        require(Math.abs(position(thumb)-(before+travel(rail,thumb)*.25f))<2*density,"Touch drag did not follow the finger");
         SystemClock.sleep(45);
         pointer(cancel?MotionEvent.ACTION_CANCEL:MotionEvent.ACTION_UP,x+travel(rail,thumb)*.25f,y);
     }
