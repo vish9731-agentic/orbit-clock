@@ -41,11 +41,25 @@ def run(ui):
         before=player();time.sleep(.65);after=player()
         assert after.get('playing')=='true' and int(after.get('position','0'))!=int(before.get('position','0')), (before,after)
         passed(('Background music' if mode=='music' else 'Foreground video')+' plays and advances before the alarm')
+    def new_timer(before):
+        until=time.monotonic()+8
+        while time.monotonic()<until:
+            candidates=[a for a in records() if a['id'] not in before and a.get('timer') and a['enabled']]
+            if candidates:return candidates[0]
+            time.sleep(.15)
+        raise AssertionError('New timer was not persisted after a single Start tap')
+    def await_record(alarm_id,condition,label):
+        until=time.monotonic()+8
+        while time.monotonic()<until:
+            a=record(alarm_id)
+            if condition(a):return a
+            time.sleep(.15)
+        raise AssertionError(label+': '+str(a))
     def create_timer():
         main();click('Timer');click('1')
         one=xy(find(desc='Timer preset: 1 min'));start=xy(find('Start timer'))
         before={a['id'] for a in records()};tap(start)
-        a=next(a for a in records() if a['id'] not in before and a.get('timer') and a['enabled'])
+        a=new_timer(before)
         return a,one,start
     def await_alarm(a):
         until=time.monotonic()+100
@@ -92,19 +106,19 @@ def run(ui):
     advancing('music')
     # A second real timer follows while music stays in a foreground playback service.
     main();click('Timer');time.sleep(.7);before={a['id'] for a in records()};tap(one);tap(start)
-    second=next(a for a in records() if a['id'] not in before and a.get('timer') and a['enabled'])
+    second=new_timer(before)
     assert 0<second['snoozeUntil']-first['snoozeUntil']<45000,(first,second)
     adb('shell','am','start','-W','-a','android.settings.SETTINGS')
     await_alarm(first);assert paused('music'), 'Music scenario must exercise actual focus loss and release'
     await_alarm(second);time.sleep(.5)
     p=player();assert p['playing']=='false' and p['events'].count('media_pause;')==1 and 'focus:1;' not in p['events'],p
     passed('Overlapping alarms share focus without resuming or repeatedly pausing the player')
-    stop_banner();assert not record(second['id'])['enabled']
+    stop_banner();await_record(second['id'],lambda a:not a['enabled'],'Second alarm did not stop')
     time.sleep(.6);p=player()
     assert p['playing']=='false' and 'focus:1;' not in p['events'],p
     assert int(preferences('scheduled_occurrences').get(first['id']+'.active',0))==first['snoozeUntil']
     passed('Stopping one overlapping alarm keeps media paused while the other rings')
-    stop_banner();assert not record(first['id'])['enabled'];resumed('music')
+    stop_banner();await_record(first['id'],lambda a:not a['enabled'],'First alarm did not stop');resumed('music')
     passed('Stopping the last alarm releases audio focus to the previous music player')
     adb('shell','am','start','-W','-f','0x10008000','-n',PROBE+'/.ProbeActivity','--es','mode','stop')
     await_player(lambda p:p.get('playing')=='false' and 'closed;' in p.get('events',''),'Music fixture did not stop')
@@ -112,7 +126,7 @@ def run(ui):
     await_alarm(video);video_owned_focus=paused('video')
     before=int(adb('shell','date','+%s').strip())*1000
     stop_banner(snooze=True)
-    snoozed=record(video['id']);assert snoozed['snoozeMinutes']==video['snoozeMinutes']
+    snoozed=await_record(video['id'],lambda a:a['skipThrough']==video['snoozeUntil'] and a['snoozeUntil']>before,'Video alarm did not snooze');assert snoozed['snoozeMinutes']==video['snoozeMinutes']
     assert before+10*60000<=snoozed['snoozeUntil']<=int(adb('shell','date','+%s').strip())*1000+10*60000+1000
     assert_scheduled(video['id'],snoozed['snoozeUntil'])
     if video_owned_focus:resumed('video')
