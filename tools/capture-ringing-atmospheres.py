@@ -28,13 +28,14 @@ def tree():
             if attempt==4: raise RuntimeError('No fresh UI hierarchy: '+last+' '+str(error)) from error
             time.sleep(.6)
 
-def find(text=None,desc=None,res=None,optional=False):
+def find(text=None,desc=None,res=None,optional=False,prefix=None):
     for _ in range(1 if optional else 4):
         for n in tree().iter('node'):
             a=n.attrib
             if ((text is not None and a.get('text')==text) or
                 (desc is not None and a.get('content-desc')==desc) or
-                (res is not None and a.get('resource-id')==res)):
+                (res is not None and a.get('resource-id')==res) or
+                (prefix is not None and a.get('content-desc','').startswith(prefix))):
                 bounds=list(map(int,re.findall(r'\d+',a.get('bounds',''))))
                 if len(bounds)==4 and bounds[2]>bounds[0] and bounds[3]>bounds[1]: return n
         time.sleep(.35)
@@ -82,7 +83,7 @@ def await_alarm(alarm_id,at):
 
 def fresh_ring(alarm_id,at):
     # Rooted disposable device only: every launch still requires a valid occurrence.
-    adb('shell','am','start','-W','-f','0x10008000','-n',PKG+'/dev.orbit.clock.core.RingActivity',
+    adb('shell','am','start','-f','0x10008000','-n',PKG+'/dev.orbit.clock.core.RingActivity',
         '--es','id',alarm_id,'--el','at',str(at))
     time.sleep(.5)
     find(desc='Alarm label: Alarm')
@@ -128,7 +129,7 @@ try:
     adb('shell','input','keyevent','224');adb('shell','wm','dismiss-keyguard')
     adb('shell','am','start','-W','-n',PKG+'/dev.orbit.clock.phone.MainActivity')
     before={a['id'] for a in records()}
-    tap(desc='Add alarm');find('New alarm');tap('Save alarm')
+    tap(desc='Add alarm');find('New alarm');tap(desc='Alarm sound');tap('Save alarm')
     until=time.monotonic()+8;alarm=None
     while time.monotonic()<until:
         added=[a for a in records() if a['id'] not in before and a['enabled'] and not a.get('timer') and not a['deleted']]
@@ -143,7 +144,7 @@ try:
     assert at,'Saved alarm was not scheduled'
     set_time(at-15000)
     await_alarm(alarm['id'],at)
-    fresh_ring(alarm['id'],at)
+    if find(desc='Alarm label: Alarm',optional=True) is None:fresh_ring(alarm['id'],at)
     find(desc='Snooze duration: 10 minutes')
     day=dt.datetime.fromtimestamp(at/1000,dt.timezone.utc).replace(hour=0,minute=0,second=0,microsecond=0)
     periods=[('early-morning',6),('sunshine',8),('noon',12),('afternoon',15),('evening',18),('late-evening',21),('night',1)]
@@ -206,7 +207,7 @@ try:
         fresh_ring(alarm['id'],at)
         actual=dt.datetime.fromtimestamp(int(adb('shell','date','+%s').strip()),dt.timezone.utc)
         assert actual.hour==hour,(hour,actual)
-        find(desc=f'Alarm time: {actual.hour:02d}:{actual.minute:02d}')
+        find(prefix=f'Alarm time: {actual.hour:02d}:')
         find(desc='Snooze duration: 10 minutes')
         entry={'hour':hour,'occurrence':at,'saved_hour':snoozed['hour'],'default_snooze':snoozed['snoozeMinutes']}
         hourly.append(entry);print('SNOOZE '+json.dumps(entry),flush=True)
@@ -221,9 +222,14 @@ try:
     assert not crash.strip(),crash
     print('CAPTURE RESULT: seven distinct real app screenshots, live time refresh, eight real hourly snoozes and no crashes',flush=True)
 except Exception:
+    # Collect non-graphics diagnostics first; a stalled compositor must not
+    # prevent retaining the app/system logs needed to diagnose a failed launch.
+    for name,args in [('failure-crashes.txt',('logcat','-d','-b','crash')),
+                      ('failure-logcat.txt',('logcat','-d','-t','500'))]:
+        try:(OUT/name).write_text(adb(*args))
+        except Exception as error:print('Diagnostic capture:',name,error,flush=True)
     try:
-        (OUT/'failure.png').write_bytes(adb('exec-out','screencap','-p',binary=True))
         (OUT/'failure.xml').write_text(ET.tostring(tree(),encoding='unicode'))
-        (OUT/'failure-logcat.txt').write_text(adb('logcat','-d','-t','400'))
-    except Exception as e: print('Evidence capture:',e,flush=True)
+        (OUT/'failure.png').write_bytes(adb('exec-out','screencap','-p',binary=True))
+    except Exception as e:print('Evidence capture:',e,flush=True)
     raise

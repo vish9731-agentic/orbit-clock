@@ -7,12 +7,13 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.RadialGradient
+import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
 
 /** Static corner light, not a full-screen tint. All decoration stays clear of time and actions. */
 class RingAtmosphereDrawable(minute: Int) : Drawable() {
-    private data class Light(val shader: Shader)
+    private data class Light(val shader: Shader, val area: RectF)
     private data class Celestial(val scene: RingAtmosphere.Scene, val opacity: Float)
     private var currentMinute = Math.floorMod(minute, 1440)
     private var lights = emptyList<Light>()
@@ -53,7 +54,15 @@ class RingAtmosphereDrawable(minute: Int) : Drawable() {
                 setScale(rx, ry)
                 postTranslate(bounds.left + cx, bounds.top + cy)
             })
-            nextLights += Light(shader)
+            // A CLAMP gradient is fully transparent beyond its unit circle.
+            // Restrict GPU work to that ellipse's clipped rectangle instead of
+            // shading the whole display for every small corner layer.
+            val area = RectF(bounds.left + cx - rx, bounds.top + cy - ry,
+                bounds.left + cx + rx, bounds.top + cy + ry)
+            if (area.intersect(bounds.left.toFloat(), bounds.top.toFloat(),
+                    bounds.right.toFloat(), bounds.bottom.toFloat())) {
+                nextLights += Light(shader, area)
+            }
         }
         fun scene(scene: RingAtmosphere.Scene, weight: Float) {
             if (weight < .001f) return
@@ -76,12 +85,15 @@ class RingAtmosphereDrawable(minute: Int) : Drawable() {
     }
 
     override fun draw(canvas: Canvas) {
+        if (bounds.isEmpty) return
+        val checkpoint = canvas.save()
+        canvas.clipRect(bounds)
         paint.shader = null; paint.colorFilter = filter
         paint.color = RingAtmosphere.tint(currentMinute); paint.alpha = opacity
         canvas.drawRect(bounds, paint)
         for (light in lights) {
             paint.shader = light.shader; paint.alpha = opacity
-            canvas.drawRect(bounds, paint)
+            canvas.drawRect(light.area, paint)
         }
         paint.shader = null
         val w = bounds.width().toFloat(); val h = bounds.height().toFloat()
@@ -111,6 +123,7 @@ class RingAtmosphereDrawable(minute: Int) : Drawable() {
             canvas.drawPath(moon, paint)
         }
         paint.alpha = 255
+        canvas.restoreToCount(checkpoint)
     }
 
     override fun setAlpha(alpha: Int) { opacity = alpha.coerceIn(0, 255); invalidateSelf() }

@@ -41,6 +41,7 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan
           disable-animations: false
           emulator-boot-timeout: 360
           script: |
@@ -48,6 +49,7 @@ jobs:
             adb shell settings put secure user_setup_complete 1
             adb shell pm disable-user --user 0 com.google.android.googlesdksetup || true
             adb shell am force-stop com.google.android.apps.nexuslauncher
+            adb shell setprop debug.hwui.renderer skiagl
             adb install phone/build/outputs/apk/debug/phone-debug.apk
             adb shell pm grant dev.orbit.clock android.permission.POST_NOTIFICATIONS
             adb shell appops set dev.orbit.clock SCHEDULE_EXACT_ALARM allow
