@@ -6,12 +6,24 @@ The user wants a personal Android phone + Galaxy Watch 4 Classic clock app inspi
 
 The user authorized creating the private personal repository, uploading this project, fixing build failures, running tests and publishing debug APK downloads. Login and account authorization are completed by the user. Do not use Bytebeam repositories for this project.
 
+## Current verified interaction update — 0.1.30
+
+Source `69380559ed71382174005744801fbcca14e91d4a`, version code 31. [Build/tests/lint/publication](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41291899614) and [full Android 15 emulator suite](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41291899547) passed. Both release APK assets are uploaded; the shared signing identity is unchanged. Seven Kotlin/JUnit tests and 44 production-policy checks pass.
+
+All **48 emulator scenarios** passed with an empty crash buffer. Coverage includes all five tools, saved alarm persistence, large type, real timer delivery, five-to-sixty-minute snooze limits, recreation, actual selected snooze deadlines, separate Stop, held volume up, volume down with animations disabled, interruptible spring cancellation, hint learning/dismissal/session caps, city removal, bounded truthful connection feedback, canceled native back/draft preservation, committed back without saving, inline-error recovery, intermediate motion frames, rapid tab changes and reduced-motion operation. Internal screenshots and transition video frames were reviewed; they are feedback for development, not routine user deliverables.
+
+The approved dark green ringing reference remains: light large time, custom label or Alarm, compact duration row and Snooze/Stop rail. Action labels are 24sp regular. Navigation chrome stays mounted around native Material shared-axis transitions with overlapping fades. The slider uses raw finger velocity and an interruptible bounded native spring; actions execute immediately on release, never in animation completion callbacks. Native FAB/component motion and system haptic preferences are preserved.
+
+Contextual hints retire after demonstrated use or dismissal and otherwise cap at three visible app-process sessions. Rotations and rerenders do not consume extra impressions. Ringing guidance progresses from swipe directions to volume shortcut; watch education explains bezel control without enlarging the ringing layout. Sync feedback reports observed connectivity/request status or timeout; it never claims unacknowledged delivery. Both manifests opt into native predictive back with older-platform fallback. See [reference mapping](docs/INTERACTIONS.md) and [motion inventory](docs/MOTION.md).
+
+Phone emulator evidence cannot establish physical frame rate, haptic quality, Wear OS layout/usability, Bluetooth delivery, hardware-key behavior on the user's phone, or physical bezel direction/thresholds. Those device checks and full Google Clock feature parity remain outstanding. The app owns its alarms; Google Clock private alarms are not imported.
+
 ## Current state
 
 - Private repository exists: https://github.com/vish9731-agentic/orbit-clock. Personal-account access and admin/push permissions were confirmed.
 - Source lives at `/workspace/orbit-clock`. Modules: `core`, `phone`, `wear`. JDK 17, SDK 35, AGP 8.7.3, Kotlin 2.0.21, Gradle 8.9; Gradle wrapper is included.
 - Local build succeeded for `:core:testDebugUnitTest :phone:assembleDebug :wear:assembleDebug :phone:lintDebug :wear:lintDebug`.
-- Current verification: 7 Kotlin/JUnit tests, 44 production-policy checks and 24 Android 15 emulator scenarios passed; both debug APK builds and lint passed.
+- Current verification: 7 Kotlin/JUnit tests, 44 production-policy checks and 48 Android 15 emulator scenarios passed on source 69380559; both debug APK builds and lint passed.
 - Both debug APKs exist under their modules' `build/outputs/apk/debug/` directories. APK v2 signature verification passed for both with matching certificate SHA-256 `d3c6b53474417ca21c9e094ffa4a1eefd021af614f6267a2c882b993397e4f4a`.
 - Android 15 phone-emulator startup smoke test passed: https://github.com/vish9731-agentic/orbit-clock/actions/runs/41171287946. APK installation and launch succeeded, the app process remained alive after 10 seconds, the crash buffer was empty, and a screenshot was captured. Hardware, Bluetooth delivery and physical-bezel tests remain.
 - Repository upload is complete. Cloud build/tests/lint/publication passed: https://github.com/vish9731-agentic/orbit-clock/actions/runs/41104668417. Release: https://github.com/vish9731-agentic/orbit-clock/releases/tag/debug-latest. Downloaded both cloud artifacts and release APKs, confirmed byte-for-byte matches, matching debug certificates, version code 3 and debuggable manifest. The first attempt failed on retired SDK package `tools`; the workflow now installs explicit supported packages.

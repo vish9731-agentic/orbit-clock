@@ -9,7 +9,7 @@ Keep the approved Google Clock ringing layout and quiet typography. Hints must e
 | [Material 3 motion](https://m3.material.io/styles/motion/overview/how-it-works) | Coordinated spatial transitions; short opacity/color effects; native Material component motion |
 | [Reply motion examples](https://codelabs.developers.google.com/codelabs/material-motion-android) | Continuous context between tools, persistent chrome, shared-axis movement with overlapping fades |
 | [Designing Fluid Interfaces](https://developer.apple.com/videos/play/wwdc2018/803/) | Direct finger tracking, raw-coordinate velocity, interruptible native spring return |
-| [TipKit education principles](https://developer.apple.com/videos/play/wwdc2023/10229/) | Contextual eligibility, learning, dismissal, and a three-visible-session cap; implemented natively on Android |
+| [TipKit education principles](https://developer.apple.com/videos/play/wwdc2023/10229/) | Contextual eligibility, learning, dismissal, and a three-visible-process-session cap; implemented natively on Android |
 | [Android predictive back](https://developer.android.com/design/ui/mobile/guides/patterns/predictive-back) | Native back opt-in and Material bottom-sheet handling, with older-platform fallback |
 | [Android haptics](https://developer.android.com/develop/ui/views/haptics/haptics-principles) | Normal system ticks for selection/threshold, confirmation on completion, no forced vibration preferences |
 
@@ -24,7 +24,7 @@ Keep the approved Google Clock ringing layout and quiet typography. Hints must e
 - Watch alarm pages can explain bezel control without adding another row to the compact ringing controls.
 - Phone ringing first explains slide directions, then offers the volume-button shortcut after touch controls are learned. Successful hardware use retires its hint.
 
-Hints stay local to each device. Explicit dismissal and demonstrated learning take precedence over display limits. Only hints at least half-visible count toward the session budget; rotations and page rerenders do not consume additional impressions. Essential action labels and accessibility instructions remain after education retires. No modal coach marks interrupt a ringing alarm.
+Hints stay local to each device. Explicit dismissal and demonstrated learning take precedence over display limits. Only hints at least half-visible count toward the app-process-session budget; rotations and page rerenders do not consume additional impressions. Essential action labels and accessibility instructions remain after education retires. No modal coach marks interrupt a ringing alarm.
 
 ## Motion and state
 

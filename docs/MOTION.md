@@ -12,8 +12,9 @@ Main clock, timer and stopwatch numerals use tabular figures to avoid horizontal
 
 | Interaction | Feedback |
 | --- | --- |
-| Buttons, FAB, clickable alarm cards | Native ripple plus 0.97 press scale over 80ms; 180ms return |
-| Tool navigation | Direction follows tab order; 18dp content movement and fade over 220ms, with incoming content visible from 35% opacity to avoid an empty flash |
+| Buttons and clickable alarm cards | Native ripple plus 0.97 press scale over 80ms; 180ms return |
+| FAB | Native Material press/elevation and show/hide motion |
+| Tool navigation | Persistent chrome; native Material shared-axis movement and overlapping fades over 240ms, following tab order |
 | Screen and card entrance | 10dp movement/fade; 18ms stagger capped at 90ms, limited to the first eight children |
 | Alarm, timer, city or lap insertion | New visible item enters; existing keyed items move to their new positions over 220ms |
 | Removal/reordering | State changes immediately; remaining visible keyed items move into place, preserving scroll position |
@@ -30,12 +31,12 @@ Main clock, timer and stopwatch numerals use tabular figures to avoid horizontal
 | Alarm/permission/time bottom sheets | Native Material sheet movement; bounded content entrance for editor/time picker |
 | Dialogs, switches, text fields and time picker | Native Material feedback retained, including focus, errors, ripple and checked state |
 | City selection and watch-tool menu | Selection tick plus the corresponding content transition |
-| Sync request | Finite 300ms half-turn and press feedback; toast says requested, never falsely reports successful delivery |
+| Sync request | Finite 300ms half-turn and press feedback; bounded connection-status check, never falsely reports successful delivery |
 | Ringing-screen entrance | Time and label fade/move in; alarm action controls are immediately available |
 | Snooze-duration adjustment | Value changes immediately, then gives the 180ms value pulse |
 | Slider drag | Thumb follows the finger directly, grows by 4%, tilts up to 8°, and gently dims the opposite action label |
 | Slider threshold | One tick when crossing the threshold per gesture; confirmation haptic on completion |
-| Incomplete/canceled slider drag | 260ms low-overshoot return to center, restoring labels and thumb scale |
+| Incomplete/canceled slider drag | Native, velocity-aware spring return with bounded travel; labels follow actual spring position and new input interrupts without a jump |
 | Slider completion and volume buttons | Alarm action executes immediately, never waits for animation completion |
 
 ## Motion policy
@@ -53,3 +54,5 @@ The cloud emulator suite enables real Android animations, exercises normal featu
 See verification/STATUS.md for the observed result and source revision. Emulator feedback cannot establish physical-device frame rate, haptic quality or watch usability.
 
 Verification scope defaults to full. After the main flows have been covered on unchanged app code, select ringing-motion or motion for a focused rerun using the workflow input or explicit commit markers [ui:ringing-motion] / [ui:motion]. Focused tests retain the same assertions. Scheduled-deadline reads wait up to five seconds for the main screen’s asynchronous restore to finish; a missing or wrong final schedule still fails.
+
+See [INTERACTIONS.md](INTERACTIONS.md) for reference mapping, contextual education, visible-session caps, native back behavior, and truthful connection feedback. Hints use up to three visible app-process sessions; learning and explicit dismissal retire them sooner. Native page transitions keep the header/navigation/status/FAB mounted. Confirmation feedback reflects local saves and never asserts watch delivery without an acknowledgement.

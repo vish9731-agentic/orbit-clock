@@ -1,5 +1,19 @@
 # Verification status
 
+## Current verified interaction update — 0.1.30
+
+Source `69380559ed71382174005744801fbcca14e91d4a`, version code 31. [Build/tests/lint/publication](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41291899614) and [full Android 15 emulator suite](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41291899547) passed. Both release APK assets are uploaded; the shared signing identity is unchanged. Seven Kotlin/JUnit tests and 44 production-policy checks pass.
+
+All **48 emulator scenarios** passed with an empty crash buffer. Coverage includes all five tools, saved alarm persistence, large type, real timer delivery, five-to-sixty-minute snooze limits, recreation, actual selected snooze deadlines, separate Stop, held volume up, volume down with animations disabled, interruptible spring cancellation, hint learning/dismissal/session caps, city removal, bounded truthful connection feedback, canceled native back/draft preservation, committed back without saving, inline-error recovery, intermediate motion frames, rapid tab changes and reduced-motion operation. Internal screenshots and transition video frames were reviewed; they are feedback for development, not routine user deliverables.
+
+The approved dark green ringing reference remains: light large time, custom label or Alarm, compact duration row and Snooze/Stop rail. Action labels are 24sp regular. Navigation chrome stays mounted around native Material shared-axis transitions with overlapping fades. The slider uses raw finger velocity and an interruptible bounded native spring; actions execute immediately on release, never in animation completion callbacks. Native FAB/component motion and system haptic preferences are preserved.
+
+Contextual hints retire after demonstrated use or dismissal and otherwise cap at three visible app-process sessions. Rotations and rerenders do not consume extra impressions. Ringing guidance progresses from swipe directions to volume shortcut; watch education explains bezel control without enlarging the ringing layout. Sync feedback reports observed connectivity/request status or timeout; it never claims unacknowledged delivery. Both manifests opt into native predictive back with older-platform fallback. See [reference mapping](../docs/INTERACTIONS.md) and [motion inventory](../docs/MOTION.md).
+
+Phone emulator evidence cannot establish physical frame rate, haptic quality, Wear OS layout/usability, Bluetooth delivery, hardware-key behavior on the user's phone, or physical bezel direction/thresholds. Those device checks and full Google Clock feature parity remain outstanding. The app owns its alarms; Google Clock private alarms are not imported.
+
+## Historical evidence
+
 ## Completed locally
 
 | Check | Result |

@@ -2,7 +2,7 @@
 
 Native Android phone and Wear OS clock apps with a Material You / Material 3 interface, shared alarms, and rotating-bezel controls for Galaxy Watch 4 Classic.
 
-Both debug APKs now compile successfully. The project passes 7 Kotlin/JUnit tests and 44 standalone checks of the production timing and gesture policies. Android lint reports no errors. The redesigned phone UI also passes 24 Android 15 emulator interaction checks. **The [Material UI interaction suite](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41176288860) passes alarm editing/persistence, city search, timers, stopwatch, bedtime settings, dark mode, and 130% text size. Physical-device testing remains.** This is a working build of an initial prototype, not full Google Clock feature parity or a validated alarm replacement.
+Both debug APKs build successfully. The project passes 7 Kotlin/JUnit tests and 44 standalone production-policy checks, with phone/watch lint passing. The current interface adds contextual learning hints, continuous Material navigation, interruptible spring swipe feedback and finite connection status. All 48 Android 15 emulator scenarios passed on source `69380559`. See [verification/STATUS.md](verification/STATUS.md) for revision-specific emulator evidence. Physical-device testing remains. This is an initial prototype, not full Google Clock feature parity or a validated alarm replacement.
 
 Private repository: [vish9731-agentic/orbit-clock](https://github.com/vish9731-agentic/orbit-clock).
 
@@ -55,7 +55,7 @@ The intended flow is: request a change → a coding session with access updates 
 
 The [Android debug workflow](.github/workflows/android-debug.yml) runs on push, pull request or manual dispatch. After a successful default-branch build, it is configured to publish individual APKs to the `debug-latest` prerelease as well as Actions artifacts. **Verified:** [cloud build, tests, lint and publication succeeded](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41104668417). Both phone and watch debug APKs are built and uploaded from the verified revision; the development signing key is unchanged.
 
-Verified download links (version `0.1.20`, version code `21` for this build):
+Verified download links (version `0.1.30`, version code `31` for this build):
 
 - [Phone debug APK](https://github.com/vish9731-agentic/orbit-clock/releases/download/debug-latest/orbit-clock-phone-debug.apk)
 - [Watch debug APK](https://github.com/vish9731-agentic/orbit-clock/releases/download/debug-latest/orbit-clock-watch-debug.apk)
@@ -82,3 +82,9 @@ While the ringing screen is open and focused, either physical volume button snoo
 ## Ringing screen
 
 The phone follows the user-selected Google Clock reference: a plain dark green background, large time, saved custom label (or “Alarm” when blank), and a Snooze/Stop rail with a draggable center thumb. A compact minus/minutes/plus row sits above it, with five-minute steps from 5 to 60. Both volume buttons still snooze while the ringing screen is focused. Accessible action labels also support tapping. Watch controls retain their compact dark layout.
+
+## Motion and contextual guidance
+
+The selected dark green ringing layout is preserved, with quieter 24sp Snooze/Stop labels. Persistent navigation surrounds native Material shared-axis transitions; the alarm thumb follows the finger and returns with an interruptible velocity-aware spring. Native components retain their own motion and haptics, and reduced-motion settings resolve controls immediately.
+
+Hints explain editing, city removal, timer presets, laps, bedtime and ringing shortcuts only when relevant. Learning or dismissal retires them, and a maximum of three visible app-process sessions prevents repeated education. Connection checks report availability/request status with a timeout, without claiming unacknowledged delivery. See [interaction references](docs/INTERACTIONS.md) and [motion policy](docs/MOTION.md).
