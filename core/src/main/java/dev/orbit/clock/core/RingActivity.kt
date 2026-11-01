@@ -28,10 +28,10 @@ class RingActivity : AppCompatActivity() {
     private lateinit var increase: MaterialButton
     private lateinit var progress: TextView
     private lateinit var indicator: LinearProgressIndicator
-    private var watchActions: WatchRingActions? = null
+    private var watchActions: AlarmSlideControl? = null
     private val bezelHandler = Handler(Looper.getMainLooper())
     // Match RotaryGesture's >1500ms pause boundary without changing its thresholds.
-    private val resetBezelFeedback = Runnable { watchActions?.resetProgress() }
+    private val resetBezelFeedback = Runnable { watchActions?.releaseBezel() }
     private val changes = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
             val a = Store(c).get(id)
@@ -115,9 +115,9 @@ class RingActivity : AppCompatActivity() {
         body.addView(stepper, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(if (watch) 4 else 16) })
         updateDuration()
         if (watch) {
-            val actions = WatchRingActions(this, colors, { act(true) }, { act(false) })
+            val actions = AlarmSlideControl(this, { act(true) }, { act(false) }, compact = true)
             watchActions = actions
-            body.addView(actions, LinearLayout.LayoutParams(-1, dp(80)))
+            body.addView(actions, LinearLayout.LayoutParams(-1, dp(64)))
         } else {
             body.addView(AlarmSlideControl(this,
                 { VisualHints.learn(this, "ring_controls"); act(true) },
@@ -216,7 +216,7 @@ class RingActivity : AppCompatActivity() {
             // three/six-unit amounts while mapping anticlockwise to Snooze.
             val action = gesture.turn(if (watch) -rawTurn else rawTurn, SystemClock.elapsedRealtime())
             if (watch) {
-                watchActions?.setProgress(gesture.isSnoozing, gesture.progress())
+                watchActions?.setBezelProgress(gesture.isSnoozing, gesture.progress() / 100f)
                 bezelHandler.removeCallbacks(resetBezelFeedback)
                 bezelHandler.postDelayed(resetBezelFeedback, 1501)
             } else {

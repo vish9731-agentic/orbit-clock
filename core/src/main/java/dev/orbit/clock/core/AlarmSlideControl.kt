@@ -15,7 +15,7 @@ import com.google.android.material.button.MaterialButton
 import kotlin.math.abs
 
 /** Google Clock-style rail with a draggable center thumb and accessible action labels. */
-class AlarmSlideControl(context: Context, private val snooze: () -> Unit, private val stop: () -> Unit) : FrameLayout(context) {
+class AlarmSlideControl(context: Context, private val snooze: () -> Unit, private val stop: () -> Unit, private val compact: Boolean = false) : FrameLayout(context) {
     private fun dp(n: Int) = (resources.displayMetrics.density * n).toInt()
     private var startX = 0f
     private var dragging = false
@@ -23,6 +23,34 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
     private var thresholdTicked = false
     private var tracker: VelocityTracker? = null
     private var returnSpring: SpringAnimation? = null
+    private var bezelSpring: SpringAnimation? = null
+    private var lastBezelTime = 0L
+    private var lastBezelTarget = 0f
+    private var bezelVelocity = 0f
+    /** Physical progress is authoritative; spring inertia cannot fire an action. */
+    fun setBezelProgress(snoozing: Boolean, fraction: Float) {
+        if (fired || dragging) return
+        val target = travel() * fraction.coerceIn(0f, 1f) * if (snoozing) -1f else 1f
+        val now = android.os.SystemClock.uptimeMillis()
+        val dt = (now - lastBezelTime).coerceIn(16, 250) / 1000f
+        bezelVelocity = ((target - lastBezelTarget) / dt).coerceIn(-dp(300).toFloat(), dp(300).toFloat())
+        lastBezelTime = now; lastBezelTarget = target
+        returnSpring?.cancel()
+        if (!OrbitMotion.enabled()) {
+            bezelSpring?.cancel(); thumb.translationX = target; feedback(target); return
+        }
+        val spring = bezelSpring ?: SpringAnimation(thumb, DynamicAnimation.TRANSLATION_X).apply {
+            this.spring = SpringForce(0f).apply { dampingRatio = .78f; stiffness = 420f }
+            setMinValue(-travel()); setMaxValue(travel()); setMinimumVisibleChange(.15f)
+            addUpdateListener { _, value, _ -> feedback(value) }
+        }.also { bezelSpring = it }
+        if (!spring.isRunning) spring.setStartVelocity(bezelVelocity * .18f)
+        spring.animateToFinalPosition(target)
+    }
+    fun releaseBezel() {
+        bezelSpring?.cancel(); lastBezelTarget = 0f
+        settle(velocity = bezelVelocity * .12f); bezelVelocity = 0f
+    }
     private lateinit var snoozeLabel: MaterialButton
     private lateinit var stopLabel: MaterialButton
     private val thumb: MaterialButton
@@ -30,13 +58,13 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
         background = GradientDrawable().apply { setColor(0xff103a35.toInt()); cornerRadius = dp(48).toFloat() }
         fun action(text: String, gravity: Int, callback: () -> Unit) {
             val button = MaterialButton(context).apply {
-                this.text = text; isAllCaps = false; textSize = 22f; typeface = android.graphics.Typeface.create(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL), 450, false); setTextColor(0xffd3e3df.toInt())
+                this.text = text; isAllCaps = false; textSize = if (compact) 13f else 22f; typeface = android.graphics.Typeface.create(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL), 450, false); setTextColor(0xffd3e3df.toInt())
                 backgroundTintList = ColorStateList.valueOf(android.graphics.Color.TRANSPARENT)
                 minWidth = 0; minimumWidth = 0; setPadding(0, 0, 0, 0); insetTop = 0; insetBottom = 0
                 setOnClickListener { if (!fired) { fired = true; performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM); callback() } }
             }
             if (text == "Snooze") snoozeLabel = button else stopLabel = button
-            addView(button, LayoutParams(dp(132), -1, gravity))
+            addView(button, LayoutParams(dp(if (compact) 64 else 132), -1, gravity))
         }
         action("Snooze", Gravity.START, snooze)
         action("Stop", Gravity.END, stop)
@@ -44,8 +72,8 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
             setTag(R.id.orbit_motion_bound, true); stateListAnimator = null
             contentDescription = "Alarm slider: swipe left to snooze, right to stop"
             setIconResource(R.drawable.ic_alarm); iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
-            iconTint = ColorStateList.valueOf(0xff74e8d7.toInt()); iconSize = dp(24); iconPadding = 0
-            minWidth = 0; minimumWidth = 0; setPadding(dp(34), 0, dp(34), 0)
+            iconTint = ColorStateList.valueOf(0xff74e8d7.toInt()); iconSize = dp(if (compact) 20 else 24); iconPadding = 0
+            minWidth = 0; minimumWidth = 0; setPadding(dp(if (compact) 12 else 34), 0, dp(if (compact) 12 else 34), 0)
             cornerRadius = dp(40); insetTop = 0; insetBottom = 0
             backgroundTintList = ColorStateList.valueOf(0xff00564d.toInt())
             setOnClickListener { announceForAccessibility("Swipe left to snooze, right to stop") }
@@ -53,7 +81,7 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
                 when (e.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
                         VisualHints.cancel(this@AlarmSlideControl)
-                        returnSpring?.cancel(); animate().cancel(); tracker?.recycle(); tracker = VelocityTracker.obtain(); track(e)
+                        bezelSpring?.cancel(); returnSpring?.cancel(); animate().cancel(); tracker?.recycle(); tracker = VelocityTracker.obtain(); track(e)
                         startX = e.rawX - translationX; dragging = true; thresholdTicked = false
                         if (OrbitMotion.enabled()) animate().scaleX(1.04f).scaleY(1.04f).setStartDelay(0).setDuration(100).start()
                         parent.requestDisallowInterceptTouchEvent(true); true
@@ -84,11 +112,11 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
                 }
             }
         }
-        addView(thumb, LayoutParams(dp(96), dp(64), Gravity.CENTER))
+        addView(thumb, LayoutParams(dp(if (compact) 48 else 96), dp(if (compact) 48 else 64), Gravity.CENTER))
         VisualHints.bind(this, "ring_controls", directional = true)
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
     }
-    private fun travel() = ((width - dp(96)) / 2f - dp(10)).coerceAtLeast(0f)
+    private fun travel() = ((width - dp(if (compact) 48 else 96)) / 2f - dp(10)).coerceAtLeast(0f)
     private fun track(event: MotionEvent) {
         val raw = MotionEvent.obtain(event)
         raw.offsetLocation(event.rawX - event.x, event.rawY - event.y)
@@ -116,7 +144,7 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
             }
         }
     }
-    override fun onDetachedFromWindow() { tracker?.recycle(); tracker = null; dragging = false; settle(true); super.onDetachedFromWindow() }
+    override fun onDetachedFromWindow() { bezelSpring?.cancel(); tracker?.recycle(); tracker = null; dragging = false; settle(true); super.onDetachedFromWindow() }
     override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
         super.onWindowFocusChanged(hasWindowFocus)
         if (!hasWindowFocus) { tracker?.recycle(); tracker = null; dragging = false; settle(true) }
