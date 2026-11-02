@@ -43,6 +43,54 @@ public class RubberProbe extends Instrumentation {
  View getThumb(View view) throws Exception {
   Field f=sliderClass.getDeclaredField("thumb");f.setAccessible(true);return (View)f.get(view);
  }
+
+ View thumbPart(String name) throws Exception {
+  return main(()->{Field f=sliderClass.getDeclaredField(name);f.setAccessible(true);return (View)f.get(rail);});
+ }
+ float surfaceStretch() throws Exception {
+  return main(()->{Field owner=sliderClass.getDeclaredField("thumbSurface");owner.setAccessible(true);
+   Object surface=owner.get(rail);Field stretch=surface.getClass().getDeclaredField("stretch");
+   stretch.setAccessible(true);return ((Number)stretch.get(surface)).floatValue();});
+ }
+ void unscaledLayers() throws Exception {
+  View icon=thumbPart("thumbIcon");
+  require(main(()->thumb.getScaleX()==1f && thumb.getScaleY()==1f &&
+    icon.getScaleX()==1f && icon.getScaleY()==1f && icon.getParent()==thumb),
+    "Thumb container/icon must be separate unscaled layers");
+  require(main(()->icon.getWidth()==dp(24) && icon.getHeight()==dp(24)),
+    "Phone glyph's layout dimensions changed");
+ }
+ int[] hardwareGlyph(String name) throws Exception {
+  SystemClock.sleep(40); // Allow the hardware display list to present after the input frame.
+  Bitmap shot=getUiAutomation().takeScreenshot();
+  require(shot!=null,"Hardware screenshot unavailable: "+name);
+  Bitmap image=shot.copy(Bitmap.Config.ARGB_8888,false);
+  int[] bounds=main(()->{int[] xy=new int[2];rail.getLocationOnScreen(xy);
+    Point display=new Point();activity.getWindowManager().getDefaultDisplay().getRealSize(display);
+    return new int[]{xy[0],xy[1],rail.getWidth(),rail.getHeight(),display.x,display.y};});
+  float sx=image.getWidth()/(float)bounds[4],sy=image.getHeight()/(float)bounds[5];
+  int x1=Math.max(0,Math.round(bounds[0]*sx)),y1=Math.max(0,Math.round(bounds[1]*sy));
+  int x2=Math.min(image.getWidth(),Math.round((bounds[0]+bounds[2])*sx));
+  int y2=Math.min(image.getHeight(),Math.round((bounds[1]+bounds[3])*sy));
+  int left=x2,right=-1,top=y2,bottom=-1,pixels=0;
+  for(int y=y1;y<y2;y++)for(int x=x1;x<x2;x++){
+   int color=image.getPixel(x,y);
+   if(Color.red(color)<160 && Color.green(color)>180 && Color.blue(color)>140){
+    left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);pixels++;
+   }
+  }
+  save("hardware-"+name,image);
+  require(pixels>20,"No hardware-rendered alarm glyph: "+name+" display="+Arrays.toString(bounds));
+  report("HARDWARE GLYPH "+name+" width="+(right-left+1)+" height="+(bottom-top+1)+" pixels="+pixels);
+  return new int[]{right-left+1,bottom-top+1,pixels};
+ }
+ void sameHardwareGlyph(int[] base,int[] actual,String name) {
+  float ratio=(actual[0]/(float)actual[1])/(base[0]/(float)base[1]);
+  require(Math.abs(actual[0]-base[0])<=2 && Math.abs(actual[1]-base[1])<=2 &&
+    Math.abs(ratio-1f)<.06f,
+    "Actual screen glyph stretched during "+name+": "+Arrays.toString(base)+" -> "+Arrays.toString(actual));
+ }
+
  float travel() throws Exception {
   return main(()->{Method m=sliderClass.getDeclaredMethod("travel");m.setAccessible(true);return ((Number)m.invoke(rail)).floatValue();});
  }
@@ -77,6 +125,7 @@ public class RubberProbe extends Instrumentation {
  void rested() throws Exception {
   waitFor(()->main(()->Math.abs(thumb.getTranslationX())<1f && Math.abs(thumb.getScaleX()-1f)<.012f &&
     Math.abs(thumb.getScaleY()-1f)<.012f && Math.abs(thumb.getRotation())<.001f),2200,"Thumb did not settle");
+  waitFor(()->Math.abs(surfaceStretch())<.012f,2200,"Pill surface did not settle");
  }
  Bitmap render() throws Exception {
   return main(()->{Bitmap b=Bitmap.createBitmap(rail.getWidth(),rail.getHeight(),Bitmap.Config.ARGB_8888);rail.draw(new Canvas(b));return b;});
@@ -95,21 +144,31 @@ public class RubberProbe extends Instrumentation {
   return new int[]{right-left+1,bottom-top+1};
  }
  void stretch() throws Exception {
-  install(false);Bitmap base=render();int[] before=glyph(base,base.getWidth()/2f);save("rest",base);
-  float limit=travel();press();move(limit*.45f,100);SystemClock.sleep(180);
-  float scale=main(()->thumb.getScaleX());
-  require(scale>1.04f && scale<1.27f,"Thumb must stretch, got "+scale);
-  require(main(()->thumb.getScaleY())<.99f,"Thumb must thin gently");
+  install(false);unscaledLayers();
+  Bitmap base=render();int[] before=glyph(base,base.getWidth()/2f);save("rest",base);
+  int[] hardwareBase=hardwareGlyph("rest");
+  float limit=travel();press();move(limit*.45f,120);SystemClock.sleep(180);
+  float shape=surfaceStretch();
+  require(shape>.035f && shape<.25f,"Pill surface must stretch, got "+shape);
+  unscaledLayers();
   require(Math.abs(main(()->thumb.getRotation()))<.001f,"Thumb must not tumble");
   require(Math.abs(x()-limit*.45f)<2f,"Thumb must track the finger");
   require(main(()->{Field f=sliderClass.getDeclaredField("stopLabel");f.setAccessible(true);return ((View)f.get(rail)).getAlpha();})<.03f,
     "Destination letters remain visible beneath the stretched thumb");
   Bitmap stretched=render();int[] after=glyph(stretched,stretched.getWidth()/2f+x());save("stretch",stretched);
   require(before[0]>dp(8) && before[1]>dp(8),"No alarm glyph in baseline");
-  require(Math.abs(after[0]-before[0])<=dp(2) && Math.abs(after[1]-before[1])<=dp(2),
-   "Alarm glyph was distorted with pill: "+Arrays.toString(before)+" -> "+Arrays.toString(after));
-  end(limit*.45f,false);SystemClock.sleep(60);save("return",render());rested();noAction("Partial release");
-  report("PASS horizontal stretch, no rotation, crisp glyph, direct tracking and settled return");
+  require(Math.abs(after[0]-before[0])<=2 && Math.abs(after[1]-before[1])<=2,
+   "Software alarm glyph changed: "+Arrays.toString(before)+" -> "+Arrays.toString(after));
+  sameHardwareGlyph(hardwareBase,hardwareGlyph("slow-drag"),"slow drag");
+  move(limit*.59f,12);
+  sameHardwareGlyph(hardwareBase,hardwareGlyph("fast-drag"),"fast drag");
+  SystemClock.sleep(250);
+  sameHardwareGlyph(hardwareBase,hardwareGlyph("held"),"held stretch");
+  unscaledLayers();
+  end(limit*.59f,false);SystemClock.sleep(60);
+  sameHardwareGlyph(hardwareBase,hardwareGlyph("return"),"spring return");
+  save("return",render());rested();noAction("Partial release");
+  report("PASS surface-only stretch, separate unit-scale glyph, hardware glyph invariance at rest/slow/fast/hold/return");
  }
  void inertia() throws Exception {
   install(false);final float limit=travel();final float released=limit*.58f;
@@ -155,6 +214,30 @@ public class RubberProbe extends Instrumentation {
   main(()->{stage.removeView(rail);return null;});require(Math.abs(x())<.01f,"Detach did not reset");noAction("Detach");
   report("PASS left/right exactly once, cancellation, focus loss and detach");
  }
+ void visualEdgeCatch() throws Exception {
+  install(false);
+  main(()->{
+   Field owner=sliderClass.getDeclaredField("thumbSurface");owner.setAccessible(true);
+   View surface=(View)owner.get(rail);
+   Field stretch=surface.getClass().getDeclaredField("stretch");stretch.setAccessible(true);
+   stretch.setFloat(surface,.18f);surface.invalidate();
+   float edge=thumb.getRight()+thumb.getWidth()*.09f-2f;
+   float middle=thumb.getTop()+thumb.getHeight()/2f;
+   require(edge>thumb.getRight(),"Catch point must lie outside the fixed thumb frame");
+   long at=SystemClock.uptimeMillis();
+   MotionEvent downEvent=MotionEvent.obtain(at,at,MotionEvent.ACTION_DOWN,edge,middle,0);
+   downEvent.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+   rail.dispatchTouchEvent(downEvent);downEvent.recycle();
+   require((Boolean)sliderClass.getMethod("getTouchActive").invoke(rail),
+     "Expanded visual edge did not capture touch outside the fixed frame");
+   MotionEvent upEvent=MotionEvent.obtain(at,at+1,MotionEvent.ACTION_UP,edge,middle,0);
+   upEvent.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+   rail.dispatchTouchEvent(upEvent);upEvent.recycle();
+   return null;
+  });
+  rested();noAction("Catch at expanded visual edge");
+  report("PASS ViewGroup dispatch catches stretched edge outside fixed frame without action fall-through");
+ }
  void compact() throws Exception {
   install(true);float limit=travel();
   main(()->{sliderClass.getMethod("setBezelProgress",boolean.class,float.class).invoke(rail,true,.65f);return null;});
@@ -175,7 +258,7 @@ public class RubberProbe extends Instrumentation {
    Class<?> motion=Class.forName("dev.orbit.clock.core.OrbitMotion",true,target.getClassLoader());
    waitFor(()->!(Boolean)motion.getMethod("enabled").invoke(motion.getField("INSTANCE").get(null)),6000,"Reduced motion not applied");
    install(false);press();move(travel()*.4f,50);
-   require(main(()->thumb.getScaleX())==1f && main(()->thumb.getScaleY())==1f,"Reduced motion stretched");
+   require(main(()->thumb.getScaleX())==1f && main(()->thumb.getScaleY())==1f && Math.abs(surfaceStretch())<.001f,"Reduced motion stretched");
    end(travel()*.4f,false);require(Math.abs(x())<.01f,"Reduced motion animated return");noAction("Reduced motion");
    report("PASS reduced motion");
   } finally {shell("settings put global animator_duration_scale 1");}
@@ -183,16 +266,28 @@ public class RubberProbe extends Instrumentation {
  Bitmap sweep(Drawable d,Method phase,float value) throws Exception {
   phase.invoke(d,value);Bitmap b=Bitmap.createBitmap(600,100,Bitmap.Config.ARGB_8888);d.draw(new Canvas(b));return b;
  }
- int peak(Bitmap b,int from,int to){int best=from,alpha=-1;for(int x=from;x<to;x++)if(Color.alpha(b.getPixel(x,50))>alpha){best=x;alpha=Color.alpha(b.getPixel(x,50));}return best;}
+ int peak(Bitmap b,int from,int to){return peakAt(b,from,to,50);}
+ int peakAt(Bitmap b,int from,int to,int row){
+  int best=from,alpha=-1;for(int x=from;x<to;x++)if(Color.alpha(b.getPixel(x,row))>alpha){best=x;alpha=Color.alpha(b.getPixel(x,row));}return best;
+ }
  void shimmer() throws Exception {
   Class<?> type=Class.forName("dev.orbit.clock.core.VisualHints$Sweep",true,target.getClassLoader());
   Constructor<?> ctor=type.getDeclaredConstructor(boolean.class);ctor.setAccessible(true);
   Drawable drawable=(Drawable)ctor.newInstance(true);drawable.setBounds(0,0,600,100);
   Method phase=type.getDeclaredMethod("setPhase",float.class);phase.setAccessible(true);
-  Bitmap a=sweep(drawable,phase,.25f),b=sweep(drawable,phase,.30f),end=sweep(drawable,phase,1f);
+  Bitmap a=sweep(drawable,phase,.10f),b=sweep(drawable,phase,.14f),end=sweep(drawable,phase,1f);
   int left=peak(a,0,300),right=peak(a,300,600);
-  require(left<180 && right>420 && Color.alpha(a.getPixel(left,50))>40 && Color.alpha(a.getPixel(right,50))>40,"Missing two glints");
-  require(peak(b,0,300)<left && peak(b,300,600)>right,"Glints must move outward");
+  require(left<270 && right>330 && Color.alpha(a.getPixel(left,50))>25 && Color.alpha(a.getPixel(right,50))>25,"Missing two expanding fronts");
+  int leftTop=peakAt(a,0,300,20),leftBottom=peakAt(a,0,300,80);
+  int rightTop=peakAt(a,300,600,20),rightBottom=peakAt(a,300,600,80);
+  require(leftTop-left>=3 && leftBottom-left>=3 && right-rightTop>=3 && right-rightBottom>=3,
+    "Fronts are vertical bands, not curved semicircles: left="+left+" top="+leftTop+" bottom="+leftBottom+
+      " right="+right+" top="+rightTop+" bottom="+rightBottom);
+  require(Math.abs(leftTop-leftBottom)<=2 && Math.abs(rightTop-rightBottom)<=2,
+    "Semicircular fronts are not symmetric around the thumb centreline");
+  require(Color.alpha(a.getPixel(leftTop,20))>15 && Color.alpha(a.getPixel(rightTop,20))>15,
+    "Arc curvature must come from visible rims, not empty rows");
+  require(peak(b,0,300)<left && peak(b,300,600)>right,"Semicircular fronts must expand outward");
   require(Color.alpha(a.getPixel(300,50))==0 && Color.alpha(a.getPixel(0,0))==0,"Shimmer must stay localized and clipped");
   for(int x=0;x<600;x++)require(Color.alpha(end.getPixel(x,50))==0,"Shimmer must finish cleanly");
   save("shimmer",a);save("shimmer-outward",b);
@@ -204,8 +299,9 @@ public class RubberProbe extends Instrumentation {
   press();require(!main(()->((Map<?,?>)active.get(null)).containsKey(rail)),"Touch did not stop shimmer");
   end(0,true);rested();noAction("Shimmer");
   Bitmap composite=render();drawable.setBounds(0,0,composite.getWidth(),composite.getHeight());
-  phase.invoke(drawable,.25f);drawable.draw(new Canvas(composite));save("shimmer-on-rail",composite);
-  report("PASS two outward glints, clipped/finite drawing, fresh cue despite old learning, immediate touch cancellation");
+  phase.invoke(drawable,.10f);drawable.draw(new Canvas(composite));save("shimmer-on-rail",composite);
+  phase.invoke(drawable,.14f);Bitmap later=render();drawable.draw(new Canvas(later));save("shimmer-on-rail-later",later);
+  report("PASS curved expanding semicircular fronts, hollow/finite drawing, fresh cue despite old learning, immediate touch cancellation");
  }
  @Override public void onCreate(Bundle args){super.onCreate(args);start();}
  @Override public void onStart(){
@@ -219,7 +315,7 @@ public class RubberProbe extends Instrumentation {
    main(()->{stage=new FrameLayout(activity);stage.setBackgroundColor(0xff030405);
      activity.addContentView(stage,new android.view.ViewGroup.LayoutParams(-1,-1));return null;});
    waitFor(()->main(()->stage.getWidth()>0),5000,"Stage not laid out");
-   shimmer();stretch();inertia();actions();compact();reduced();
+   shimmer();stretch();inertia();actions();visualEdgeCatch();compact();reduced();
    result.putString("stream","RUBBER_RESULT_PASS: native views, stretch/glyph rendering, inertia, safe actions, interruption, bezel and reduced motion\n");
    finish(Activity.RESULT_OK,result);
   }catch(Throwable e){result.putString("stream","RUBBER_FAILURE: "+android.util.Log.getStackTraceString(e));finish(Activity.RESULT_CANCELED,result);}
