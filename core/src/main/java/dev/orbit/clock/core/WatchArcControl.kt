@@ -12,6 +12,14 @@ class WatchArcControl(context: Context, private val snooze: () -> Unit, private 
     private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xff103a35.toInt(); style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeWidth = dp(18f) }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xffd3e3df.toInt(); textAlign = Paint.Align.CENTER; textSize = dp(9f) * resources.configuration.fontScale.coerceAtMost(1.3f) }
     private val oval = RectF()
+    private val railOutline = Path()
+    private val railCentre = Path()
+    private val hatchLines = Path()
+    private val railFill = Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG)
+    private val hatchInk = Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG).apply {
+        style = Paint.Style.STROKE; strokeWidth = dp(.7f); strokeCap = Paint.Cap.BUTT
+    }
+    private val railBounds = RectF()
     private var fraction = 0f
     private var velocity = 0f
     private var radius = 0f
@@ -102,6 +110,31 @@ class WatchArcControl(context: Context, private val snooze: () -> Unit, private 
         super.onSizeChanged(w, h, oldw, oldh)
         radius = (min(w, h) / 2f - dp(16f)).coerceAtLeast(1f)
         oval.set(w / 2f - radius, h / 2f - radius, w / 2f + radius, h / 2f + radius)
+        // Cache all geometry and shaders at layout, never in an animation frame.
+        railCentre.rewind(); railCentre.addArc(oval, 90f - halfSweep, halfSweep * 2f)
+        railOutline.rewind(); track.getFillPath(railCentre, railOutline)
+        railOutline.computeBounds(railBounds, true)
+        val outer = radius + dp(9f)
+        val inside = ((radius - dp(9f)) / outer).coerceIn(0f, .95f)
+        val shoulder = ((radius - dp(1f)) / outer).coerceIn(inside + .001f, .99f)
+        val edgeFade = RadialGradient(w / 2f, h / 2f, outer,
+            intArrayOf(0x00ffffff, 0x00ffffff, 0x96ffffff.toInt(), 0xffffffff.toInt()),
+            floatArrayOf(0f, inside, shoulder, 1f), Shader.TileMode.CLAMP)
+        val stops = floatArrayOf(0f, (90f-halfSweep)/360f, .25f, (90f+halfSweep)/360f, 1f)
+        val colour = SweepGradient(w / 2f, h / 2f,
+            intArrayOf(0x0874e8d7, 0x0874e8d7, 0x2674e8d7, 0x6474e8d7, 0x0874e8d7), stops)
+        val ink = SweepGradient(w / 2f, h / 2f,
+            intArrayOf(0x1874e8d7, 0x1874e8d7, 0x7174e8d7, 0xc674e8d7.toInt(), 0x1874e8d7), stops)
+        railFill.shader = ComposeShader(colour, edgeFade, PorterDuff.Mode.DST_IN)
+        hatchInk.shader = ComposeShader(ink, edgeFade, PorterDuff.Mode.DST_IN)
+        hatchLines.rewind()
+        val rise = railBounds.height()
+        var x = railBounds.left - rise
+        while (x <= railBounds.right + rise) {
+            hatchLines.moveTo(x + rise * .55f, railBounds.top)
+            hatchLines.lineTo(x, railBounds.bottom)
+            x += dp(3f)
+        }
     }
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
         val size = dp(40f).toInt(); val centerX = width / 2f; val centerY = height / 2f
@@ -122,7 +155,12 @@ class WatchArcControl(context: Context, private val snooze: () -> Unit, private 
         thumb.invalidate()
     }
     override fun onDraw(canvas: Canvas) {
-        super.onDraw(canvas); canvas.drawArc(oval, 90f - halfSweep, halfSweep * 2f, false, track)
+        super.onDraw(canvas)
+        canvas.drawPath(railOutline, railFill)
+        val clipped = canvas.save()
+        canvas.clipPath(railOutline)
+        canvas.drawPath(hatchLines, hatchInk)
+        canvas.restoreToCount(clipped)
         fun label(text: String, angle: Float, alpha: Float) {
             val theta = Math.toRadians(angle.toDouble()); val save = canvas.save()
             canvas.translate(width / 2f + radius * cos(theta).toFloat(), height / 2f + radius * sin(theta).toFloat())

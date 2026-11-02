@@ -365,6 +365,32 @@ public final class BezelUiProbe extends Instrumentation {
             return paintedWidth>0 && paintedWidth<rail.getWidth()*.72f;
         }),"Painted bottom arc/thumb is too wide or overlaps the large duration targets");
     }
+    private int radialAlpha(Bitmap image,float radius,float degrees) {
+        double angle=degrees*Math.PI/180;
+        int x=Math.max(0,Math.min(image.getWidth()-1,Math.round(image.getWidth()/2f+radius*(float)Math.cos(angle))));
+        int y=Math.max(0,Math.min(image.getHeight()-1,Math.round(image.getHeight()/2f+radius*(float)Math.sin(angle))));
+        return image.getPixel(x,y)>>>24;
+    }
+    private void texturedRail(Activity activity) throws Exception {
+        View rail=actions(activity); float r=travel(rail,sliderThumb(activity));
+        Bitmap image=componentBitmap(rail);
+        double inner=0,left=0,right=0; int count=0,changes=0,last=-1;
+        for(float angle=105;angle<=121;angle+=.25f) {
+            int ink=radialAlpha(image,r+7*density,angle);
+            if(last>=0 && Math.abs(ink-last)>14) changes++;
+            last=ink;
+            inner+=radialAlpha(image,r-7*density,angle);
+            left+=radialAlpha(image,r+6*density,angle);
+            right+=radialAlpha(image,r+6*density,180-angle);
+            count++;
+        }
+        image.recycle();
+        inner/=count; left/=count; right/=count;
+        save("texture-metrics.json",new JSONObject().put("hatchEdges",changes).put("innerAlpha",inner).put("leftOuterAlpha",left).put("rightOuterAlpha",right).toString());
+        require(changes>=6,"Fine diagonal hatching is not visibly separated: "+changes);
+        require(left>inner+20,"Rail inner edge does not fade continuously into transparency");
+        require(left>right*1.6+8,"Rail opacity does not taper along the arc");
+    }
     private void layout(Activity a) {
         View rail=actions(a), thumb=sliderThumb(a);
         require(rail.getClass().getName().equals("dev.orbit.clock.core.WatchArcControl"),"Short bottom-arc control missing");
@@ -379,7 +405,7 @@ public final class BezelUiProbe extends Instrumentation {
         require(ui(() -> clock.getTextSize()>label.getTextSize()*1.6f && label.getTextSize()>minutes.getTextSize()*1.2f),"Time/label/duration visual hierarchy is incorrect");
         require(ui(() -> {
             int[] c=new int[2],l=new int[2],m=new int[2]; clock.getLocationOnScreen(c); label.getLocationOnScreen(l); minutes.getLocationOnScreen(m);
-            return c[1]+clock.getHeight()<=l[1]+density && l[1]+label.getHeight()<=m[1]+density;
+            return c[1]+clock.getHeight()+4*density<=l[1] && l[1]+label.getHeight()+3*density<=m[1];
         }),"Time, label and adjustment row overlap");
         require(ui(() -> thumb.getTranslationY()<=density),"Arc thumb left the lower semicircle");
         control(a,"Snooze"); control(a,"Dismiss");
@@ -397,11 +423,11 @@ public final class BezelUiProbe extends Instrumentation {
         require(target.getPackageManager().hasSystemFeature("android.hardware.type.watch"),"Wear OS required");
         require(android.animation.ValueAnimator.areAnimatorsEnabled(),"Motion verification requires animations enabled");
         Activity a=delivered("slider-snooze");
-        layout(a); selected(a,10);
+        layout(a); texturedRail(a); selected(a,10);
         click(control(a,"Increase snooze by 5 minutes")); selected(a,15);
         a=recreate(a); selected(a,15); layout(a);
         require(record("slider-snooze").getInt("snoozeMinutes")==10,"Duration changed saved default");
-        pass("Time dominates label and compact duration; 56dp adjustment targets, short bottom arc clears large buttons and recreated selection fits watch");
+        pass("Hatched rail has a transparent inner edge and tapered opacity; time/label have breathing room; 56dp targets, arc clearance and recreated selection fit watch");
         displayScreenshot("display-idle"); screenshot("01-idle");
         View rail=actions(a), thumb=sliderThumb(a);
         float span=travel(rail,thumb);

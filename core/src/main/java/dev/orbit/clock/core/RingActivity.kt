@@ -103,20 +103,20 @@ class RingActivity : AppCompatActivity() {
         val time = now.format(DateTimeFormatter.ofPattern(if (android.text.format.DateFormat.is24HourFormat(this)) "HH:mm" else "h:mm"))
         if (watch) {
             val timeWidth = (watchWidth * .76f).toInt()
-            val timeHeight = (watchHeight * .28f).toInt()
-            val timeTop = (watchHeight * .045f).toInt()
-            watchRoot!!.addView(label(time, 48f).apply {
+            val timeHeight = (watchHeight * .245f).toInt()
+            val timeTop = (watchHeight * .03f).toInt()
+            watchRoot!!.addView(label(time, 44f).apply {
                 typeface = Typeface.create(typeface, 350, false)
                 maxLines = 1; fontFeatureSettings = "tnum"
                 contentDescription = "Alarm time: $time"; phoneTime = this
-                setAutoSizeTextTypeUniformWithConfiguration(30, 48, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+                setAutoSizeTextTypeUniformWithConfiguration(30, 44, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
             }, FrameLayout.LayoutParams(dp(timeWidth), dp(timeHeight), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(timeTop) })
-            watchRoot.addView(label(name, 18f).apply {
+            watchRoot.addView(label(name, 16f).apply {
                 maxLines = 1; ellipsize = TextUtils.TruncateAt.END
                 contentDescription = "Alarm label: $name"
                 setTextColor(0xffa5bab3.toInt())
-                setAutoSizeTextTypeUniformWithConfiguration(12, 18, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
-            }, FrameLayout.LayoutParams(dp((watchWidth * .66f).toInt()), dp((watchHeight * .125f).toInt()), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp((watchHeight * .325f).toInt()) })
+                setAutoSizeTextTypeUniformWithConfiguration(12, 16, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            }, FrameLayout.LayoutParams(dp((watchWidth * .66f).toInt()), dp((watchHeight * .125f).toInt()), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp((watchHeight * .305f).toInt()) })
         } else {
             body.addView(Space(this), LinearLayout.LayoutParams(1, 0, 3.3f))
             body.addView(label(time, 144f).apply {

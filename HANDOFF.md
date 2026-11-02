@@ -1,5 +1,13 @@
 # Orbit Clock handoff
 
+## Reference-inspired hatching, transparency and text spacing — verification pending
+
+The user supplied a watch photo with fine diagonal hatching, a translucent fading rail and generous central text spacing, asking Orbit to mimic those qualities. The short 68-degree bottom arc and Orbit green palette are retained. Cached vector hatching (0.7dp strokes, 3dp pitch) is clipped to the rounded rail. A sweep opacity gradient tapers along the segment while a radial mask fades the inner edge into transparency; there is no opaque track slab or bitmap texture. Paths, gradients and shader composition are built only on size changes, not animation frames.
+
+The watch time gets a modestly quieter 44sp maximum in a 24.5%-height row at 3% top inset. The label uses up to16sp at30.5% top, giving explicit gaps between time/label and label/controls. The 56dp plus/minus targets, small duration, clockwise-left Snooze / anticlockwise-right Dismiss, three/six-unit amounts, frame-paced motion and watch-face reveal remain. Phone/widget work and signing are untouched.
+
+Native checks inspect rendered hatch-edge contrast, radial and along-arc alpha taper, explicit text gaps, button/arc clearance, 130% font layout and all existing actual action/transition scenarios. Build and runtime verification pending.
+
 ## Wide widget 4×1 strip — verified debug 0.1.111
 
 User requested converting the wide widget from4×2 to4×1. The same provider now targets four columns/one row with70dp minimum height. Active dynamic_widget_strip layouts place the clock, icon, two-line reminder/time + countdown, and48dp toggle horizontally. Alarm time comes first in the summary so a long label can truncate safely. The text container has a46dp rounding allowance to avoid one-pixel cropping at fractional density. Narrow-wide anchors and the single full-viewport transparency fade are retained; square remains2×2. Existing launcher placements can retain their old allocation until the user drags the resize handle to one row; new placements default4×1. Android owns that grid allocation.
