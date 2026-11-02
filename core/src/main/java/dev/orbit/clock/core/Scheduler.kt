@@ -39,7 +39,10 @@ object Scheduler {
         try { manager.setAlarmClock(AlarmManager.AlarmClockInfo(at, show), pending(c, a.id, at)) }
         catch (_: SecurityException) { state(c).edit().remove("${a.id}.scheduled").commit() }
     }
-    fun restore(c: Context) { Store(c).all().forEach { schedule(c, it) } }
+    fun restore(c: Context) {
+        Store(c).all().forEach { schedule(c, it) }
+        c.sendBroadcast(Intent(Store.CHANGED).setPackage(c.packageName))
+    }
     fun isActive(c: Context, a: Alarm, occurrence: Long): Boolean =
         a.enabled && !a.deleted && occurrence > 0 && a.skipThrough < occurrence &&
             state(c).getLong("${a.id}.active", 0) == occurrence &&
@@ -55,6 +58,7 @@ object Scheduler {
         val next = if (a.days.isEmpty()) null else
             a.next(Instant.ofEpochMilli(maxOf(System.currentTimeMillis(), occurrence)))
         install(c, a, next)
+        c.sendBroadcast(Intent(Store.CHANGED).setPackage(c.packageName))
         return true
     }
     fun act(c: Context, id: String, occurrence: Long, snooze: Boolean, snoozeMinutesOverride: Int? = null) {
@@ -83,3 +87,4 @@ class AlarmReceiver : BroadcastReceiver() {
 class RestoreReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) { Scheduler.restore(context) }
 }
+

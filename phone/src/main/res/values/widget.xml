@@ -1,0 +1,7 @@
+<resources>
+ <string name="widget_description">A transparent clock that changes near alarms, snoozes and bedtime. Reminder windows from 10 to 90 minutes.</string>
+ <string name="widget_square">Orbit · Dynamic square</string>
+ <string name="widget_wide">Orbit · Dynamic wide</string>
+ <color name="widget_alarm_tone">#17352B</color>
+ <color name="widget_bedtime_tone">#252C48</color>
+</resources>

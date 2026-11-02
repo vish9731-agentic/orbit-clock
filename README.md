@@ -123,3 +123,12 @@ Physical Galaxy Watch 4 Classic detents, direction mapping, haptics and on-devic
 Orbit sends Android's native Pause command and requests transient exclusive alarm audio focus when ringing begins. Successful focus requests are shared across overlapping alarms and released after the last alarm stops or snoozes. If Android 15 denies background audio focus, the native Pause command still operates and the alarm tone remains available. Orbit never sends Play; the media app controls whether it resumes after focus returns.
 
 [All nine media emulator checks passed](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41320960051), including real music/video playback, overlapping alarms, Stop, Snooze and the Android 15 denial fallback. These checks used independent native test players. YouTube and physical-device audio have not been tested; apps must honor Android audio focus or media controls.
+
+# Dynamic home-screen widgets
+
+The phone app includes **Orbit · Dynamic square** (about 2×2) and **Orbit · Dynamic wide** (about 4×2). Add them from your launcher's widget picker. Both are transparent clocks outside reminder windows. Square replaces the clock with one reminder; wide always keeps the clock on the left and reveals a dark transparent-to-opaque gradient and white reminder content on the right. Exact cell sizes depend on the launcher. Use wallpaper with adequate contrast for the white clock and its shadow.
+
+Use the launcher's **Edit widget** action for shared alarm/bedtime windows of 10, 15, 30, 45, 60 or 90 minutes (default 15), a bedtime reminder switch, Add alarm and the bedtime schedule. Tap the clock to open Orbit, an alarm reminder to edit that alarm, or the moon reminder to open Bedtime. The alarm's On control disables the saved alarm, including its repeats; it is not a one-occurrence skip.
+
+The display follows installed alarm occurrences and actual snooze deadlines, excludes timers/deleted/disabled alarms, and gives ringing/nearby alarms priority over bedtime. Bedtime uses the existing enabled **Wake up** alarm's local time, repeat days and saved sleep goal; snoozing never moves bedtime. “It's bedtime” expires after 15 minutes. The launcher renders the live clock/countdown. Non-wakeup boundary updates and periodic recovery avoid a background polling service; Android sleep/launcher restrictions may delay visual transitions without changing core ringing schedules. No Wear OS widget or Google Clock private-data integration is added.
+

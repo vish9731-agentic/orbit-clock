@@ -378,6 +378,14 @@ open class ClockActivity : AppCompatActivity() {
         }
         field.error = message; OrbitMotion.reject(field)
     }
+    /** Used by the phone's explicit widget links after the activity has resumed. */
+    protected fun openWidgetAlarm(id: String?) {
+        tab = "Alarms"
+        render()
+        val alarm = if (id == null) Alarm() else Store(this).get(id)
+        if (alarm != null && !alarm.deleted && !alarm.timer) editAlarm(alarm)
+    }
+    protected fun openWidgetBedtime() { tab = "Bedtime"; render() }
     private fun editAlarm(original: Alarm) {
         var hour = original.hour; var minute = original.minute
         val exists = Store(this).get(original.id) != null
@@ -632,3 +640,4 @@ open class ClockActivity : AppCompatActivity() {
         return super.onGenericMotionEvent(event)
     }
 }
+

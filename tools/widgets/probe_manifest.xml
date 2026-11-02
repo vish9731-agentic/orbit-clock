@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.orbit.clock.widgetprobe">
+    <uses-sdk android:minSdkVersion="30" android:targetSdkVersion="35"/>
+    <application android:label="Orbit widget verification" android:hasCode="true"/>
+    <instrumentation android:name="dev.orbit.clock.widgetprobe.WidgetProbe" android:targetPackage="dev.orbit.clock" android:functionalTest="true"/>
+</manifest>

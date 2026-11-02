@@ -1,0 +1,78 @@
+name: Dynamic home screen widgets
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'phone/**'
+      - 'tools/widgets/**'
+      - '.github/workflows/widgets.yml'
+permissions:
+  contents: read
+jobs:
+  widgets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;34.0.0'
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build app and independent native host probe
+        run: |
+          ./gradlew --no-daemon -Pkotlin.compiler.execution.strategy=in-process :phone:assembleDebug
+          bash tools/widgets/build-probe.sh
+      - name: Prepare runner
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android/sdk/ndk
+          sudo chmod 666 /dev/kvm
+      - name: Exercise both native widget hosts and real snooze delivery
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 2048M
+          heap-size: 256M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 2048
+          disable-animations: false
+          emulator-boot-timeout: 360
+          script: |
+            adb shell settings put global device_provisioned 1
+            adb shell settings put secure user_setup_complete 1
+            adb shell pm disable-user --user 0 com.google.android.googlesdksetup || true
+            adb shell am force-stop com.google.android.apps.nexuslauncher
+            adb shell pm disable-user --user 0 com.google.android.settings.intelligence || true
+            adb shell wm size 720x1600
+            adb shell wm density 280
+            adb shell svc power stayon true
+            adb install phone/build/outputs/apk/debug/phone-debug.apk
+            adb shell pm grant dev.orbit.clock android.permission.POST_NOTIFICATIONS
+            adb shell appops set dev.orbit.clock SCHEDULE_EXACT_ALARM allow
+            adb shell appops set dev.orbit.clock USE_FULL_SCREEN_INTENT allow || true
+            adb shell appwidget grantbind --package dev.orbit.clock --user 0
+            adb logcat -c
+            adb install build/widget-probe/probe.apk
+            adb shell am instrument -w dev.orbit.clock.widgetprobe/dev.orbit.clock.widgetprobe.WidgetProbe > widget-evidence.txt
+            adb pull /sdcard/Android/data/dev.orbit.clock/files/widget-evidence widget-frames
+            adb logcat -b crash -d > widget-crashes.txt
+            python -c "from pathlib import Path; s=Path('widget-evidence.txt').read_text(); print(s); assert 'WIDGET_RESULT_PASS' in s and 'WIDGET_FAILURE' not in s; assert 'FATAL EXCEPTION' not in Path('widget-crashes.txt').read_text()"
+      - name: Internal visual feedback
+        if: always()
+        run: python tools/widgets/contact_sheet.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: widget-evidence
+          retention-days: 3
+          path: |
+            widget-evidence.txt
+            widget-crashes.txt
+            widget-frames/
