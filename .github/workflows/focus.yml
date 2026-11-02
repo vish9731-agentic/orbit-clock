@@ -71,6 +71,9 @@ jobs:
             adb shell appops set dev.orbit.clock SCHEDULE_EXACT_ALARM allow
             adb logcat -c
             adb shell am instrument -w dev.orbit.clock.focusprobe/dev.orbit.clock.focusprobe.FocusProbe | tee focus-results/checks.txt
+            adb logcat -d -b crash > focus-results/crashes.txt
+            adb logcat -d -s AndroidRuntime > focus-results/runtime.txt
+            cat focus-results/crashes.txt
             grep -q 'PASS .* Focus runtime checks' focus-results/checks.txt
             adb shell run-as dev.orbit.clock cat files/focus-results/focus.png > focus-results/focus.png
             adb logcat -d -b crash > focus-results/crashes.txt
