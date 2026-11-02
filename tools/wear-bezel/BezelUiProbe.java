@@ -294,7 +294,7 @@ public final class BezelUiProbe extends Instrumentation {
     private View sliderThumb(Activity a) { return ui(() -> (View) field(actions(a), "thumb")); }
     private float position(View thumb) { return ui(thumb::getTranslationX); }
     private float travel(View rail, View thumb) { return ui(() -> ((Number)field(rail,"radius")).floatValue()); }
-    private float arcOffset(float span,float fraction) { return span*(float)Math.sin(fraction*Math.PI/2); }
+    private float arcOffset(float span,float fraction) { return span*(float)Math.sin(fraction*34*Math.PI/180); }
     private void settleAt(View thumb, float target) throws Exception {
         waitUntil(() -> Math.abs(position(thumb)-target)<density,1200,"Slider did not settle at its input target");
     }
@@ -347,9 +347,27 @@ public final class BezelUiProbe extends Instrumentation {
         }
         return null;
     }
+    private void arcClearance(Activity activity) {
+        View rail=actions(activity);
+        Bitmap image=componentBitmap(rail);
+        int firstY=image.getHeight(),left=image.getWidth(),right=-1;
+        for(int y=0;y<image.getHeight();y++) for(int x=0;x<image.getWidth();x++) {
+            if((image.getPixel(x,y)>>>24)>32) { firstY=Math.min(firstY,y); left=Math.min(left,x); right=Math.max(right,x); }
+        }
+        final int top=firstY,paintedWidth=right-left+1;
+        image.recycle();
+        require(ui(() -> {
+            int[] p=new int[2]; rail.getLocationOnScreen(p);
+            for(String desc:new String[]{"Decrease snooze by 5 minutes","Increase snooze by 5 minutes"}) {
+                View button=control(activity,desc); int[] b=new int[2]; button.getLocationOnScreen(b);
+                if(p[1]+top < b[1]+button.getHeight()+4*density) return false;
+            }
+            return paintedWidth>0 && paintedWidth<rail.getWidth()*.72f;
+        }),"Painted bottom arc/thumb is too wide or overlaps the large duration targets");
+    }
     private void layout(Activity a) {
         View rail=actions(a), thumb=sliderThumb(a);
-        require(rail.getClass().getName().equals("dev.orbit.clock.core.WatchArcControl"),"Semicircular watch control missing");
+        require(rail.getClass().getName().equals("dev.orbit.clock.core.WatchArcControl"),"Short bottom-arc control missing");
         for(String desc:new String[]{"Decrease snooze by 5 minutes","Increase snooze by 5 minutes"}) {
             View v=control(a,desc);
             require(ui(() -> v.getWidth()>=55.5f*density && v.getHeight()>=55.5f*density),"Duration tap target shrank");
@@ -365,6 +383,7 @@ public final class BezelUiProbe extends Instrumentation {
         }),"Time, label and adjustment row overlap");
         require(ui(() -> thumb.getTranslationY()<=density),"Arc thumb left the lower semicircle");
         control(a,"Snooze"); control(a,"Dismiss");
+        arcClearance(a);
     }
     private View findDuration(View root) {
         String desc=root.getContentDescription()==null?"":root.getContentDescription().toString();
@@ -382,16 +401,16 @@ public final class BezelUiProbe extends Instrumentation {
         click(control(a,"Increase snooze by 5 minutes")); selected(a,15);
         a=recreate(a); selected(a,15); layout(a);
         require(record("slider-snooze").getInt("snoozeMinutes")==10,"Duration changed saved default");
-        pass("Time dominates label and compact duration; 56dp adjustment targets, semicircular rail and recreated selection fit watch");
+        pass("Time dominates label and compact duration; 56dp adjustment targets, short bottom arc clears large buttons and recreated selection fits watch");
         displayScreenshot("display-idle"); screenshot("01-idle");
         View rail=actions(a), thumb=sliderThumb(a);
         float span=travel(rail,thumb);
-        rotate(a,1);
+        rotate(a,-1);
         motionSamples(thumb,0,arcOffset(span,-1f/3f),"left-motion");
         require(record("slider-snooze").getLong("snoozeUntil")<System.currentTimeMillis(),"A partial bezel turn fired an action");
-        require(ui(() -> sliderThumb(resumed).getTranslationY() < -2*density),"Thumb did not follow the curved rail");
+        require(ui(() -> sliderThumb(resumed).getTranslationY() < -.5f*density),"Thumb did not follow the curved rail");
         screenshot("02-left-partial");
-        float from=position(thumb); rotate(a,-1);
+        float from=position(thumb); rotate(a,1);
         motionSamples(thumb,from,arcOffset(span,1f/6f),"reverse-motion");
         screenshot("03-reversal");
         pass("Bezel detents produce continuous intermediate positions and interruptible directional reversal");
@@ -402,23 +421,27 @@ public final class BezelUiProbe extends Instrumentation {
         require(record("slider-snooze").getBoolean("enabled") && record("slider-snooze").getLong("snoozeUntil")<System.currentTimeMillis(),"Partial swipe/return unexpectedly fired an action");
         pass("Idle and partial touch releases settle gracefully; moving thumb can be caught without jumping; inertia never acts");
         SystemClock.sleep(1700);
-        rotate(a,1); rotate(a,1);
+        rotate(a,-2.9f); settleAt(thumb,arcOffset(span,-2.9f/3f)); arcClearance(a);
+        screenshot("05-bottom-arc-clearance");
+        require(record("slider-snooze").getLong("snoozeUntil")<System.currentTimeMillis(),"Near-end clearance check fired an action");
+        SystemClock.sleep(2200); settleAt(thumb,0);
+        rotate(a,-1); rotate(a,-1);
         require(record("slider-snooze").getLong("snoozeUntil")<System.currentTimeMillis(),"Snooze fired before three units");
-        long before=System.currentTimeMillis(); rotate(a,1); long after=System.currentTimeMillis();
+        long before=System.currentTimeMillis(); rotate(a,-1); long after=System.currentTimeMillis();
         final long earliest=before+15*60000L;
-        waitUntil(() -> record("slider-snooze").getLong("snoozeUntil")>=earliest,3000,"Anticlockwise snooze failed");
+        waitUntil(() -> record("slider-snooze").getLong("snoozeUntil")>=earliest,3000,"Clockwise snooze failed");
         JSONObject changed=record("slider-snooze");
         require(changed.getLong("snoozeUntil")<=after+15*60000L+1000 && changed.getInt("snoozeMinutes")==10,"Selected snooze duration not preserved");
         homeAfterAction();
-        pass("Anticlockwise threshold commits selected snooze, then translucent expansion returns to watch face");
+        pass("Clockwise threshold commits selected snooze, then translucent expansion returns to watch face");
         a=delivered("slider-dismiss"); rail=actions(a); thumb=sliderThumb(a); span=travel(rail,thumb);
-        rotate(a,-3); settleAt(thumb,arcOffset(span,.5f)); screenshot("04-right-partial");
+        rotate(a,3); settleAt(thumb,arcOffset(span,.5f)); screenshot("04-right-partial");
         require(record("slider-dismiss").getBoolean("enabled"),"Dismiss fired early");
-        rotate(a,-2); require(record("slider-dismiss").getBoolean("enabled"),"Dismiss fired before six units");
-        rotate(a,-1);
-        waitUntil(() -> !record("slider-dismiss").getBoolean("enabled"),3000,"Clockwise six-unit dismiss failed");
+        rotate(a,2); require(record("slider-dismiss").getBoolean("enabled"),"Dismiss fired before six units");
+        rotate(a,1);
+        waitUntil(() -> !record("slider-dismiss").getBoolean("enabled"),3000,"Anticlockwise six-unit dismiss failed");
         homeAfterAction();
-        pass("Clockwise follows arc, retains six-unit dismissal and transitions to watch face");
+        pass("Anticlockwise follows arc, retains six-unit dismissal and transitions to watch face");
         a=delivered("slider-limits");
         click(control(a,"Decrease snooze by 5 minutes")); selected(a,5);
         require(!ui(control(a,"Decrease snooze by 5 minutes")::isEnabled),"Minimum control enabled");
@@ -436,7 +459,7 @@ public final class BezelUiProbe extends Instrumentation {
         a=delivered("slider-touch-snooze"); click(control(a,"Increase snooze by 5 minutes")); selected(a,15);
         shell("settings put global animator_duration_scale 0");
         waitUntil(() -> !android.animation.ValueAnimator.areAnimatorsEnabled(),3000,"Reduced motion not applied");
-        rotate(a,.5f); settleAt(sliderThumb(a),arcOffset(travel(actions(a),sliderThumb(a)),-1f/6f));
+        rotate(a,-.5f); settleAt(sliderThumb(a),arcOffset(travel(actions(a),sliderThumb(a)),-1f/6f));
         click(control(a,"Snooze"));
         require(record("slider-touch-snooze").getLong("snoozeUntil")>System.currentTimeMillis()+14*60000L,"Touch Snooze failed");
         homeAfterAction();

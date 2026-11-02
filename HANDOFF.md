@@ -1,5 +1,12 @@
 # Orbit Clock handoff
 
+## Short bottom arc and flipped watch directions — verification pending
+
+The user explicitly reverses the previous watch mapping: **clockwise Snooze on the left (three units), anticlockwise Dismiss on the right (six units)**. RingActivity now passes Wear's raw encoder axis directly to the existing logical gesture; phone input and gesture thresholds are unchanged. Accessibility descriptions and native rotary assertions follow the new physical direction.
+
+WatchArcControl draws a **68-degree bottom segment**, centered at six o'clock, instead of the previous full 180-degree semicircle. Thumb positions/tangents and label/action hit areas follow the short segment. The time, alarm label, compact duration, 56dp plus/minus targets, frame-paced spring and translucent watch-face exit are retained. Native checks measure painted arc/thumb bounds against the unchanged duration targets (at least 4dp clearance) and constrain painted width; they exercise near-complete clockwise travel as well as rest and 130% text. This supersedes the semicircle and old direction descriptions below. Build and runtime verification pending.
+
+
 ## Apple-referenced pill stretch and expanding semicircular shimmer — verified debug 98
 
 The approved correction replaces straight light bands with two hollow, curved fronts expanding from the resting thumb’s semicircular endcaps. Cached radial gradients are clipped outward and to the rail. The phone receives two finite passes after 450ms over 1.8s, canceled by touch, lost focus, detach or reduced motion. No other-screen shimmer or hint prose is added.

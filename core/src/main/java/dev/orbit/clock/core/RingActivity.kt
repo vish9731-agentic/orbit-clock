@@ -278,8 +278,8 @@ class RingActivity : AppCompatActivity() {
             if (watch && watchActions?.touchActive == true) return true
             val rawTurn = event.getAxisValue(MotionEvent.AXIS_SCROLL)
             // Wear's positive raw axis is anticlockwise. Keep the existing
-            // three/six-unit amounts while mapping anticlockwise to Snooze.
-            val action = gesture.turn(if (watch) -rawTurn else rawTurn, SystemClock.elapsedRealtime())
+            // three/six-unit amounts: clockwise Snooze, anticlockwise Dismiss.
+            val action = gesture.turn(rawTurn, SystemClock.elapsedRealtime())
             if (watch) {
                 watchActions?.setBezelProgress(gesture.isSnoozing, gesture.fraction())
                 bezelHandler.removeCallbacks(resetBezelFeedback)

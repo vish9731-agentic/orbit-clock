@@ -6,7 +6,7 @@ import android.view.*
 import android.widget.FrameLayout
 import kotlin.math.*
 
-/** Bezel-first, vector-drawn lower semicircle. Motion never commits an alarm action. */
+/** Bezel-first, vector-drawn short bottom arc. Motion never commits an alarm action. */
 class WatchArcControl(context: Context, private val snooze: () -> Unit, private val stop: () -> Unit) : FrameLayout(context) {
     private fun dp(value: Float) = resources.displayMetrics.density * value
     private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xff103a35.toInt(); style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeWidth = dp(18f) }
@@ -15,6 +15,7 @@ class WatchArcControl(context: Context, private val snooze: () -> Unit, private 
     private var fraction = 0f
     private var velocity = 0f
     private var radius = 0f
+    private val halfSweep = 34f
     private var completing = false
     private var completion: (() -> Unit)? = null
     private var dragging = false
@@ -62,7 +63,7 @@ class WatchArcControl(context: Context, private val snooze: () -> Unit, private 
         addView(leftAction, LayoutParams(dp(40f).toInt(), dp(32f).toInt()))
         addView(rightAction, LayoutParams(dp(40f).toInt(), dp(32f).toInt()))
         addView(thumb, LayoutParams(dp(40f).toInt(), dp(40f).toInt()))
-        thumb.contentDescription = "Alarm slider: rotate anticlockwise to snooze, clockwise to dismiss"
+        thumb.contentDescription = "Alarm slider: rotate clockwise to snooze, anticlockwise to dismiss"
         thumb.setOnTouchListener { _, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
@@ -110,26 +111,26 @@ class WatchArcControl(context: Context, private val snooze: () -> Unit, private 
             val aw = dp(40f).toInt(); val ah = dp(32f).toInt()
             view.layout((x - aw / 2).toInt(), (y - ah / 2).toInt(), (x + aw / 2).toInt(), (y + ah / 2).toInt())
         }
-        action(leftAction, 120f); action(rightAction, 60f); placeThumb()
+        action(leftAction, 116f); action(rightAction, 64f); placeThumb()
     }
     private fun placeThumb() {
-        val angle = Math.toRadians((90f - fraction * 90f).toDouble())
+        val angle = Math.toRadians((90f - fraction * halfSweep).toDouble())
         thumb.translationX = radius * cos(angle).toFloat()
         thumb.translationY = radius * (sin(angle).toFloat() - 1f)
-        thumb.tangent = -fraction * 90f
+        thumb.tangent = -fraction * halfSweep
         thumb.stretch = if (OrbitMotion.enabled()) (abs(velocity) * .025f).coerceAtMost(.065f) else 0f
         thumb.invalidate()
     }
     override fun onDraw(canvas: Canvas) {
-        super.onDraw(canvas); canvas.drawArc(oval, 0f, 180f, false, track)
+        super.onDraw(canvas); canvas.drawArc(oval, 90f - halfSweep, halfSweep * 2f, false, track)
         fun label(text: String, angle: Float, alpha: Float) {
             val theta = Math.toRadians(angle.toDouble()); val save = canvas.save()
             canvas.translate(width / 2f + radius * cos(theta).toFloat(), height / 2f + radius * sin(theta).toFloat())
             canvas.rotate(angle - 90f); textPaint.alpha = (255 * alpha).toInt()
             canvas.drawText(text, 0f, -(textPaint.ascent() + textPaint.descent()) / 2f, textPaint); canvas.restoreToCount(save)
         }
-        label("Snooze", 120f, if (fraction < 0) (1f - abs(fraction) * 2.5f).coerceAtLeast(0f) else 1f)
-        label("Stop", 60f, if (fraction > 0) (1f - fraction * 2.5f).coerceAtLeast(0f) else 1f)
+        label("Snooze", 116f, if (fraction < 0) (1f - abs(fraction) * 2.5f).coerceAtLeast(0f) else 1f)
+        label("Stop", 64f, if (fraction > 0) (1f - fraction * 2.5f).coerceAtLeast(0f) else 1f)
     }
     private fun animateTo(target: Float, startVelocity: Float = velocity) {
         if (!OrbitMotion.enabled()) {
