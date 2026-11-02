@@ -67,7 +67,7 @@ object VisualHints {
     }
     private class Sweep(private val directional: Boolean) : Drawable() {
         var phase = 0f
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG)
         private val path = Path()
         private val matrix = Matrix()
         private var gradient: LinearGradient? = null

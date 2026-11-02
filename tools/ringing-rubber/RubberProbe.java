@@ -102,6 +102,8 @@ public class RubberProbe extends Instrumentation {
   require(main(()->thumb.getScaleY())<.99f,"Thumb must thin gently");
   require(Math.abs(main(()->thumb.getRotation()))<.001f,"Thumb must not tumble");
   require(Math.abs(x()-limit*.45f)<2f,"Thumb must track the finger");
+  require(main(()->{Field f=sliderClass.getDeclaredField("stopLabel");f.setAccessible(true);return ((View)f.get(rail)).getAlpha();})<.03f,
+    "Destination letters remain visible beneath the stretched thumb");
   Bitmap stretched=render();int[] after=glyph(stretched,stretched.getWidth()/2f+x());save("stretch",stretched);
   require(before[0]>dp(8) && before[1]>dp(8),"No alarm glyph in baseline");
   require(Math.abs(after[0]-before[0])<=dp(2) && Math.abs(after[1]-before[1])<=dp(2),
@@ -196,7 +198,9 @@ public class RubberProbe extends Instrumentation {
   Field active=hints.getDeclaredField("active");active.setAccessible(true);
   waitFor(()->main(()->((Map<?,?>)active.get(null)).containsKey(rail)),2000,"Old learning hid new ringing cue");
   press();require(!main(()->((Map<?,?>)active.get(null)).containsKey(rail)),"Touch did not stop shimmer");
-  end(0,true);noAction("Shimmer");
+  end(0,true);rested();noAction("Shimmer");
+  Bitmap composite=render();drawable.setBounds(0,0,composite.getWidth(),composite.getHeight());
+  phase.invoke(drawable,.25f);drawable.draw(new Canvas(composite));save("shimmer-on-rail",composite);
   report("PASS two outward glints, clipped/finite drawing, fresh cue despite old learning, immediate touch cancellation");
  }
  @Override public void onCreate(Bundle args){super.onCreate(args);start();}

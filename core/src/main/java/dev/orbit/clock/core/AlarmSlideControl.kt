@@ -206,8 +206,11 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
             }.also { stretchSpring = it }
             spring.animateToFinalPosition(tension)
         }
-        snoozeLabel.alpha = if (fraction > 0) 1f - fraction * .45f else 1f
-        stopLabel.alpha = if (fraction < 0) 1f + fraction * .45f else 1f
+        // Fade the destination before the stretched pill overlaps its letters.
+        val covered = (abs(fraction) / (if (compact) .30f else .38f)).coerceIn(0f, 1f)
+        val reveal = 1f - covered * covered * (3f - 2f * covered)
+        snoozeLabel.alpha = if (fraction < 0) reveal else 1f - fraction * .35f
+        stopLabel.alpha = if (fraction > 0) reveal else 1f + fraction * .35f
     }
     private fun settle(immediate: Boolean = false, velocity: Float = 0f) {
         returnSpring?.cancel(); thumb.animate().cancel()
