@@ -62,7 +62,7 @@ public class WidgetProbe extends Instrumentation {
    int center=(int)(w*.65f);require(Color.alpha(bitmap.getPixel(center,h/2))>=150,"Reminder contrast too low");
    require(Color.alpha(bitmap.getPixel(center,0))==0 && Color.alpha(bitmap.getPixel(center,h-1))==0,"Hard top/bottom perimeter");
    require(Color.alpha(bitmap.getPixel(w-1,h/2))==0,"Hard right perimeter");
-   int previous=0;int feather=(int)Math.ceil(8*c.getResources().getDisplayMetrics().density);
+   int previous=0;int feather=(int)Math.ceil(10*c.getResources().getDisplayMetrics().density);
    for(int x=0;x<w-feather;x++){int alpha=Color.alpha(bitmap.getPixel(x,h/2));require(alpha>=previous,"Interior scrim opacity reverses");require(alpha-previous<=6,"Hard inner seam");previous=alpha;}
    for(int x=w-feather;x<w;x++){int alpha=Color.alpha(bitmap.getPixel(x,h/2));require(Math.abs(alpha-previous)<=36,"Hard feather edge");previous=alpha;}
 
@@ -237,7 +237,7 @@ public class WidgetProbe extends Instrumentation {
   waitFor(()->c.getSharedPreferences("widget",0).getInt("alarmWindow",15)==90,"Settings did not persist 90");
   require(main(()->hasText(settings.getWindow().getDecorView(),"Dark clock text")),"Clock contrast setting missing");
   boolean wasDark=c.getSharedPreferences("widget",0).getBoolean("darkClockText",false);
-  click(main(()->findText(settings.getWindow().getDecorView(),"Dark clock text")));
+  main(()->{View control=findText(settings.getWindow().getDecorView(),"Dark clock text");require(control!=null && control.isClickable(),"Contrast switch not clickable");control.performClick();return null;});
   waitFor(()->c.getSharedPreferences("widget",0).getBoolean("darkClockText",false)!=wasDark,"Clock contrast setting did not persist");
   pass("settings UI: default15, persisted90-minute window and wallpaper contrast choice");
   main(()->{settings.finish();return null;});

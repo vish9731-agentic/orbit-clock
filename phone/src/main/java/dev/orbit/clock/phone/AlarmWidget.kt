@@ -176,7 +176,7 @@ open class AlarmWidget : AppWidgetProvider() {
             val secondary = when (s.kind) {
                 "bedtime" -> if (wide) "Bedtime · $eventTime" else "Until bedtime"
                 "bednow" -> "Bedtime"
-                "off" -> eventTime
+                "off" -> s.alarm?.label?.ifBlank { "Alarm" } ?: "Alarm"
                 else -> if (wide) "$eventTime · $title" else if (snoozed) "Snoozed · $eventTime" else eventTime
             }
             v.setTextViewText(R.id.widget_title, secondary)
