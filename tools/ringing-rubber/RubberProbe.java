@@ -124,7 +124,12 @@ public class RubberProbe extends Instrumentation {
   rested();noAction("Inertial overshoot");
   report("PASS release momentum retained without triggering actions, release="+released+" peak="+peak);
   install(false);press();move(limit*.5f,80);end(limit*.5f,false);SystemClock.sleep(50);
-  float caught=x();press();require(Math.abs(x()-caught)<1.5f,"Catching return jumped");
+  float caught=main(()->{
+   float before=thumb.getTranslationX();down=SystemClock.uptimeMillis();origin=thumb.getWidth()/2f;
+   event(MotionEvent.ACTION_DOWN,origin,down);
+   require(Math.abs(thumb.getTranslationX()-before)<1.5f,"Catching return jumped at touch-down");
+   return before;
+  });
   move(dp(6),30);require(Math.abs(x()-(caught+dp(6)))<2f,"Caught thumb stopped following finger");
   end(dp(6),true);rested();noAction("Interrupted return");
   report("PASS catch/reverse/cancel continuity");
