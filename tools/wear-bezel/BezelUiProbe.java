@@ -281,7 +281,7 @@ public final class BezelUiProbe extends Instrumentation {
     }
     private void motionSamples(View thumb, float from, float target, String name) throws Exception {
         JSONArray samples=new JSONArray();
-        android.view.ViewTreeObserver.OnDrawListener observer=() -> samples.put(thumb.getTranslationX());
+        android.view.ViewTreeObserver.OnDrawListener observer=() -> { try { samples.put(thumb.getTranslationX()); } catch(org.json.JSONException failure) { throw new AssertionError(failure); } };
         ui(() -> { thumb.getViewTreeObserver().addOnDrawListener(observer); return null; });
         SystemClock.sleep(1100);
         ui(() -> { if(thumb.getViewTreeObserver().isAlive()) thumb.getViewTreeObserver().removeOnDrawListener(observer); return null; });
