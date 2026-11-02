@@ -115,6 +115,11 @@ public class WidgetProbe extends Instrumentation {
   waitFor(()->kind(System.currentTimeMillis()).equals("alarm"),"Alarm not near");renderAt(System.currentTimeMillis());visible(true);
   capture("03-alarm-dark",Color.rgb(25,32,45));capture("04-alarm-light",Color.rgb(240,235,220));capture("04b-alarm-pattern",0);
   checkSurface();pass("one full-width backdrop, no inner tile, continuous alpha and transparent clock edge");
+  main(()->{RemoteViews legacy=new RemoteViews(c.getPackageName(),c.getResources().getIdentifier("alarm_widget_wide","layout",c.getPackageName()));
+   legacy.setViewVisibility(id("widget_event"),View.VISIBLE);legacy.setInt(id("widget_event"),"setBackgroundColor",Color.BLUE);manager.updateAppWidget(wideId,legacy);return null;});
+  waitFor(()->main(()->wide.findViewById(id("widget_backdrop"))==null),"Legacy host fixture not installed");
+  refresh();waitFor(()->main(()->wide.findViewById(id("widget_backdrop"))!=null),"Existing widget did not reinflate the rebuilt layout");
+  checkSurface();pass("existing host replaces the legacy hierarchy without deleting the widget");
   long now=System.currentTimeMillis();for(int minutes:new int[]{10,15,30,45,60,90}){
    c.getSharedPreferences("widget",0).edit().putInt("alarmWindow",minutes).commit();
    JSONObject a=record("Near alarm").put("snoozeUntil",now+(minutes+1)*60000L);save(a);

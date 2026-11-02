@@ -19,13 +19,14 @@ object WidgetBackdrop {
         val red = (Color.red(tone) * .62f).toInt()
         val green = (Color.green(tone) * .62f).toInt()
         val blue = (Color.blue(tone) * .62f).toInt()
-        val detailWidth = if (widthDp < 264) 120f else 144f
-        val textLeft = (widthDp - detailWidth + 12f) / widthDp
-        val start = if (wide) (textLeft - .19f).coerceIn(.28f, .42f) else 0f
-        val end = if (wide) (textLeft + .025f).coerceIn(.54f, .76f) else .20f
+        val start = if (wide) { if (widthDp < 264) .28f else .32f } else 0f
         val colors = IntArray(257) { index ->
-            val t = ((index / 256f - start) / (end - start)).coerceIn(0f, 1f)
-            val alpha = (255f * t * t * (3f - 2f * t)).toInt()
+            val t = ((index / 256f - start) / (1f - start)).coerceIn(0f, 1f)
+            val remaining = 1f - t
+            // The fade continues to the outer edge, with no early opaque plateau.
+            val transmission = if (wide) remaining * remaining * remaining
+                else remaining * remaining * remaining * remaining * remaining
+            val alpha = (255f * (1f - transmission)).toInt()
             // Identical RGB at every stop, including transparent ones: no grey/black fringe.
             Color.argb(alpha, red, green, blue)
         }
