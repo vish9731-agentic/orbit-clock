@@ -1,5 +1,10 @@
 # Orbit Clock handoff
 
+## Pomodoro Focus mode — implementation under verification
+
+Phone/watch Timer now opens Focus mode with configurable 25/5/15 defaults, manual phase transitions, a long break every four focuses, persistent Pause/Resume, confirmed End, notifications and focused-screen clockwise Start/Resume / anticlockwise Pause. Existing widgets are unchanged pending scope confirmation. See [Focus behavior and architecture](docs/FOCUS.md) for ownership, offline, permission and timing limits. Dedicated phone/Wear runtime verification and build/lint are in progress; do not claim APKs are ready until successful runs are recorded. Physical bezel and paired-device acceptance remain necessary.
+
+
 ## Reference-inspired hatching, transparency and text spacing — verification pending
 
 The user supplied a watch photo with fine diagonal hatching, a translucent fading rail and generous central text spacing, asking Orbit to mimic those qualities. The short 68-degree bottom arc and Orbit green palette are retained. Cached vector hatching (0.7dp strokes, 3dp pitch) is clipped to the rounded rail. A sweep opacity gradient tapers along the segment while a radial mask fades the inner edge into transparency; there is no opaque track slab or bitmap texture. Paths, gradients and shader composition are built only on size changes, not animation frames.

@@ -39,21 +39,22 @@ class FocusActivity : AppCompatActivity() {
         else registerReceiver(changes, IntentFilter(FocusStore.CHANGED))
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(if (watch) 25 else 24), dp(if (watch) 20 else 32), dp(if (watch) 25 else 24), dp(28))
+            setPadding(dp(if (watch) 25 else 24), dp(if (watch) 14 else 32), dp(if (watch) 25 else 24), dp(28))
             setBackgroundColor(colors.surface)
         }
         val scroll = ScrollView(this).apply { isFillViewport = true; addView(body) }; setContentView(scroll)
         fun text(size: Float) = TextView(this).apply { textSize = size; setTextColor(colors.onSurface); gravity = Gravity.CENTER }
-        body.addView(text(if (watch) 20f else 30f).apply { text = "Focus mode" })
+        if (!watch) body.addView(text(30f).apply { text = "Focus mode" })
         phase = text(16f); body.addView(phase)
         face = FocusFace(this, colors).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES }
-        body.addView(face, LinearLayout.LayoutParams(-1, dp(if (watch) 100 else 240)))
-        sessions = text(13f); body.addView(sessions)
+        body.addView(face, LinearLayout.LayoutParams(-1, dp(if (watch) 80 else 240)))
+        sessions = text(13f); if (!watch) body.addView(sessions)
         fun button(label: String, action: () -> Unit) = MaterialButton(this).apply {
             text = label; isAllCaps = false; minHeight = dp(48); setOnClickListener { performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); action() }
             body.addView(this, LinearLayout.LayoutParams(-1, -2))
         }
         primary = button("Start focus") { control() }
+        if (watch) body.addView(sessions)
         end = button("End session") {
             MaterialAlertDialogBuilder(this).setTitle("End this focus session?").setMessage("Reset the current cycle and session count?")
                 .setNegativeButton("Keep session", null).setPositiveButton("End") { _, _ -> FocusStore.act(this, "end") }.show()
@@ -85,8 +86,10 @@ class FocusActivity : AppCompatActivity() {
         val command = action ?: if (s.status == "Running") "pause" else "start"
         if (command == "start" && s.status != "Running") {
             if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 90)
-                Toast.makeText(this, "Allow notifications for focus completion alerts, then start again.", Toast.LENGTH_LONG).show(); return
+                MaterialAlertDialogBuilder(this).setTitle("Focus notifications")
+                    .setMessage("Allow notifications to hear or feel completion alerts while Orbit is in the background.")
+                    .setNegativeButton("Start without alerts") { _, _ -> FocusStore.act(this, command) }
+                    .setPositiveButton("Allow") { _, _ -> requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 90) }.show(); return
             }
             if (!Scheduler.allowed(this)) {
                 MaterialAlertDialogBuilder(this).setTitle("Allow precise focus alerts?")
