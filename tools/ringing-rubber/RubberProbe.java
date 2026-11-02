@@ -72,16 +72,52 @@ public class RubberProbe extends Instrumentation {
   int x1=Math.max(0,Math.round(bounds[0]*sx)),y1=Math.max(0,Math.round(bounds[1]*sy));
   int x2=Math.min(image.getWidth(),Math.round((bounds[0]+bounds[2])*sx));
   int y2=Math.min(image.getHeight(),Math.round((bounds[1]+bounds[3])*sy));
-  int left=x2,right=-1,top=y2,bottom=-1,pixels=0;
+  int width=x2-x1,height=y2-y1;
+  require(width>0 && height>0,"Empty hardware rail bounds: "+Arrays.toString(bounds));
+  int[] columns=new int[width];int rawPixels=0;
   for(int y=y1;y<y2;y++)for(int x=x1;x<x2;x++){
    int color=image.getPixel(x,y);
-   if(Color.red(color)<160 && Color.green(color)>180 && Color.blue(color)>140){
-    left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);pixels++;
+   if(Color.red(color)<160 && Color.green(color)>180 && Color.blue(color)>140){columns[x-x1]++;rawPixels++;}
+  }
+  // LCD text antialiasing contributes isolated cyan-looking fringe pixels. Locate
+  // the dense icon-sized region first; the icon remains separate from both labels.
+  int window=Math.min(width,Math.max(1,Math.round(dp(36)*sx)));
+  int sum=0;for(int x=0;x<window;x++)sum+=columns[x];
+  int best=sum,bestStart=0;
+  for(int start=1;start<=width-window;start++){
+   sum+=columns[start+window-1]-columns[start-1];
+   if(sum>best){best=sum;bestStart=start;}
+  }
+  int windowX=x1+bestStart;
+  boolean[] mask=new boolean[window*height];int windowPixels=0;
+  for(int y=0;y<height;y++)for(int x=0;x<window;x++){
+   int color=image.getPixel(windowX+x,y1+y);
+   if(Color.red(color)<160 && Color.green(color)>180 && Color.blue(color)>140){mask[y*window+x]=true;windowPixels++;}
+  }
+  int left=x2,right=-1,top=y2,bottom=-1,pixels=0;
+  int[] queue=new int[mask.length];
+  for(int seed=0;seed<mask.length;seed++)if(mask[seed]){
+   int head=0,tail=0,count=0,l=window,r=-1,t=height,bot=-1;
+   queue[tail++]=seed;mask[seed]=false;
+   while(head<tail){
+    int point=queue[head++],x=point%window,y=point/window;
+    count++;l=Math.min(l,x);r=Math.max(r,x);t=Math.min(t,y);bot=Math.max(bot,y);
+    for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++){
+     int nx=x+dx,ny=y+dy;
+     if(nx>=0 && nx<window && ny>=0 && ny<height && mask[ny*window+nx]){
+      mask[ny*window+nx]=false;queue[tail++]=ny*window+nx;
+     }
+    }
    }
+   // Preserve separate clock-ring, hand and bell components; reject only tiny
+   // text-fringe specks (the observed false positives were 1-3 pixels each).
+   if(count>=4){left=Math.min(left,windowX+l);right=Math.max(right,windowX+r);
+    top=Math.min(top,y1+t);bottom=Math.max(bottom,y1+bot);pixels+=count;}
   }
   save("hardware-"+name,image);
   require(pixels>20,"No hardware-rendered alarm glyph: "+name+" display="+Arrays.toString(bounds));
-  report("HARDWARE GLYPH "+name+" width="+(right-left+1)+" height="+(bottom-top+1)+" pixels="+pixels);
+  report("HARDWARE GLYPH "+name+" width="+(right-left+1)+" height="+(bottom-top+1)+" pixels="+pixels+
+    " rawCyan="+rawPixels+" iconWindowCyan="+windowPixels+" rejected="+(rawPixels-pixels));
   return new int[]{right-left+1,bottom-top+1,pixels};
  }
  void sameHardwareGlyph(int[] base,int[] actual,String name) {
