@@ -62,10 +62,13 @@ object FocusStore {
     @Synchronized fun accept(c: Context, item: DataItem): Boolean {
         if (item.uri.path != PATH) return false
         runCatching {
-            val incoming = decode(DataMapItem.fromDataItem(item).dataMap.getString("record") ?: return true)
-            if (incoming.newerThan(read(c))) write(c, incoming, false)
+            merge(c, DataMapItem.fromDataItem(item).dataMap.getString("record") ?: return true)
         }
         return true
+    }
+    @Synchronized fun merge(c: Context, raw: String) {
+        val incoming = decode(raw)
+        if (incoming.newerThan(read(c))) write(c, incoming, false)
     }
     private fun pending(c: Context, s: FocusSession) = PendingIntent.getBroadcast(c, 9201,
         Intent(c, FocusReceiver::class.java).setAction("complete").setData(Uri.parse("orbit://focus/deadline"))

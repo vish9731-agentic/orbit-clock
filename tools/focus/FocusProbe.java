@@ -84,6 +84,14 @@ public class FocusProbe extends Instrumentation {
             java.io.File dir=new java.io.File(c.getFilesDir(),"focus-results"); dir.mkdirs();
             android.graphics.Bitmap bitmap=getUiAutomation().takeScreenshot();
             if(bitmap!=null) { java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(dir,"focus.png")); bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out); out.close(); }
+            JSONObject old=state();
+            JSONObject incoming=new JSONObject(old.toString()).put("revision",old.getLong("revision")+100).put("writer","remote-test").put("status","Paused").put("remaining",42000).put("deadline",0);
+            call("merge",new Class[]{Context.class,String.class},c,incoming.toString());
+            require(state().getLong("remaining")==42000,"new remote state accepted");
+            call("merge",new Class[]{Context.class,String.class},c,old.toString());
+            require(state().getLong("remaining")==42000,"stale remote state ignored");
+            call("merge",new Class[]{Context.class,String.class},c,incoming.toString());
+            require(state().getLong("revision")==incoming.getLong("revision"),"replayed remote state idempotent");
             act("end"); require("Ready".equals(state().getString("status")),"end resets cycle");
             require(state().getInt("focus")==1,"end keeps durations");
             result.putString("stream","PASS " + checks + " Focus runtime checks"); finish(Activity.RESULT_OK,result);
