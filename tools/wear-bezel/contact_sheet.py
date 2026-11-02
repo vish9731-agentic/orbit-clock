@@ -12,8 +12,8 @@ frames=[actual.get(preferred.get(p.name,''),p) for p in frames]
 failures=sorted(root.rglob('failure.png'))
 frames.extend(failures)
 if frames:
-    width=600
-    cell=200
+    width=480
+    cell=160
     rows=(len(frames)+2)//3
     sheet=Image.new('RGB',(width,rows*(cell+24)), '#111111')
     draw=ImageDraw.Draw(sheet)
