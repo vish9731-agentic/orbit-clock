@@ -105,12 +105,12 @@ class RingActivity : AppCompatActivity() {
                 maxLines = 1; fontFeatureSettings = "tnum"
                 contentDescription = "Alarm time: $time"; phoneTime = this
                 setAutoSizeTextTypeUniformWithConfiguration(24, 32, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
-            }, LinearLayout.LayoutParams(dp(headingWidth), dp(36)))
+            }, LinearLayout.LayoutParams(dp(headingWidth), dp(32)))
             body.addView(label(name, 13f).apply {
                 maxLines = 1; ellipsize = TextUtils.TruncateAt.END
                 contentDescription = "Alarm label: $name"
                 setTextColor(0xffa5bab3.toInt())
-            }, LinearLayout.LayoutParams(dp(headingWidth), dp(20)).apply { bottomMargin = dp(6) })
+            }, LinearLayout.LayoutParams(dp(headingWidth), dp(20)).apply { bottomMargin = dp(4) })
         } else {
             body.addView(Space(this), LinearLayout.LayoutParams(1, 0, 3.3f))
             body.addView(label(time, 144f).apply {
@@ -147,12 +147,12 @@ class RingActivity : AppCompatActivity() {
         stepper.addView(decrease, LinearLayout.LayoutParams(size, size))
         stepper.addView(duration, LinearLayout.LayoutParams(dp(if (watch) 68 else 96), size))
         stepper.addView(increase, LinearLayout.LayoutParams(size, size))
-        body.addView(stepper, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(if (watch) 10 else 16) })
+        body.addView(stepper, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(if (watch) 6 else 16) })
         updateDuration()
         if (watch) {
             val actions = AlarmSlideControl(this, { act(true) }, { act(false) }, compact = true)
             watchActions = actions
-            body.addView(actions, LinearLayout.LayoutParams(dp((watchWidth * .80f).toInt().coerceAtMost(210)), dp(44)).apply { gravity = Gravity.CENTER_HORIZONTAL })
+            body.addView(actions, LinearLayout.LayoutParams(dp((watchWidth * .76f).toInt().coerceAtMost(210)), dp(42)).apply { gravity = Gravity.CENTER_HORIZONTAL })
         } else {
             body.addView(AlarmSlideControl(this,
                 { VisualHints.learn(this, "ring_controls"); act(true) },
