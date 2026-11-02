@@ -8,6 +8,7 @@ on:
       - 'core/src/main/java/dev/orbit/clock/core/RingingService.kt'
       - 'core/src/main/java/dev/orbit/clock/core/SnoozeDuration.java'
       - 'tools/verify-auto-snooze.py'
+      - 'tools/auto-snooze/**'
       - '.github/workflows/auto-snooze.yml'
 permissions:
   contents: read
@@ -28,18 +29,19 @@ jobs:
           packages: 'platform-tools platforms;android-35 build-tools;34.0.0'
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
-      - run: python -m pip install pillow
       - name: Build phone UI
-        run: ./gradlew --no-daemon -Pkotlin.compiler.execution.strategy=in-process :phone:assembleDebug
+        run: |
+          ./gradlew --no-daemon -Pkotlin.compiler.execution.strategy=in-process :phone:assembleDebug
+          bash tools/auto-snooze/build-probe.sh
       - name: Prepare runner
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android/sdk/ndk
           sudo chmod 666 /dev/kvm
           free -m
-      - name: Verify atmospheres and four real snoozes
+      - name: Verify real 30-second auto-snooze and aligned deadlines
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 33
+          api-level: 35
           target: google_apis
           arch: x86_64
           profile: pixel_6
@@ -63,7 +65,9 @@ jobs:
             adb shell appops set dev.orbit.clock SCHEDULE_EXACT_ALARM allow
             adb shell appops set dev.orbit.clock USE_FULL_SCREEN_INTENT allow || true
             adb logcat -c
-            python tools/verify-auto-snooze.py
+            adb install build/auto-snooze-probe/probe.apk
+            adb shell am instrument -w dev.orbit.clock.autoprobe/dev.orbit.clock.autoprobe.AutoSnoozeProbe > auto-snooze-evidence.txt
+            python -c "from pathlib import Path; s=Path('auto-snooze-evidence.txt').read_text(); print(s); assert 'AUTO_SNOOZE_RESULT_PASS' in s and 'AUTO_SNOOZE_FAILURE' not in s"
       - name: Runner resource diagnostics
         if: always()
         run: |
@@ -74,4 +78,4 @@ jobs:
         with:
           name: auto-snooze-evidence
           retention-days: 3
-          path: atmosphere-screenshots/
+          path: auto-snooze-evidence.txt
