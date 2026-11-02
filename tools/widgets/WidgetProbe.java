@@ -109,11 +109,17 @@ public class WidgetProbe extends Instrumentation {
   pass("actual non-wakeup AlarmManager boundary switches clock to reminder without polling");
   save(record("Near alarm").put("snoozeUntil",System.currentTimeMillis()+5*60000));renderAt(System.currentTimeMillis());
   require(main(()->square.findViewById(id("widget_event")).getContentDescription().toString().startsWith("Snoozed")),"Snooze state");capture("05-snoozed",Color.rgb(75,85,67));
-  pass("all six reminder windows, exact boundaries and snooze deadline");
+  save(alarm("Later alarm",8,0,new JSONArray()).put("snoozeUntil",System.currentTimeMillis()+45*60000));
+  save(alarm("Timer fixture",8,0,new JSONArray()).put("timer",true).put("snoozeUntil",System.currentTimeMillis()+60000));
+  Object selection=snapshot(System.currentTimeMillis());Object selected=selection.getClass().getMethod("getAlarm").invoke(selection);
+  require(selected!=null && selected.getClass().getMethod("getId").invoke(selected).equals("Near alarm"),"Earliest clock alarm selection / timer exclusion");
+  remove("Timer fixture");
+  pass("all six reminder windows, exact boundaries, multiple alarms, timer exclusion and snooze deadline");
   // The child's PendingIntent is sent by the real host, not by a test-only application hook.
   click(square.findViewById(id("widget_toggle")));waitFor(()->!record("Near alarm").getBoolean("enabled"),"Toggle did not save");
   waitFor(()->main(()->square.findViewById(id("widget_clock")).getVisibility()==View.VISIBLE),"Store broadcast did not refresh host");
   require(record("Near alarm").getInt("snoozeMinutes")==5,"Toggle changed defaults");pass("native host toggle, saved state and automatic return to clock");
+  require(record("Later alarm").getBoolean("enabled"),"Toggle changed another alarm");remove("Later alarm");
   remove("Near alarm");
   JSONObject wake=alarm("Wake up",7,0,new JSONArray(Arrays.asList(1,2,3,4,5)));save(wake);
   LocalDate monday=LocalDate.now().plusDays(14).with(TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY));
@@ -137,7 +143,11 @@ public class WidgetProbe extends Instrumentation {
   c.getSharedPreferences("tools",0).edit().putInt("sleepGoal",7).commit();require(kind(before).equals("clock"),"Sleep goal did not move bedtime");
   c.getSharedPreferences("tools",0).edit().putInt("sleepGoal",8).commit();
   c.getSharedPreferences("widget",0).edit().putInt("bedtimeWindow",15).putBoolean("bedtimeEnabled",false).commit();require(kind(before).equals("clock"),"Bedtime opt out");
-  c.getSharedPreferences("widget",0).edit().putBoolean("bedtimeEnabled",true).commit();remove("Wake up");
+  c.getSharedPreferences("widget",0).edit().putBoolean("bedtimeEnabled",true).commit();
+  TimeZone original=TimeZone.getDefault();try{
+   TimeZone.setDefault(TimeZone.getTimeZone(original.getID().equals("Asia/Tokyo")?"America/New_York":"Asia/Tokyo"));
+   require(kind(before).equals("clock"),"Bedtime did not follow local zone");
+  }finally{TimeZone.setDefault(original);}remove("Wake up");
   pass("bedtime across midnight, repeat days, all windows, sleep-goal edits, 15-minute grace and opt out");
   // Real AlarmReceiver delivery, then the production snooze action.
   long at=System.currentTimeMillis()+12000;Calendar aCal=Calendar.getInstance();aCal.setTimeInMillis(at);
@@ -153,7 +163,7 @@ public class WidgetProbe extends Instrumentation {
   main(()->{c.startActivity(new Intent().setClassName(c.getPackageName(),"dev.orbit.clock.phone.MainActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP));return null;});
   waitFor(()->activity.hasWindowFocus(),"Main activity did not regain focus");
   renderAt(System.currentTimeMillis());
-  main(()->{float d=c.getResources().getDisplayMetrics().density;square.setLayoutParams(new LinearLayout.LayoutParams((int)(130*d),(int)(130*d)));wide.setLayoutParams(new LinearLayout.LayoutParams((int)(300*d),(int)(130*d)));return null;});
+  main(()->{float d=c.getResources().getDisplayMetrics().density;square.setLayoutParams(new LinearLayout.LayoutParams((int)(130*d),(int)(130*d)));wide.setLayoutParams(new LinearLayout.LayoutParams((int)(250*d),(int)(130*d)));return null;});
   SystemClock.sleep(400);
   capture("08-small",Color.rgb(240,235,220));
   require(main(()->{View event=square.findViewById(id("widget_event"));View count=square.findViewById(id("widget_countdown"));return count.getBottom()<=event.getHeight();}),"Small square clips countdown");

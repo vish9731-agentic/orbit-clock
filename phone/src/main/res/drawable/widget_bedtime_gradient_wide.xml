@@ -1,1 +1,1 @@
-<shape xmlns:android="http://schemas.android.com/apk/res/android"><corners android:radius="28dp"/><gradient android:angle="0" android:startColor="#00000000" android:centerColor="@color/widget_bedtime_tone" android:centerX="0.35" android:endColor="@color/widget_bedtime_tone"/></shape>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"><corners android:radius="28dp"/><gradient android:angle="0" android:startColor="#00000000" android:centerColor="@color/widget_bedtime_tone" android:centerX="0.22" android:endColor="@color/widget_bedtime_tone"/></shape>
