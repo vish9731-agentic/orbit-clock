@@ -21,8 +21,13 @@ public class FocusProbe extends Instrumentation {
     private JSONObject state() throws Exception {
         return new JSONObject(c.getSharedPreferences("focus",0).getString("session", "{}"));
     }
-    private void require(boolean good, String label) { if (!good) throw new AssertionError(label); checks++; System.out.println("PASS " + label); }
-    private void ui(Runnable action) { runOnMainSync(action); waitForIdleSync(); }
+    private void require(boolean good, String label) { if (!good) throw new AssertionError(label); checks++; Bundle progress=new Bundle(); progress.putString("stream","PASS " + label + "\n"); sendStatus(0,progress); }
+    private void ui(Runnable action) {
+        java.util.concurrent.atomic.AtomicReference<Throwable> error=new java.util.concurrent.atomic.AtomicReference<>();
+        runOnMainSync(() -> { try { action.run(); } catch(Throwable failure) { error.set(failure); } });
+        if(error.get()!=null) throw new AssertionError("UI action failed",error.get());
+        waitForIdleSync();
+    }
     private View find(View v, String text) {
         if(v instanceof TextView && text.equals(((TextView)v).getText().toString())) return v;
         if(v instanceof ViewGroup) for(int i=0;i<((ViewGroup)v).getChildCount();i++) { View f=find(((ViewGroup)v).getChildAt(i), text); if(f!=null)return f; }
@@ -46,6 +51,7 @@ public class FocusProbe extends Instrumentation {
         try {
             c=getTargetContext(); store=c.getClassLoader().loadClass("dev.orbit.clock.core.FocusStore"); singleton=store.getField("INSTANCE").get(null);
             c.getSharedPreferences("focus",0).edit().clear().commit();
+            Bundle launch=new Bundle(); launch.putString("stream","Launching Focus activity\n"); sendStatus(0,launch);
             activity=startActivitySync(new Intent().setClassName(c,"dev.orbit.clock.core.FocusActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             SystemClock.sleep(1200); waitForIdleSync();
             boolean watch=c.getPackageManager().hasSystemFeature("android.hardware.type.watch");

@@ -60,6 +60,8 @@ jobs:
             adb shell settings put global device_provisioned 1
             adb shell settings put secure user_setup_complete 1
             adb shell settings put secure user_setup_pairing 1
+            adb shell pm disable-user --user 0 com.google.android.googlesdksetup || true
+            adb shell am force-stop com.google.android.googlesdksetup
             adb shell dumpsys battery unplug
             adb shell dumpsys battery set status 3
             adb shell settings put system screen_off_timeout 1800000
@@ -70,7 +72,7 @@ jobs:
             adb shell pm grant dev.orbit.clock android.permission.POST_NOTIFICATIONS
             adb shell appops set dev.orbit.clock SCHEDULE_EXACT_ALARM allow
             adb logcat -c
-            adb shell am instrument -w dev.orbit.clock.focusprobe/dev.orbit.clock.focusprobe.FocusProbe | tee focus-results/checks.txt
+            timeout 180 adb shell am instrument -w dev.orbit.clock.focusprobe/dev.orbit.clock.focusprobe.FocusProbe | tee focus-results/checks.txt
             adb logcat -d -b crash > focus-results/crashes.txt
             adb logcat -d -s AndroidRuntime > focus-results/runtime.txt
             cat focus-results/crashes.txt
