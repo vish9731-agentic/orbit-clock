@@ -103,6 +103,7 @@ class FocusActivity : AppCompatActivity() {
             }
         }
         FocusStore.act(this, command)
+        update()
     }
     private fun durations() {
         val s = FocusStore.read(this)

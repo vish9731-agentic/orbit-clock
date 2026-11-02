@@ -34,7 +34,13 @@ public class FocusProbe extends Instrumentation {
         return null;
     }
     private void tap(String text) {
-        ui(() -> { View v=find(activity.getWindow().getDecorView(),text); if(v==null)throw new AssertionError("Missing " + text); v.performClick(); });
+        long limit=SystemClock.uptimeMillis()+6000;
+        boolean[] clicked={false};
+        while(!clicked[0] && SystemClock.uptimeMillis()<limit) {
+            ui(() -> { View v=find(activity.getWindow().getDecorView(),text); if(v!=null) { v.performClick(); clicked[0]=true; } });
+            if(!clicked[0]) SystemClock.sleep(100);
+        }
+        if(!clicked[0]) throw new AssertionError("Missing " + text);
     }
     private void act(String action) throws Exception { ui(() -> { try { call("act",new Class[]{Context.class,String.class},c,action); }catch(Exception e){throw new RuntimeException(e);} }); }
     private void rotate(float delta) {
