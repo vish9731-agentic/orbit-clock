@@ -84,7 +84,8 @@ object FocusStore {
     }
     fun now(c: Context, s: FocusSession): Long = if (s.status == "Running" && s.owner == device(c))
         s.deadline - (elapsedDeadline(c, s) - SystemClock.elapsedRealtime()) else System.currentTimeMillis()
-    fun schedule(c: Context, s: FocusSession = read(c)) {
+    @Synchronized fun schedule(c: Context, s: FocusSession = read(c)) {
+        if (s != read(c)) return
         val manager = c.getSystemService(AlarmManager::class.java)
         val pi = pending(c, s); manager.cancel(pi)
         if (s.status != "Complete") c.getSystemService(NotificationManager::class.java).cancel(9201)
@@ -118,7 +119,7 @@ object FocusStore {
             .setContentText("${s.completed} focus sessions completed").setContentIntent(open).setOnlyAlertOnce(!alert)
             .setOngoing(s.status == "Running").setAutoCancel(alert)
             .addAction(Notification.Action.Builder(null, label, control).build())
-        if (s.status == "Running") n.setWhen(s.deadline).setUsesChronometer(true).setChronometerCountDown(true)
+        if (s.status == "Running") n.setWhen(System.currentTimeMillis() + s.left(now(c, s))).setUsesChronometer(true).setChronometerCountDown(true)
         nm.notify(9201, n.build())
     }
 }
