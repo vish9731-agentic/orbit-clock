@@ -46,24 +46,24 @@ public final class BezelUiProbe extends Instrumentation {
     private void observeExit(Activity activity) {
         View overlay=find(activity.getWindow().getDecorView(),null,"watch_exit_reveal");
         if(overlay==null) return;
-        try {
-            android.animation.ValueAnimator animation=(android.animation.ValueAnimator)field(overlay,"animator");
-            JSONArray samples=new JSONArray(); exitMotions.add(samples);
-            final boolean[] captured={false,false};
-            animation.addUpdateListener(frame -> {
-                try {
-                    float p=((Number)field(overlay,"revealProgress")).floatValue();
-                    float radius=((Number)field(overlay,"revealRadius")).floatValue();
-                    float alpha=((Number)field(overlay,"sceneAlpha")).floatValue();
-                    samples.put(new JSONArray().put(p).put(radius).put(alpha));
-                    if(exitFrames.size()<2 && ((!captured[0] && p>.22f) || (!captured[1] && p>.60f))) {
-                        if(p>.60f) captured[1]=true; else captured[0]=true;
-                        Bitmap image=Bitmap.createBitmap(overlay.getWidth(),overlay.getHeight(),Bitmap.Config.ARGB_8888);
-                        activity.getWindow().getDecorView().draw(new Canvas(image)); exitFrames.add(image);
-                    }
-                } catch(Exception failure) { throw new AssertionError(failure); }
-            });
-        } catch(Exception failure) { throw new AssertionError(failure); }
+        JSONArray samples=new JSONArray(); exitMotions.add(samples);
+        final boolean[] captured={false,false}, drawing={false};
+        overlay.getViewTreeObserver().addOnDrawListener(() -> {
+            if(drawing[0]) return;
+            try {
+                float p=((Number)field(overlay,"revealProgress")).floatValue();
+                float radius=((Number)field(overlay,"revealRadius")).floatValue();
+                float alpha=((Number)field(overlay,"sceneAlpha")).floatValue();
+                samples.put(new JSONArray().put(p).put(radius).put(alpha));
+                if(exitFrames.size()<2 && ((!captured[0] && p>.22f) || (!captured[1] && p>.60f))) {
+                    if(p>.60f) captured[1]=true; else captured[0]=true;
+                    drawing[0]=true;
+                    Bitmap image=Bitmap.createBitmap(overlay.getWidth(),overlay.getHeight(),Bitmap.Config.ARGB_8888);
+                    activity.getWindow().getDecorView().draw(new Canvas(image)); exitFrames.add(image);
+                    drawing[0]=false;
+                }
+            } catch(Exception failure) { throw new AssertionError(failure); }
+        });
     }
     private void homeAfterAction() throws Exception {
         waitUntil(() -> {
@@ -280,17 +280,19 @@ public final class BezelUiProbe extends Instrumentation {
         waitUntil(() -> Math.abs(position(thumb)-target)<density,1200,"Slider did not settle at its input target");
     }
     private void motionSamples(View thumb, float from, float target, String name) throws Exception {
-        java.util.Set<Integer> intermediate=new java.util.HashSet<>();
         JSONArray samples=new JSONArray();
-        long until=SystemClock.elapsedRealtime()+900;
-        while(SystemClock.elapsedRealtime()<until) {
-            float value=position(thumb); samples.put(value);
+        android.view.ViewTreeObserver.OnDrawListener observer=() -> samples.put(thumb.getTranslationX());
+        ui(() -> { thumb.getViewTreeObserver().addOnDrawListener(observer); return null; });
+        SystemClock.sleep(1100);
+        ui(() -> { if(thumb.getViewTreeObserver().isAlive()) thumb.getViewTreeObserver().removeOnDrawListener(observer); return null; });
+        java.util.Set<Integer> intermediate=new java.util.HashSet<>();
+        for(int i=0;i<samples.length();i++) {
+            float value=(float)samples.getDouble(i);
             if(Math.abs(value-from)>.5f && Math.abs(value-target)>.5f) intermediate.add(Math.round(value*2));
-            SystemClock.sleep(16);
         }
         save(name+".json",samples.toString());
-        require(ui(() -> thumb.getRotation()==0f),"Watch thumb must move horizontally without wobble");
-        require(intermediate.size()>=2,"Slider jumped between detents without intermediate positions: "+samples);
+        require(ui(() -> thumb.getRotation()==0f),"Glyph must stay upright while the vector pill follows the arc");
+        require(intermediate.size()>=2,"Arc did not render multiple intermediate positions: "+samples);
         settleAt(thumb,target);
     }
     private void pointer(int action,float x,float y) {

@@ -4,9 +4,6 @@ import android.content.Context
 import android.graphics.*
 import android.view.*
 import android.widget.FrameLayout
-import androidx.dynamicanimation.animation.FloatValueHolder
-import androidx.dynamicanimation.animation.SpringAnimation
-import androidx.dynamicanimation.animation.SpringForce
 import kotlin.math.*
 
 /** Bezel-first, vector-drawn lower semicircle. Motion never commits an alarm action. */
@@ -15,7 +12,6 @@ class WatchArcControl(context: Context, private val snooze: () -> Unit, private 
     private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xff103a35.toInt(); style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeWidth = dp(18f) }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xffd3e3df.toInt(); textAlign = Paint.Align.CENTER; textSize = dp(9f) * resources.configuration.fontScale.coerceAtMost(1.3f) }
     private val oval = RectF()
-    private val value = FloatValueHolder(0f)
     private var fraction = 0f
     private var velocity = 0f
     private var radius = 0f
@@ -27,12 +23,36 @@ class WatchArcControl(context: Context, private val snooze: () -> Unit, private 
     private var tracker: VelocityTracker? = null
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
     val touchActive: Boolean get() = dragging || completing
-    private val motion = SpringAnimation(value).apply {
-        spring = SpringForce(0f).apply { dampingRatio = .86f; stiffness = 190f }
-        setMinValue(-1f); setMaxValue(1f); setMinimumVisibleChange(.0004f)
-        addUpdateListener { _, position, speed -> fraction = position; velocity = speed; placeThumb(); invalidate() }
-        addEndListener { _, canceled, _, _ -> if (!canceled && completing) finishCompletion() }
+    private var target = 0f
+    private var motionRunning = false
+    private var lastFrame = 0L
+    private val frames = Choreographer.getInstance()
+    private val motionFrame = object : Choreographer.FrameCallback {
+        override fun doFrame(frameTimeNanos: Long) {
+            if (!motionRunning) return
+            // A delayed UI frame must not jump across most of the rail. Advance
+            // at most 32ms of spring time per rendered frame, preserving velocity.
+            val dt = if (lastFrame == 0L) 1.0 / 60.0 else ((frameTimeNanos - lastFrame) / 1e9).coerceIn(0.0, .032)
+            lastFrame = frameTimeNanos
+            if (!OrbitMotion.enabled()) { fraction = target; velocity = 0f }
+            else {
+                // Analytic damped spring, stiffness 190, damping ratio .86.
+                val omega = 13.7840487521; val damping = .86 * omega
+                val frequency = omega * sqrt(1.0 - .86 * .86)
+                val a = (fraction - target).toDouble()
+                val b = (velocity + damping * a) / frequency
+                val sine = sin(frequency * dt); val cosine = cos(frequency * dt); val decay = exp(-damping * dt)
+                fraction = (target + decay * (a * cosine + b * sine)).toFloat().coerceIn(-1f, 1f)
+                velocity = (decay * ((b * frequency - damping * a) * cosine + (-a * frequency - damping * b) * sine)).toFloat()
+            }
+            placeThumb(); invalidate()
+            if (abs(fraction - target) < .0004f && abs(velocity) < .006f) {
+                fraction = target; velocity = 0f; motionRunning = false; placeThumb(); invalidate()
+                if (completing) finishCompletion()
+            } else frames.postFrameCallback(this)
+        }
     }
+    private fun cancelMotion() { motionRunning = false; lastFrame = 0L; frames.removeFrameCallback(motionFrame) }
     private val thumb = ArcThumb(context)
     private val leftAction = View(context).apply { contentDescription = "Snooze"; isClickable = true; isFocusable = true; setOnClickListener { if (!completing) snooze() } }
     private val rightAction = View(context).apply { contentDescription = "Dismiss"; isClickable = true; isFocusable = true; setOnClickListener { if (!completing) stop() } }
@@ -47,7 +67,7 @@ class WatchArcControl(context: Context, private val snooze: () -> Unit, private 
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     if (completing || !thumb.containsPill(event.x, event.y)) false else {
-                        motion.cancel(); downX = event.rawX; downFraction = fraction; dragging = true
+                        cancelMotion(); downX = event.rawX; downFraction = fraction; dragging = true
                         tracker?.recycle(); tracker = VelocityTracker.obtain(); track(event)
                         parent.requestDisallowInterceptTouchEvent(true); true
                     }
@@ -55,7 +75,7 @@ class WatchArcControl(context: Context, private val snooze: () -> Unit, private 
                 MotionEvent.ACTION_MOVE -> {
                     if (dragging && radius > 0f) {
                         fraction = (downFraction + (event.rawX - downX) / radius).coerceIn(-1f, 1f)
-                        velocity = 0f; value.value = fraction; track(event); placeThumb(); invalidate()
+                        velocity = 0f; track(event); placeThumb(); invalidate()
                     }; true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -113,11 +133,14 @@ class WatchArcControl(context: Context, private val snooze: () -> Unit, private 
     }
     private fun animateTo(target: Float, startVelocity: Float = velocity) {
         if (!OrbitMotion.enabled()) {
-            motion.cancel(); fraction = target; value.value = target; velocity = 0f; placeThumb(); invalidate()
+            cancelMotion(); fraction = target; this.target = target; velocity = 0f; placeThumb(); invalidate()
             if (completing) finishCompletion()
         } else {
-            if (!motion.isRunning) motion.setStartVelocity(startVelocity)
-            motion.animateToFinalPosition(target)
+            this.target = target
+            if (!motionRunning) {
+                velocity = startVelocity; motionRunning = true; lastFrame = 0L
+                frames.postFrameCallback(motionFrame)
+            }
         }
     }
     fun setBezelProgress(snoozing: Boolean, progress: Float) {
@@ -129,20 +152,20 @@ class WatchArcControl(context: Context, private val snooze: () -> Unit, private 
         completing = true; dragging = false; completion = finished
         animateTo(if (snoozing) -1f else 1f)
         // A lost frame/window must never leave a completed alarm stuck on screen.
-        postDelayed({ if (completing) finishCompletion() }, 700)
+        postDelayed({ if (completing) finishCompletion() }, 1600)
     }
     private fun finishCompletion() {
         val callback = completion ?: return; completion = null
-        motion.cancel(); callback()
+        cancelMotion(); callback()
     }
     fun thumbCenter(): Pair<Float, Float> = Pair(thumb.left + thumb.width / 2f + thumb.translationX, thumb.top + thumb.height / 2f + thumb.translationY)
     override fun onDetachedFromWindow() {
-        motion.cancel(); tracker?.recycle(); tracker = null; completion = null; super.onDetachedFromWindow()
+        cancelMotion(); tracker?.recycle(); tracker = null; completion = null; super.onDetachedFromWindow()
     }
     override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
         super.onWindowFocusChanged(hasWindowFocus)
         if (!hasWindowFocus && !completing) {
-            motion.cancel(); fraction = 0f; value.value = 0f; velocity = 0f; dragging = false; placeThumb(); invalidate()
+            cancelMotion(); fraction = 0f; target = 0f; velocity = 0f; dragging = false; placeThumb(); invalidate()
         }
     }
     private class ArcThumb(context: Context) : View(context) {

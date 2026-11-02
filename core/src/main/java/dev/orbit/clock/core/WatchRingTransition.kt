@@ -1,6 +1,5 @@
 package dev.orbit.clock.core
 
-import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.ActivityOptions
 import android.content.Intent
@@ -9,6 +8,7 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
+import android.view.Choreographer
 import android.view.animation.PathInterpolator
 import kotlin.math.*
 
@@ -54,27 +54,41 @@ object WatchRingTransition {
         private var revealProgress = 0f
         private var revealRadius = 0f
         private var sceneAlpha = 1f
-        private val animator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 760; interpolator = android.view.animation.LinearInterpolator()
-            addUpdateListener {
-                revealProgress = it.animatedValue as Float
+        private var running = false
+        private var lastFrame = 0L
+        private val frames = Choreographer.getInstance()
+        private val animation = object : Choreographer.FrameCallback {
+            override fun doFrame(frameTimeNanos: Long) {
+                if (!running) return
+                val elapsed = if (lastFrame == 0L) 0f else ((frameTimeNanos - lastFrame) / 1e6f).coerceIn(0f, 32f)
+                lastFrame = frameTimeNanos
+                revealProgress = (revealProgress + elapsed / 760f).coerceAtMost(1f)
                 val growth = ease.getInterpolation(revealProgress)
                 val farX = max(scene.x, width - scene.x); val farY = max(scene.y, height - scene.y)
                 revealRadius = 12f * resources.displayMetrics.density + hypot(farX, farY) * 1.15f * growth
                 val fade = ((revealProgress - .06f) / .80f).coerceIn(0f, 1f)
                 sceneAlpha = 1f - fade * fade * (3f - 2f * fade)
                 invalidate()
+                if (revealProgress >= 1f || !OrbitMotion.enabled()) end()
+                else frames.postFrameCallback(this)
             }
-            addListener(object : android.animation.AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: android.animation.Animator) {
-                    (parent as? ViewGroup)?.removeView(this@Reveal)
-                    activity.finish()
-                    @Suppress("DEPRECATION") activity.overridePendingTransition(0, 0)
-                }
-            })
+        }
+        private val owner = activity
+        private fun end() {
+            if (!running) return
+            running = false; frames.removeFrameCallback(animation)
+            (parent as? ViewGroup)?.removeView(this)
+            owner.finish()
+            @Suppress("DEPRECATION") owner.overridePendingTransition(0, 0)
         }
         init { tag = "watch_exit_reveal"; isClickable = true; importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS }
-        fun start() { post { if (isAttachedToWindow) { if (OrbitMotion.enabled()) animator.start() else (parent as? ViewGroup)?.removeView(this) } } }
+        fun start() { post {
+            if (isAttachedToWindow) {
+                running = true
+                if (OrbitMotion.enabled()) { frames.postFrameCallback(animation); postDelayed({ end() }, 4000) }
+                else end()
+            }
+        } }
         override fun onDraw(canvas: Canvas) {
             // This bitmap stays at its captured pixel size. It is never enlarged.
             imagePaint.alpha = (sceneAlpha * 255).toInt()
@@ -87,10 +101,11 @@ object WatchRingTransition {
         }
         override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
             super.onWindowFocusChanged(hasWindowFocus)
-            if (!hasWindowFocus && animator.isStarted) animator.end()
+            if (!hasWindowFocus && running) end()
         }
         override fun onDetachedFromWindow() {
-            animator.cancel(); if (!scene.bitmap.isRecycled) scene.bitmap.recycle(); super.onDetachedFromWindow()
+            running = false; frames.removeFrameCallback(animation)
+            if (!scene.bitmap.isRecycled) scene.bitmap.recycle(); super.onDetachedFromWindow()
         }
     }
 }
