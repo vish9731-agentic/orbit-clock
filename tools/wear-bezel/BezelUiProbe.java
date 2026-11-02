@@ -43,6 +43,7 @@ public final class BezelUiProbe extends Instrumentation {
     private long fixtureAt;
     private final List<JSONArray> exitMotions = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final List<Bitmap> exitFrames = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<Bitmap> faceFrames = new ArrayList<>();
     private void observeExit(Activity activity) {
         View overlay=find(activity.getWindow().getDecorView(),null,"watch_exit_reveal");
         if(overlay==null) return;
@@ -66,11 +67,24 @@ public final class BezelUiProbe extends Instrumentation {
         });
     }
     private void homeAfterAction() throws Exception {
+        android.content.pm.ResolveInfo home=target.getPackageManager().resolveActivity(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
+        require(home!=null,"System HOME component was not resolved");
+        String homeComponent=new android.content.ComponentName(home.activityInfo.packageName,home.activityInfo.name).flattenToShortString();
         waitUntil(() -> {
+            if(android.animation.ValueAnimator.areAnimatorsEnabled() && faceFrames.size()<2) {
+                boolean visible=ui(() -> {
+                    if(resumed==null || !resumed.getClass().getName().equals(EXIT)) return false;
+                    View reveal=find(resumed.getWindow().getDecorView(),null,"watch_exit_reveal");
+                    if(reveal==null) return false;
+                    float progress=((Number)field(reveal,"revealProgress")).floatValue();
+                    return progress>.18f && progress<.80f;
+                });
+                if(visible) { Bitmap frame=getUiAutomation().takeScreenshot(); if(frame!=null) faceFrames.add(frame); }
+            }
             String activities=shell("dumpsys activity activities");
-            for(String line:activities.split("\\n")) if(line.contains("topResumedActivity=") && !line.contains(PKG)) return true;
+            for(String line:activities.split("\\n")) if(line.contains("topResumedActivity=") && line.contains(homeComponent)) return true;
             return false;
-        },6000,"Completed action did not reveal the system watch face");
+        },7000,"Completed action did not reveal the resolved system watch face: "+homeComponent);
         require(ui(() -> resumed==null || find(resumed.getWindow().getDecorView(),null,"watch_exit_reveal")==null || resumed.isDestroyed()),"Exit overlay remained above the watch face");
     }
 
@@ -423,7 +437,8 @@ public final class BezelUiProbe extends Instrumentation {
             require(lastRadius>firstRadius+50*density && lastAlpha<.05f,"Expansion/transparency did not progress to home");
         }
         for(int i=0;i<exitFrames.size();i++) try(FileOutputStream stream=new FileOutputStream(new File(out,"07-exit-"+i+".png"))) { exitFrames.get(i).compress(Bitmap.CompressFormat.PNG,100,stream); exitFrames.get(i).recycle(); }
-        pass("Native Snooze fallback, expanding/fading transition frames, overlay cleanup and reduced-motion immediate watch-face return");
+        for(int i=0;i<faceFrames.size();i++) try(FileOutputStream stream=new FileOutputStream(new File(out,"08-actual-face-"+i+".png"))) { faceFrames.get(i).compress(Bitmap.CompressFormat.PNG,100,stream); faceFrames.get(i).recycle(); }
+        pass("Native Snooze fallback, rendered expansion/fade frames, exact system HOME destination, cleanup and reduced-motion immediate watch-face return");
     }
     @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); start(); }
     @Override public void onStart() {
