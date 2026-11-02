@@ -113,7 +113,7 @@ open class AlarmWidget : AppWidgetProvider() {
             v.setOnClickPendingIntent(R.id.widget_clock, open)
             v.setViewVisibility(R.id.widget_clock, if (wide || !event) View.VISIBLE else View.GONE)
             v.setViewVisibility(R.id.widget_event, if (event) View.VISIBLE else if (wide) View.INVISIBLE else View.GONE)
-            val background = if (alarm) R.drawable.widget_alarm_gradient else R.drawable.widget_bedtime_gradient
+            val background = if (wide) { if (alarm) R.drawable.widget_alarm_gradient_wide else R.drawable.widget_bedtime_gradient_wide } else { if (alarm) R.drawable.widget_alarm_gradient else R.drawable.widget_bedtime_gradient }
             v.setInt(R.id.widget_event, "setBackgroundResource", if (event) background else 0)
             v.setImageViewResource(R.id.widget_icon, when { !alarm -> R.drawable.widget_moon; snoozed -> R.drawable.widget_snooze; else -> R.drawable.widget_alarm })
             val title = when (s.kind) {

@@ -133,6 +133,7 @@ public class WidgetProbe extends Instrumentation {
    require(kind(bed-minutes*60000L).equals("bedtime"),"Bed window "+minutes);
    require(kind(bed-minutes*60000L-1).equals("clock"),"Bed outside "+minutes);
   }
+  c.getSharedPreferences("widget",0).edit().putInt("bedtimeWindow",15).commit();
   c.getSharedPreferences("tools",0).edit().putInt("sleepGoal",7).commit();require(kind(before).equals("clock"),"Sleep goal did not move bedtime");
   c.getSharedPreferences("tools",0).edit().putInt("sleepGoal",8).commit();
   c.getSharedPreferences("widget",0).edit().putInt("bedtimeWindow",15).putBoolean("bedtimeEnabled",false).commit();require(kind(before).equals("clock"),"Bedtime opt out");
