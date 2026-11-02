@@ -24,7 +24,7 @@ class FocusSessionTest {
         assertEquals(5 * 60_000L, rest.left(10_000_000))
     }
     @Test fun fourthFocusOffersLongBreak() {
-        var s = FocusSession(focus = 1, shortBreak = 1, longBreak = 2)
+        var s = FocusSession(focus = 1, shortBreak = 1, longBreak = 2, remaining = 60_000)
         var now = 0L
         repeat(4) { cycle ->
             s = s.act("start", now); now += 60_000

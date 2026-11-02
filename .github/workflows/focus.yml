@@ -5,6 +5,9 @@ on:
     paths: ['core/**', 'tools/focus/**', '.github/workflows/focus.yml']
   pull_request:
     paths: ['core/**', 'tools/focus/**', '.github/workflows/focus.yml']
+concurrency:
+  group: focus-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
