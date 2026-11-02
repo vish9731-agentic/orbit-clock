@@ -1,11 +1,10 @@
 # Orbit Clock handoff
 
-## Wide widget 4×1 strip — verification pending
+## Wide widget 4×1 strip — verified debug 0.1.111
 
-User requests converting the wide 4×2 widget to 4×1. Provider identity is preserved; metadata targets four columns/one row with70dp minimum height. New dynamic_widget_strip layouts place the icon, a two-line time/label + countdown block, and48dp toggle beside the clock instead of stacking a tall header. Alarm time comes first in the summary so long labels can truncate safely. Narrow-wide anchors remain; the continuous full-viewport alpha field is retained and sized to the real one-row bounds. Square remains2×2. Existing launcher placements may retain two rows until the user resizes; new placements default4×1. Android owns the grid allocation.
+User requested converting the wide widget from4×2 to4×1. The same provider now targets four columns/one row with70dp minimum height. Active dynamic_widget_strip layouts place the clock, icon, two-line reminder/time + countdown, and48dp toggle horizontally. Alarm time comes first in the summary so a long label can truncate safely. The text container has a46dp rounding allowance to avoid one-pixel cropping at fractional density. Narrow-wide anchors and the single full-viewport transparency fade are retained; square remains2×2. Existing launcher placements can retain their old allocation until the user drags the resize handle to one row; new placements default4×1. Android owns that grid allocation.
 
-Native verification now binds wide hosts at340×80dp and250×70dp, asserts 4×1 picker metadata and fully visible countdowns, and reuses real alarm/snooze/bedtime and migration checks at100%/130% text. Verification is pending.
-
+Verified source `f7e7bf6fefd522f1659f78e4dbebfd80f0bbbaa1`, debug **0.1.111**. [Build, unit/policy checks, phone/watch APKs, both lints and publication](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41498027352) passed. [Native Android15 widget verification](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41498027255) passed all11 scenario groups at100% and130% text sizes, with no app crashes. The probe verifies4×1 picker metadata,340×80dp and250×70dp hosts, fully visible countdown bounds, continuous full-surface transparency, existing-host migration, actual alarm delivery/snooze, bedtime, windows, toggles, editing and settings. Native dark/light/checkerboard and minimum-size renders were inspected internally at both text sizes. The initial44dp text container cropped one pixel; the verified46dp container corrects it. Physical launcher placement still needs device acceptance; no watch behavior was changed.
 
 ## Home-screen widget surface rebuild — verified debug 0.1.109
 

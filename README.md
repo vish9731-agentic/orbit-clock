@@ -134,4 +134,4 @@ The display follows installed alarm occurrences and actual snooze deadlines, exc
 
 The rebuilt surface is verified in debug **0.1.109**: native phone-emulator checks passed at normal and 130% text size, including light/dark/patterned wallpaper, minimum sizes and updating an existing widget without deleting it. Physical launcher behavior still needs device acceptance.
 
-The wide widget uses a one-row layout. New placements default to4×1; if an existing placement keeps its old height, use the launcher's resize handles to reduce it to one row.
+The wide widget uses a one-row layout, verified in debug **0.1.111** at normal and130% text sizes. New placements default to4×1; if an existing placement keeps its old height, use the launcher's resize handles to reduce it to one row.
