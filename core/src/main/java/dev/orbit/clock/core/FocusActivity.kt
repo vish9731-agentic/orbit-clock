@@ -85,7 +85,8 @@ class FocusActivity : AppCompatActivity() {
         end.visibility = if (s.status == "Ready") View.GONE else View.VISIBLE
     }
     private fun control(action: String? = null) {
-        val s = FocusStore.read(this)
+        val saved = FocusStore.read(this)
+        val s = saved.complete(FocusStore.now(this, saved))
         val command = action ?: if (s.status == "Running") "pause" else "start"
         if (command == "start" && s.status != "Running") {
             if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
