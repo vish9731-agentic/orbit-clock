@@ -72,7 +72,7 @@ open class AlarmWidget : AppWidgetProvider() {
             val state = c.getSharedPreferences("scheduled_occurrences", Context.MODE_PRIVATE)
             val ringing = all.firstOrNull { Scheduler.isActive(c, it, state.getLong("${it.id}.active", 0)) }
             val next = all.mapNotNull { a ->
-                state.getLong("${a.id}.scheduled", 0).takeIf { a.enabled && it > now }?.let { a to it }
+                state.getLong("${a.id}.scheduled", 0).takeIf { a.enabled && Scheduler.allowed(c) && it > now }?.let { a to it }
             }.minWithOrNull(compareBy({ it.second }, { it.first.id }))
             val prefs = c.getSharedPreferences("widget", Context.MODE_PRIVATE)
             val aw = WidgetTiming.window(prefs.getInt("alarmWindow", 15)) * 60_000L
@@ -100,7 +100,7 @@ open class AlarmWidget : AppWidgetProvider() {
             // Pending receiver delivery must not leave a zero/negative countdown indefinitely.
             val waiting = all.any { it.enabled && state.getLong("${it.id}.scheduled", 0) in (now - 60_000)..now && state.getLong("${it.id}.scheduled", 0) > 0 }
             if (waiting) boundaries += now + 5_000
-            val at = when (kind) { "alarm" -> next?.second ?: 0; "bedtime", "bednow" -> bed; else -> 0 }
+            val at = when (kind) { "ringing" -> state.getLong("${ringing?.id}.active", 0); "alarm" -> next?.second ?: 0; "bedtime", "bednow" -> bed; else -> 0 }
             return Snapshot(kind, chosen, at, boundaries.filter { it > now }.minOrNull() ?: 0)
         }
 
@@ -123,8 +123,10 @@ open class AlarmWidget : AppWidgetProvider() {
                 "bednow" -> "It’s bedtime"
                 else -> ""
             }
-            v.setTextViewText(R.id.widget_title, title)
-            v.setTextViewText(R.id.widget_event_time, if (s.at > 0) time(c, s.at) else s.alarm?.let { time(c, LocalDate.now().atTime(it.hour, it.minute).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()) } ?: "")
+            val eventTime = if (s.at > 0) time(c, s.at) else ""
+            v.setTextViewText(R.id.widget_title, if (!wide && alarm) eventTime else title)
+            v.setTextViewText(R.id.widget_event_time, eventTime)
+            v.setViewVisibility(R.id.widget_event_time, if (wide) View.VISIBLE else View.GONE)
             val countdown = s.kind == "alarm" || s.kind == "bedtime"
             v.setViewVisibility(R.id.widget_countdown, if (countdown) View.VISIBLE else View.GONE)
             v.setChronometerCountDown(R.id.widget_countdown, true)

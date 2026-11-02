@@ -11,6 +11,10 @@ permissions:
   contents: read
 jobs:
   widgets:
+    strategy:
+      fail-fast: false
+      matrix:
+        font: [1.0, 1.3]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -52,6 +56,7 @@ jobs:
             adb shell pm disable-user --user 0 com.google.android.settings.intelligence || true
             adb shell wm size 720x1600
             adb shell wm density 280
+            adb shell settings put system font_scale ${{ matrix.font }}
             adb shell svc power stayon true
             adb install phone/build/outputs/apk/debug/phone-debug.apk
             adb shell pm grant dev.orbit.clock android.permission.POST_NOTIFICATIONS
@@ -70,7 +75,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: widget-evidence
+          name: widget-evidence-${{ matrix.font }}
           retention-days: 3
           path: |
             widget-evidence.txt

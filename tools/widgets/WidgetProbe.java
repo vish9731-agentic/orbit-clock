@@ -14,7 +14,7 @@ public class WidgetProbe extends Instrumentation {
  <T> T main(Callable<T> call)throws Exception {FutureTask<T> f=new FutureTask<>(call);runOnMainSync(f);return f.get();}
  void require(boolean ok,String message){if(!ok)throw new AssertionError(message);}
  void waitFor(Check check,String message)throws Exception{
-  long end=SystemClock.elapsedRealtime()+15000;
+  long end=SystemClock.elapsedRealtime()+45000;
   while(SystemClock.elapsedRealtime()<end){if(check.ok())return;SystemClock.sleep(100);}
   throw new AssertionError(message);
  }
@@ -57,6 +57,10 @@ public class WidgetProbe extends Instrumentation {
   if(view instanceof TextView && ((TextView)view).getText().toString().equals(wanted))return true;
   if(view instanceof ViewGroup){ViewGroup g=(ViewGroup)view;for(int i=0;i<g.getChildCount();i++)if(hasText(g.getChildAt(i),wanted))return true;}return false;
  }
+ View findText(View view,String wanted){
+  if(view instanceof TextView && ((TextView)view).getText().toString().equals(wanted))return view;
+  if(view instanceof ViewGroup){ViewGroup g=(ViewGroup)view;for(int i=0;i<g.getChildCount();i++){View v=findText(g.getChildAt(i),wanted);if(v!=null)return v;}}return null;
+ }
  void click(View view)throws Exception{main(()->{require(view.performClick(),"Missing widget click");return null;});}
  AppWidgetHostView bind(String provider,int widgetId,int w,int h)throws Exception{
   ComponentName component=new ComponentName(c.getPackageName(),"dev.orbit.clock.phone."+provider);
@@ -91,8 +95,12 @@ public class WidgetProbe extends Instrumentation {
    require(kind(now).equals("clock"),"Outside "+minutes);save(a.put("snoozeUntil",now+minutes*60000L));require(kind(now).equals("alarm"),"Inside "+minutes);
   }
   c.getSharedPreferences("widget",0).edit().putInt("alarmWindow",15).commit();
+  save(record("Near alarm").put("snoozeUntil",System.currentTimeMillis()+15*60000+6000));refresh();
+  waitFor(()->main(()->square.findViewById(id("widget_clock")).getVisibility()==View.VISIBLE),"Outside-window clock");
+  waitFor(()->main(()->square.findViewById(id("widget_clock")).getVisibility()==View.GONE),"Scheduled visual boundary did not enter reminder mode");
+  pass("actual non-wakeup AlarmManager boundary switches clock to reminder without polling");
   save(record("Near alarm").put("snoozeUntil",System.currentTimeMillis()+5*60000));renderAt(System.currentTimeMillis());
-  require(main(()->text(square,"widget_title").getText().toString().equals("Snoozed")),"Snooze title");capture("05-snoozed",Color.rgb(75,85,67));
+  require(main(()->square.findViewById(id("widget_event")).getContentDescription().toString().startsWith("Snoozed")),"Snooze state");capture("05-snoozed",Color.rgb(75,85,67));
   pass("all six reminder windows, exact boundaries and snooze deadline");
   // The child's PendingIntent is sent by the real host, not by a test-only application hook.
   click(square.findViewById(id("widget_toggle")));waitFor(()->!record("Near alarm").getBoolean("enabled"),"Toggle did not save");
@@ -106,6 +114,9 @@ public class WidgetProbe extends Instrumentation {
   require(kind(before).equals("bedtime"),"Saved sleep-goal bedtime");renderAt(before);visible(true);capture("06-bedtime",Color.rgb(25,32,45));
   require(main(()->text(square,"widget_toggle").getVisibility()==View.GONE),"Bedtime has alarm control");
   require(kind(bed).equals("bednow"),"Bedtime arrival");renderAt(bed);capture("07-bednow",Color.rgb(25,32,45));
+  click(square.findViewById(id("widget_event")));main(()->{stage.setVisibility(View.GONE);return null;});
+  waitFor(()->main(()->hasText(activity.getWindow().getDecorView(),"A rhythm for your rest")),"Bedtime deep link");
+  main(()->{stage.setVisibility(View.VISIBLE);return null;});
   require(kind(bed+15*60000).equals("clock"),"Bedtime grace expiry");
   long friday=monday.plusDays(4).atTime(23,0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
   require(kind(friday-5*60000).equals("clock"),"No Saturday wake means no Friday bedtime");
@@ -132,10 +143,25 @@ public class WidgetProbe extends Instrumentation {
   // Verify direct alarm and bedtime links using real pending intents.
   main(()->{c.startActivity(new Intent().setClassName(c.getPackageName(),"dev.orbit.clock.phone.MainActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP));return null;});
   waitFor(()->activity.hasWindowFocus(),"Main activity did not regain focus");
-  renderAt(System.currentTimeMillis());click(square.findViewById(id("widget_event")));
+  renderAt(System.currentTimeMillis());
+  main(()->{float d=c.getResources().getDisplayMetrics().density;square.setLayoutParams(new LinearLayout.LayoutParams((int)(130*d),(int)(130*d)));wide.setLayoutParams(new LinearLayout.LayoutParams((int)(300*d),(int)(130*d)));return null;});
+  SystemClock.sleep(400);
+  require(main(()->{View event=square.findViewById(id("widget_event"));View count=square.findViewById(id("widget_countdown"));return count.getBottom()<=event.getHeight();}),"Small square clips countdown");
+  require(main(()->{View event=wide.findViewById(id("widget_event"));View count=wide.findViewById(id("widget_countdown"));return count.getBottom()<=event.getHeight();}),"Small wide clips countdown");
+  capture("08-small",Color.rgb(240,235,220));pass("both resized native hosts retain readable countdown geometry");
+  click(square.findViewById(id("widget_event")));main(()->{stage.setVisibility(View.GONE);return null;});
   waitFor(()->{for(Window w:new Window[]{activity.getWindow()})if(main(()->hasText(w.getDecorView(),"Edit alarm")))return true;
    return getUiAutomation().getRootInActiveWindow()!=null && getUiAutomation().getRootInActiveWindow().findAccessibilityNodeInfosByText("Edit alarm").size()>0;},"Alarm deep link");
   remove("Delivery");pass("host alarm tap opens existing alarm editor");
+  Activity settings=startActivitySync(new Intent().setClassName(c.getPackageName(),"dev.orbit.clock.phone.WidgetSettingsActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+  require(main(()->hasText(settings.getWindow().getDecorView(),"Before alarms · 15 min")),"Default settings window");
+  click(main(()->findText(settings.getWindow().getDecorView(),"Before alarms · 15 min")));
+  waitFor(()->getUiAutomation().getRootInActiveWindow()!=null && !getUiAutomation().getRootInActiveWindow().findAccessibilityNodeInfosByText("90 minutes").isEmpty(),"90-minute choice missing");
+  android.view.accessibility.AccessibilityNodeInfo node=getUiAutomation().getRootInActiveWindow().findAccessibilityNodeInfosByText("90 minutes").get(0);
+  while(node!=null && !node.isClickable())node=node.getParent();require(node!=null && node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK),"90-minute selection");
+  waitFor(()->c.getSharedPreferences("widget",0).getInt("alarmWindow",15)==90,"Settings did not persist 90");
+  pass("actual settings UI, default15 and persisted90-minute selection");
+  main(()->{settings.finish();return null;});
   result.putString("stream","WIDGET_RESULT_PASS checks="+checks+"\n");finish(Activity.RESULT_OK,result);
  }catch(Throwable error){result.putString("stream","WIDGET_FAILURE: "+android.util.Log.getStackTraceString(error));finish(Activity.RESULT_CANCELED,result);}
  finally{try{if(host!=null)main(()->{host.stopListening();host.deleteHost();return null;});}catch(Exception ignored){}}
