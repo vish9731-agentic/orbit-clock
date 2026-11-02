@@ -21,6 +21,8 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
                         private val compact: Boolean = false) : FrameLayout(context) {
     private fun dp(n: Int) = (resources.displayMetrics.density * n).toInt()
     private var startX = 0f
+    private var downX = 0f
+    private val touchSlop = android.view.ViewConfiguration.get(context).scaledTouchSlop
     private var dragging = false
     private var fired = false
     private var thresholdTicked = false
@@ -128,7 +130,8 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
                 tracker?.recycle(); tracker = VelocityTracker.obtain()
                 pointer = event.getPointerId(0); track(event)
                 // Keep the exact visible position when catching a returning thumb.
-                startX = fingerX(event) - thumb.translationX
+                downX = fingerX(event)
+                startX = downX - thumb.translationX
                 dragging = true; thresholdTicked = false; pullBeyondEdge = 0f
                 feedback(thumb.translationX)
                 parent?.requestDisallowInterceptTouchEvent(true)
@@ -156,14 +159,17 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
                 if (!raw.isFinite()) { cancelTouch(); return true }
                 thumb.translationX = raw.coerceIn(-travel(), travel())
                 val offset = thumb.translationX
-                val complete = travel() > 0 && abs(offset) >= travel() * .7f
+                val movement = fingerX(event) - downX
+                // A catch/tap on an inertially displaced thumb is never an action.
+                val complete = travel() > 0 && abs(offset) >= travel() * .7f &&
+                    abs(movement) >= touchSlop && movement * offset > 0f
                 recycleTouch()
                 if (complete && !fired) {
                     fired = true; thumb.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
                     if (offset < 0) snooze() else stop()
                 } else {
                     settle(velocity = velocity)
-                    if (abs(offset) < dp(4)) thumb.performClick()
+                    if (abs(movement) < touchSlop) thumb.performClick()
                 }
             }
             MotionEvent.ACTION_POINTER_UP -> {

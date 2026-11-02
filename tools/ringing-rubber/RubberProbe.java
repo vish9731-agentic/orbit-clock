@@ -143,6 +143,10 @@ public class RubberProbe extends Instrumentation {
    main(()->{event(MotionEvent.ACTION_UP,origin+distance,SystemClock.uptimeMillis());return null;});
    require(snoozes.get()+stops.get()==1,"Repeated action");
   }
+  install(false);final float displaced=travel()*.85f;
+  main(()->{thumb.setTranslationX(displaced);return null;});
+  press();end(0,false);rested();noAction("Tap catching an off-center thumb");
+  report("PASS catching tap cannot commit from inertial displacement");
   install(false);float distance=travel()*.85f;press();move(distance,100);end(distance,true);rested();noAction("Canceled threshold crossing");
   install(false);press();move(travel()*.85f,100);
   main(()->{rail.onWindowFocusChanged(false);return null;});
