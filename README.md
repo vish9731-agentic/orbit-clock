@@ -99,7 +99,7 @@ The phone follows the user-selected Google Clock reference: a black background w
 
 ## Ringing and notification UI
 
-Only the ringing slider shimmers: two soft incoming-call-inspired glints travel outward on each new visible phone ringing rail and then stop. Touch and reduced motion cancel the cue. Other screens retain static affordances and normal native press, value and navigation feedback, without shimmer or prose tips.
+Only the phone ringing slider shimmers: two hollow semicircular light fronts expand from the thumb’s round ends and then stop. The pill stretches with Apple-referenced momentum and a damped rebound while its alarm icon stays on an independent, fixed-size layer. Touch and reduced motion cancel the cue. Other screens retain static affordances and normal native press, value and navigation feedback, without shimmer or prose tips. Actual emulator display captures confirm the icon retains its proportions through slow/fast dragging, holding and return; curved-front rendering, interruption, safe actions and reduced motion pass the focused native probe.
 
 The pill stretches horizontally while its glyph stays crisp; it no longer tilts. Release velocity carries into a damped spring return that can be caught mid-motion. Destination labels fade before overlap. A deliberate physical drag commits an action; inertia or a tap catching an offset thumb cannot. See [verification status](verification/STATUS.md) for the passing focused native tests and separate broad-suite outcomes.
 
