@@ -11,7 +11,7 @@ Keep the approved Google Clock ringing layout and quiet typography on phone. Wat
 | [Material 3 motion](https://m3.material.io/styles/motion/overview/how-it-works) | Coordinated spatial transitions; short opacity/color effects; native Material component motion |
 | [Reply motion examples](https://codelabs.developers.google.com/codelabs/material-motion-android) | Continuous context between tools, persistent chrome, shared-axis movement with overlapping fades |
 | [Designing Fluid Interfaces](https://developer.apple.com/videos/play/wwdc2018/803/) | Direct finger tracking, raw-coordinate velocity, interruptible native spring return |
-| [TipKit education principles](https://developer.apple.com/videos/play/wwdc2023/10229/) | Contextual eligibility, learning and a three-visible-process-session cap; no text coaching UI |
+| [TipKit education principles](https://developer.apple.com/videos/play/wwdc2023/10229/) | Contextual non-blocking guidance without coaching prose; the requested ringing cue is finite and eligible for each new ringing view |
 | [Android predictive back](https://developer.android.com/design/ui/mobile/guides/patterns/predictive-back) | Native back opt-in and Material bottom-sheet handling, with older-platform fallback |
 | [Android haptics](https://developer.android.com/develop/ui/views/haptics/haptics-principles) | Normal system ticks for selection/threshold, confirmation on completion, no forced vibration preferences |
 
@@ -25,7 +25,7 @@ The ringing rail emits two soft, finite outward glints after 450ms, across 1.8 s
 
 The clock uses explicit weight 350, the smaller label uses 400, duration 500, and rail labels 450 at 22sp. The label is quieter than the clock. Hit targets and the selected rail layout remain.
 
-RingAtmosphere interpolates through deep-night blue, dawn rose, morning sage, afternoon amber, evening violet and night indigo using local time. Every RGB channel stays at or below 20/255. A static near-black gradient carries only a faint lower-screen tint, with no illustrations or ongoing animation. Native dark watch colors remain unchanged.
+The phone main field stays black with localized upper-corner light for dawn, morning sunshine, noon, afternoon, sunset, blue hour and night. Daylight has faint cloud wisps; 21:00 includes faint stars, and deep night includes sparse stars and a small crescent. The background follows current local time on each visible minute, resume and clock/time-zone change, including later snoozed occurrences. There is no background animation loop. Native watch colors remain separate.
 
 ## Alarm notification controls
 
@@ -37,7 +37,7 @@ RingControls stores snooze selection by alarm ID and occurrence timestamp. Full-
 
 The activity header, navigation, FAB and status surface remain mounted while tool contents change. Ordered tools use native Material shared-axis movement with overlapping fades. Native FAB show/hide is preserved. Data refreshes retain keyed item movement and scroll position.
 
-The slider tracks raw finger position/velocity. Its pill stretches horizontally with a gently thinning profile while its alarm glyph is counter-scaled to stay undistorted; rotation stays zero. A native SpringAnimation restores it after an incomplete gesture, carrying release velocity with damped overshoot. A separate retargetable spring controls elastic deformation. Edge tension stays bounded inside the rail. New input cancels the spring at its current position. A bounded distance threshold commits actions on release; spring callbacks never act on alarms. Reduced motion restores the thumb immediately. Focus loss and detach cancel tracking/animation.
+The slider tracks raw finger position/velocity. Its pill stretches horizontally with a gently thinning profile while its alarm glyph is counter-scaled to stay undistorted; rotation stays zero. A native SpringAnimation restores it after an incomplete gesture, carrying release velocity with damped overshoot. A separate retargetable spring controls elastic deformation. Edge tension stays bounded inside the rail. New input cancels the spring at its current position. The existing 70% threshold commits actions only with physical movement beyond native touch slop toward the selected action. Catching/tapping or pulling back an off-centre thumb does not act; spring callbacks never act on alarms. Destination labels fade before the stretching pill overlaps their letters. Reduced motion restores the thumb immediately. Focus loss and detach cancel tracking/animation.
 
 Save/delete/start/cancel feedback confirms local state changes. Explicit sync requests show a finite connection check, then a connection/request result or timeout. Neither a reachable node nor a successful Data Layer write is presented as a delivery acknowledgement. No periodic network polling or decorative loading loop is added.
 
@@ -49,4 +49,4 @@ The visual-cue scope records before real timer delivery and includes notificatio
 
 ## Watch ringing controls
 
-Use larger 56dp circular duration buttons above small icon-only Snooze/Dismiss actions. Curved arrows and expanding radial auras provide graphical bezel cues without visible action words, instructions or percentages. Anticlockwise turns snooze after the existing three-unit amount; clockwise turns dismiss after six units. The watch normalizes the raw encoder axis into the unchanged RotaryGesture accumulator. Intercept watch rotary events before scroll dispatch so large type never consumes an action detent. Touch targets remain fixed at 48dp while the visible cores and auras expand. Keep the chosen 5–60 minute duration, limits and occurrence-only selection semantics. Native accessibility labels remain available. Phone controls retain their existing rail.
+The watch uses the compact production rail with its larger duration controls, native typography and existing anticlockwise Snooze / clockwise Dismiss direction. Existing three-/six-unit amounts and per-occurrence duration semantics remain. Retargetable spring rendering follows detents, but physical input alone commits actions; touch can interrupt animation without jumping. The pill may stretch while its glyph remains undistorted. No on-screen coaching text or percentages are added. Physical Watch 4 Classic feel still needs device acceptance.

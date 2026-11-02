@@ -99,7 +99,9 @@ The phone follows the user-selected Google Clock reference: a black background w
 
 ## Ringing and notification UI
 
-Only the ringing slider shimmers. Other screens retain static affordances and normal native press, value and navigation feedback, without shimmer or prose tips.
+Only the ringing slider shimmers: two soft incoming-call-inspired glints travel outward on each new visible phone ringing rail and then stop. Touch and reduced motion cancel the cue. Other screens retain static affordances and normal native press, value and navigation feedback, without shimmer or prose tips.
+
+The pill stretches horizontally while its glyph stays crisp; it no longer tilts. Release velocity carries into a damped spring return that can be caught mid-motion. Destination labels fade before overlap. A deliberate physical drag commits an action; inertia or a tap catching an offset thumb cannot. See [verification status](verification/STATUS.md) for the passing focused native tests and separate broad-suite outcomes.
 
 The clock uses weight 350, the 24sp label weight 400, duration weight 500, and 22sp rail labels weight 450. The main field stays black while an upper corner carries restrained light: blue/orange dawn, fresh yellow morning sunshine, blue-sky noon, gold/teal afternoon, coral/orange sunset, deep-blue late evening, or night with five tiny stars and a small crescent. Adjacent scenes crossfade at their corners without moving across the clock or controls.
 
