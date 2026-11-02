@@ -1,5 +1,12 @@
 # Orbit Clock handoff
 
+## Glance-first widget UX — verification pending
+
+User says transparency remains poor and the UI needs more thought for real use. The 4×1/2×2 sizes and dynamic windows are retained. New glance_widget_* layouts prioritize readable whole minutes, with the exact alarm time/label secondary. Busy second-by-second digits are replaced by a shared non-wakeup minute boundary while a reminder is active. WidgetBackdrop is now a feathered readability scrim with transparent top/bottom/right edges, not a clipped opaque capsule. A recognizable switch replaces the ambiguous On text; disabling shows Alarm off + visible Undo for10 seconds. Undo restores the prior snooze deadline only if the current revision/writer still matches, and expired/stale actions cannot overwrite newer edits. A Dark clock text setting lets users choose contrast for their wallpaper; white remains the default. All active layouts use new IDs so existing hosts reinflate.
+
+Native checks cover the feathered perimeter/readable core, readable minute rollover through AlarmManager, switch feedback/Undo/expiry with snooze preservation, wallpaper contrast setting, one-row geometry, migration and existing alarm/bedtime behavior at100%/130% text. Build/runtime/visual verification pending; no completion claim yet. Concurrent watch work is preserved.
+
+
 ## Reference-inspired hatching, transparency and text spacing — verification pending
 
 The user supplied a watch photo with fine diagonal hatching, a translucent fading rail and generous central text spacing, asking Orbit to mimic those qualities. The short 68-degree bottom arc and Orbit green palette are retained. Cached vector hatching (0.7dp strokes, 3dp pitch) is clipped to the rounded rail. A sweep opacity gradient tapers along the segment while a radial mask fades the inner edge into transparency; there is no opaque track slab or bitmap texture. Paths, gradients and shader composition are built only on size changes, not animation frames.

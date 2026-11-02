@@ -9,7 +9,7 @@ import java.util.*; import java.util.concurrent.*; import org.json.*;
 public class WidgetProbe extends Instrumentation {
  Context c; Activity activity; Object companion,storeCompanion; Class<?> storeClass,alarmClass;
  AppWidgetHost host; AppWidgetManager manager; AppWidgetHostView square,wide,actualSquare,actualWide; boolean previewMode; int squareId,wideId;
- LinearLayout stage; File evidence; int checks; int squareDp=160,wideDp=340,heightDp=160,wideHeightDp=80;
+ LinearLayout stage; File evidence; int checks; int squareDp=160,wideDp=340,heightDp=160,wideHeightDp=80; long displayedAt;
  interface Check { boolean ok() throws Exception; }
  <T> T main(Callable<T> call)throws Exception {FutureTask<T> f=new FutureTask<>(call);runOnMainSync(f);return f.get();}
  void require(boolean ok,String message){if(!ok)throw new AssertionError(message);}
@@ -37,6 +37,7 @@ public class WidgetProbe extends Instrumentation {
  }
  void remove(String id)throws Exception {save(record(id).put("deleted",true).put("enabled",false));}
  void renderAt(long now)throws Exception {
+  displayedAt=now;
   Object s=snapshot(now);
   main(()->{Method v=companion.getClass().getMethod("viewsAtSize",Context.class,boolean.class,s.getClass(),long.class,int.class,int.class);
    boolean preview=Math.abs(now-System.currentTimeMillis())>60000;
@@ -57,10 +58,14 @@ public class WidgetProbe extends Instrumentation {
    ImageView image=(ImageView)wide.findViewById(id("widget_backdrop"));require(image.getVisibility()==View.VISIBLE,"Missing full-widget backdrop");
    require(image.getWidth()>event.getWidth(),"Backdrop is confined to a half tile");
    Bitmap bitmap=((android.graphics.drawable.BitmapDrawable)image.getDrawable()).getBitmap();int w=bitmap.getWidth(),h=bitmap.getHeight();
-   require(Color.alpha(bitmap.getPixel(w/4,h/2))==0,"Clock edge is not transparent");
-   require(Color.alpha(bitmap.getPixel(w-3,h/2))>=250,"Reminder contrast too low");
-   int previous=0;for(int x=0;x<w;x++){int alpha=Color.alpha(bitmap.getPixel(x,h/2));require(alpha>=previous,"Gradient reverses opacity");require(alpha-previous<=6,"Hard alpha seam");previous=alpha;}
-   int x=(int)(w*.60f);require(Math.abs(Color.alpha(bitmap.getPixel(x,2))-Color.alpha(bitmap.getPixel(x,h/2)))<=2,"Interior rounded-card edge remains");
+   require(Color.alpha(bitmap.getPixel(w/20,h/2))==0,"Clock edge is not transparent");
+   int center=(int)(w*.65f);require(Color.alpha(bitmap.getPixel(center,h/2))>=150,"Reminder contrast too low");
+   require(Color.alpha(bitmap.getPixel(center,0))==0 && Color.alpha(bitmap.getPixel(center,h-1))==0,"Hard top/bottom perimeter");
+   require(Color.alpha(bitmap.getPixel(w-1,h/2))==0,"Hard right perimeter");
+   int previous=0;int feather=(int)Math.ceil(8*c.getResources().getDisplayMetrics().density);
+   for(int x=0;x<w-feather;x++){int alpha=Color.alpha(bitmap.getPixel(x,h/2));require(alpha>=previous,"Interior scrim opacity reverses");require(alpha-previous<=6,"Hard inner seam");previous=alpha;}
+   for(int x=w-feather;x<w;x++){int alpha=Color.alpha(bitmap.getPixel(x,h/2));require(Math.abs(alpha-previous)<=36,"Hard feather edge");previous=alpha;}
+
    return null;});
  }
  void refresh()throws Exception {main(()->{companion.getClass().getMethod("refresh",Context.class).invoke(companion,c);return null;});}
@@ -70,6 +75,10 @@ public class WidgetProbe extends Instrumentation {
   require(main(()->wide.findViewById(id("widget_event")).getVisibility()==(event?View.VISIBLE:View.INVISIBLE)),"Wide event visibility");
  }
  void capture(String name,int background)throws Exception {
+  boolean dark=name.contains("light")||name.contains("pattern");
+  if(c.getSharedPreferences("widget",0).getBoolean("darkClockText",false)!=dark){
+   c.getSharedPreferences("widget",0).edit().putBoolean("darkClockText",dark).commit();renderAt(displayedAt);
+  }
   main(()->{if(name.contains("pattern"))stage.setBackground(new android.graphics.drawable.Drawable(){
     public void draw(Canvas canvas){Paint p=new Paint();int cell=36;for(int y=0;y<getBounds().height();y+=cell)for(int x=0;x<getBounds().width();x+=cell){p.setColor(((x/cell+y/cell)%2==0)?Color.rgb(247,241,223):Color.rgb(156,168,173));canvas.drawRect(x,y,x+cell,y+cell,p);}}
     public void setAlpha(int a){}public void setColorFilter(ColorFilter f){}public int getOpacity(){return android.graphics.PixelFormat.OPAQUE;}
@@ -109,13 +118,16 @@ public class WidgetProbe extends Instrumentation {
    manager=AppWidgetManager.getInstance(c);host=new AppWidgetHost(c,8765);host.startListening();
    squareId=host.allocateAppWidgetId();wideId=host.allocateAppWidgetId();square=bind("AlarmWidget",squareId,160,160);wide=bind("WideAlarmWidget",wideId,340,80);actualSquare=square;actualWide=wide;return null;});
   require(manager.getAppWidgetInfo(wideId).targetCellHeight==1 && manager.getAppWidgetInfo(wideId).targetCellWidth==4,"Wide picker metadata must be 4x1");
-  refresh();renderAt(System.currentTimeMillis());visible(false);capture("01-clock-dark",Color.rgb(25,32,45));capture("02-clock-light",Color.rgb(230,225,210));
+  refresh();renderAt(System.currentTimeMillis());visible(false);capture("01-clock-dark",Color.rgb(25,32,45));
+  c.getSharedPreferences("widget",0).edit().putBoolean("darkClockText",true).commit();renderAt(System.currentTimeMillis());
+  require(main(()->text(wide,"widget_clock").getCurrentTextColor()==Color.rgb(20,28,24)),"Dark clock appearance");capture("02-clock-light",Color.rgb(230,225,210));
+  c.getSharedPreferences("widget",0).edit().putBoolean("darkClockText",false).commit();renderAt(System.currentTimeMillis());
   pass("both real AppWidgetHost bindings, transparent idle clock only, stable empty right half");
   Calendar cal=Calendar.getInstance();cal.add(Calendar.MINUTE,10);
   save(alarm("Near alarm",cal.get(Calendar.HOUR_OF_DAY),cal.get(Calendar.MINUTE),new JSONArray()));
   waitFor(()->kind(System.currentTimeMillis()).equals("alarm"),"Alarm not near");renderAt(System.currentTimeMillis());visible(true);
   capture("03-alarm-dark",Color.rgb(25,32,45));capture("04-alarm-light",Color.rgb(240,235,220));capture("04b-alarm-pattern",0);
-  checkSurface();pass("one full-width backdrop, no inner tile, continuous alpha and transparent clock edge");
+  checkSurface();pass("full-viewport feathered scrim, readable interior and no hard perimeter");
   main(()->{RemoteViews legacy=new RemoteViews(c.getPackageName(),c.getResources().getIdentifier("alarm_widget_wide","layout",c.getPackageName()));
    legacy.setViewVisibility(id("widget_event"),View.VISIBLE);legacy.setInt(id("widget_event"),"setBackgroundColor",Color.BLUE);manager.updateAppWidget(wideId,legacy);return null;});
   waitFor(()->main(()->wide.findViewById(id("widget_backdrop"))==null),"Legacy host fixture not installed");
@@ -131,6 +143,10 @@ public class WidgetProbe extends Instrumentation {
   waitFor(()->main(()->square.findViewById(id("widget_clock")).getVisibility()==View.VISIBLE),"Outside-window clock");
   waitFor(()->main(()->square.findViewById(id("widget_clock")).getVisibility()==View.GONE),"Scheduled visual boundary did not enter reminder mode");
   pass("actual non-wakeup AlarmManager boundary switches clock to reminder without polling");
+  save(record("Near alarm").put("snoozeUntil",System.currentTimeMillis()+68000));refresh();
+  waitFor(()->main(()->text(square,"widget_countdown").getText().toString().equals("2 min")),"Initial readable minutes");
+  waitFor(()->main(()->text(square,"widget_countdown").getText().toString().equals("1 min")),"Minute boundary did not update human-readable countdown");
+  pass("readable whole-minute countdown updates at its real boundary");
   save(record("Near alarm").put("snoozeUntil",System.currentTimeMillis()+5*60000));renderAt(System.currentTimeMillis());
   require(main(()->square.findViewById(id("widget_event")).getContentDescription().toString().startsWith("Snoozed")),"Snooze state");capture("05-snoozed",Color.rgb(75,85,67));
   save(alarm("Later alarm",8,0,new JSONArray()).put("snoozeUntil",System.currentTimeMillis()+45*60000));
@@ -140,9 +156,21 @@ public class WidgetProbe extends Instrumentation {
   remove("Timer fixture");
   pass("all six reminder windows, exact boundaries, multiple alarms, timer exclusion and snooze deadline");
   // The child's PendingIntent is sent by the real host, not by a test-only application hook.
-  click(square.findViewById(id("widget_toggle")));waitFor(()->!record("Near alarm").getBoolean("enabled"),"Toggle did not save");
-  waitFor(()->main(()->square.findViewById(id("widget_clock")).getVisibility()==View.VISIBLE),"Store broadcast did not refresh host");
-  require(record("Near alarm").getInt("snoozeMinutes")==5,"Toggle changed defaults");pass("native host toggle, saved state and automatic return to clock");
+  long savedDeadline=record("Near alarm").getLong("snoozeUntil");
+  click(square.findViewById(id("widget_toggle")));waitFor(()->!record("Near alarm").getBoolean("enabled"),"Switch did not save");
+  waitFor(()->kind(System.currentTimeMillis()).equals("off"),"Off confirmation missing");
+  waitFor(()->main(()->square.findViewById(id("widget_toggle")).getContentDescription().toString().startsWith("Undo")),"Undo action missing");
+  capture("05b-undo",Color.rgb(25,32,45));
+  click(square.findViewById(id("widget_toggle")));waitFor(()->record("Near alarm").getBoolean("enabled"),"Undo did not restore alarm");
+  require(record("Near alarm").getLong("snoozeUntil")==savedDeadline,"Undo lost the snooze deadline");
+  waitFor(()->kind(System.currentTimeMillis()).equals("alarm"),"Undo did not restore reminder");
+  waitFor(()->main(()->square.findViewById(id("widget_toggle")).getContentDescription().toString().contains("on, turn off")),"Restored switch not rendered");
+  click(square.findViewById(id("widget_toggle")));waitFor(()->!record("Near alarm").getBoolean("enabled"),"Second disable missing");
+  waitFor(()->main(()->square.findViewById(id("widget_clock")).getVisibility()==View.VISIBLE),"Confirmation did not expire back to clock");
+  long offRevision=record("Near alarm").getLong("revision");
+  main(()->{c.sendBroadcast(new Intent("dev.orbit.clock.widget.UNDO").setClassName(c.getPackageName(),"dev.orbit.clock.phone.AlarmWidget").putExtra("id","Near alarm"));return null;});
+  SystemClock.sleep(300);require(!record("Near alarm").getBoolean("enabled") && record("Near alarm").getLong("revision")==offRevision,"Expired Undo changed alarm");
+  require(record("Near alarm").getInt("snoozeMinutes")==5,"Switch changed defaults");pass("switch feedback, Undo preserves snooze deadline, automatic return to clock");
   require(record("Later alarm").getBoolean("enabled"),"Toggle changed another alarm");remove("Later alarm");
   remove("Near alarm");
   JSONObject wake=alarm("Wake up",7,0,new JSONArray(Arrays.asList(1,2,3,4,5)));save(wake);
@@ -207,7 +235,11 @@ public class WidgetProbe extends Instrumentation {
   android.view.accessibility.AccessibilityNodeInfo node=getUiAutomation().getRootInActiveWindow().findAccessibilityNodeInfosByText("90 minutes").get(0);
   while(node!=null && !node.isClickable())node=node.getParent();require(node!=null && node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK),"90-minute selection");
   waitFor(()->c.getSharedPreferences("widget",0).getInt("alarmWindow",15)==90,"Settings did not persist 90");
-  pass("actual settings UI, default15 and persisted90-minute selection");
+  require(main(()->hasText(settings.getWindow().getDecorView(),"Dark clock text")),"Clock contrast setting missing");
+  boolean wasDark=c.getSharedPreferences("widget",0).getBoolean("darkClockText",false);
+  click(main(()->findText(settings.getWindow().getDecorView(),"Dark clock text")));
+  waitFor(()->c.getSharedPreferences("widget",0).getBoolean("darkClockText",false)!=wasDark,"Clock contrast setting did not persist");
+  pass("settings UI: default15, persisted90-minute window and wallpaper contrast choice");
   main(()->{settings.finish();return null;});
   result.putString("stream","WIDGET_RESULT_PASS checks="+checks+"\n");finish(Activity.RESULT_OK,result);
  }catch(Throwable error){result.putString("stream","WIDGET_FAILURE: "+android.util.Log.getStackTraceString(error));finish(Activity.RESULT_CANCELED,result);}
