@@ -5,14 +5,14 @@ import android.app.Activity
 import android.app.ActivityOptions
 import android.content.Intent
 import android.graphics.*
+import android.os.Bundle
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.PathInterpolator
-import android.widget.FrameLayout
 import kotlin.math.*
 
-/** Full-resolution, unscaled old scene over the real home screen; only vector light expands. */
+/** Full-resolution old scene over the real watch face; only vector light expands. */
 object WatchRingTransition {
     private data class Scene(val bitmap: Bitmap, val x: Float, val y: Float, val created: Long)
     private var pending: Scene? = null
@@ -25,17 +25,21 @@ object WatchRingTransition {
                 root.draw(Canvas(bitmap)); pending = Scene(bitmap, x, y, SystemClock.elapsedRealtime())
             }
         }
-        val launch = activity.packageManager.getLaunchIntentForPackage(activity.packageName)
-        if (launch != null) {
-            launch.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            activity.startActivity(launch, ActivityOptions.makeCustomAnimation(activity, 0, 0).toBundle())
-        }
+        val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+        val intents = if (pending != null) arrayOf(home, Intent(activity, WatchExitActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)) else arrayOf(home)
+        // The transient activity has its own task and a transparent window. HOME
+        // is below it, so the fade reveals the actual watch face, not Orbit.
+        activity.startActivities(intents, ActivityOptions.makeCustomAnimation(activity, 0, 0).toBundle())
         activity.finish()
         @Suppress("DEPRECATION") activity.overridePendingTransition(0, 0)
     }
     fun attach(activity: Activity) {
-        val scene = pending ?: return; pending = null
-        if (!OrbitMotion.enabled() || SystemClock.elapsedRealtime() - scene.created > 2000) { scene.bitmap.recycle(); return }
+        val scene = pending
+        pending = null
+        if (scene == null) { activity.finish(); return }
+        if (!OrbitMotion.enabled() || SystemClock.elapsedRealtime() - scene.created > 5000) { scene.bitmap.recycle(); activity.finish(); return }
         val root = activity.findViewById<ViewGroup>(android.R.id.content)
         val reveal = Reveal(activity, scene)
         root.addView(reveal, ViewGroup.LayoutParams(-1, -1))
@@ -62,7 +66,11 @@ object WatchRingTransition {
                 invalidate()
             }
             addListener(object : android.animation.AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: android.animation.Animator) { (parent as? ViewGroup)?.removeView(this@Reveal) }
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    (parent as? ViewGroup)?.removeView(this@Reveal)
+                    activity.finish()
+                    @Suppress("DEPRECATION") activity.overridePendingTransition(0, 0)
+                }
             })
         }
         init { tag = "watch_exit_reveal"; isClickable = true; importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS }
@@ -84,5 +92,17 @@ object WatchRingTransition {
         override fun onDetachedFromWindow() {
             animator.cancel(); if (!scene.bitmap.isRecycled) scene.bitmap.recycle(); super.onDetachedFromWindow()
         }
+    }
+}
+
+/** Private, short-lived transition window; does not request overlay permission. */
+class WatchExitActivity : Activity() {
+    override fun onCreate(state: Bundle?) {
+        super.onCreate(state)
+        setShowWhenLocked(true)
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+        WatchRingTransition.attach(this)
     }
 }

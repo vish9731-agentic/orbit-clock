@@ -32,6 +32,7 @@ public final class BezelUiProbe extends Instrumentation {
     private static final String PKG = "dev.orbit.clock";
     private static final String MAIN = "dev.orbit.clock.wear.MainActivity";
     private static final String RING = "dev.orbit.clock.core.RingActivity";
+    private static final String EXIT = "dev.orbit.clock.core.WatchExitActivity";
     private volatile Activity resumed;
     private Context target;
     private File out;
@@ -65,8 +66,12 @@ public final class BezelUiProbe extends Instrumentation {
         } catch(Exception failure) { throw new AssertionError(failure); }
     }
     private void homeAfterAction() throws Exception {
-        waitUntil(() -> ui(() -> resumed!=null && resumed.getClass().getName().equals(MAIN) && resumed.hasWindowFocus()),4000,"Action did not return to Orbit home");
-        waitUntil(() -> ui(() -> find(resumed.getWindow().getDecorView(),null,"watch_exit_reveal")==null),3000,"Exit overlay did not release the home screen");
+        waitUntil(() -> {
+            String activities=shell("dumpsys activity activities");
+            for(String line:activities.split("\\n")) if(line.contains("topResumedActivity=") && !line.contains(PKG)) return true;
+            return false;
+        },6000,"Completed action did not reveal the system watch face");
+        require(ui(() -> resumed==null || find(resumed.getWindow().getDecorView(),null,"watch_exit_reveal")==null || resumed.isDestroyed()),"Exit overlay remained above the watch face");
     }
 
     private interface Task<T> { T call() throws Exception; }
@@ -375,7 +380,7 @@ public final class BezelUiProbe extends Instrumentation {
         JSONObject changed=record("slider-snooze");
         require(changed.getLong("snoozeUntil")<=after+15*60000L+1000 && changed.getInt("snoozeMinutes")==10,"Selected snooze duration not preserved");
         homeAfterAction();
-        pass("Anticlockwise threshold commits selected snooze, then translucent expansion returns to Orbit home");
+        pass("Anticlockwise threshold commits selected snooze, then translucent expansion returns to watch face");
         a=delivered("slider-dismiss"); rail=actions(a); thumb=sliderThumb(a); span=travel(rail,thumb);
         rotate(a,-3); settleAt(thumb,arcOffset(span,.5f)); screenshot("04-right-partial");
         require(record("slider-dismiss").getBoolean("enabled"),"Dismiss fired early");
@@ -383,7 +388,7 @@ public final class BezelUiProbe extends Instrumentation {
         rotate(a,-1);
         waitUntil(() -> !record("slider-dismiss").getBoolean("enabled"),3000,"Clockwise six-unit dismiss failed");
         homeAfterAction();
-        pass("Clockwise follows arc, retains six-unit dismissal and transitions home");
+        pass("Clockwise follows arc, retains six-unit dismissal and transitions to watch face");
         a=delivered("slider-limits");
         click(control(a,"Decrease snooze by 5 minutes")); selected(a,5);
         require(!ui(control(a,"Decrease snooze by 5 minutes")::isEnabled),"Minimum control enabled");
@@ -396,7 +401,7 @@ public final class BezelUiProbe extends Instrumentation {
         click(control(a,"Dismiss"));
         waitUntil(() -> !record("slider-limits").getBoolean("enabled"),3000,"Touch Stop failed");
         homeAfterAction();
-        pass("Duration limits and 130 percent text fit watch; native Stop fallback transitions home");
+        pass("Duration limits and 130 percent text fit watch; native Stop fallback transitions to watch face");
         shell("settings put system font_scale 1.0"); SystemClock.sleep(600);
         a=delivered("slider-touch-snooze"); click(control(a,"Increase snooze by 5 minutes")); selected(a,15);
         shell("settings put global animator_duration_scale 0");
@@ -416,7 +421,7 @@ public final class BezelUiProbe extends Instrumentation {
             require(lastRadius>firstRadius+50*density && lastAlpha<.05f,"Expansion/transparency did not progress to home");
         }
         for(int i=0;i<exitFrames.size();i++) try(FileOutputStream stream=new FileOutputStream(new File(out,"07-exit-"+i+".png"))) { exitFrames.get(i).compress(Bitmap.CompressFormat.PNG,100,stream); exitFrames.get(i).recycle(); }
-        pass("Native Snooze fallback, expanding/fading transition frames, overlay cleanup and reduced-motion immediate home return");
+        pass("Native Snooze fallback, expanding/fading transition frames, overlay cleanup and reduced-motion immediate watch-face return");
     }
     @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); start(); }
     @Override public void onStart() {
@@ -427,7 +432,7 @@ public final class BezelUiProbe extends Instrumentation {
             public void onActivityCreated(Activity a,Bundle s) { }
             public void onActivityStarted(Activity a) { }
             public void onActivityResumed(Activity a) { resumed=a; }
-            public void onActivityPostResumed(Activity a) { if(a.getClass().getName().equals(MAIN)) observeExit(a); }
+            public void onActivityPostResumed(Activity a) { if(a.getClass().getName().equals(EXIT)) observeExit(a); }
             public void onActivityPaused(Activity a) { }
             public void onActivityStopped(Activity a) { }
             public void onActivitySaveInstanceState(Activity a,Bundle s) { }

@@ -1,10 +1,10 @@
 # Orbit Clock handoff
 
-## Time-first watch arc and translucent completion — verification pending
+## Time-first watch arc and watch-face reveal — verification pending
 
 Time now receives the largest type and vertical region, followed by the label. Snooze duration is 10–12sp with unchanged 56dp plus/minus targets. A native vector lower semicircle follows the round screen; the pill follows its tangent while the alarm glyph remains upright. Anticlockwise Snooze / clockwise Dismiss retain three/six units, reversal, idle reset and selected duration. Phone controls and current phone glint implementation are preserved.
 
-On a completed watch action, Scheduler.act commits immediately and exactly once. The UI then settles the thumb at its destination, with a bounded fallback, and returns to Orbit's home screen through a 760ms translucent vector-light expansion. A single full-resolution snapshot of the old alarm scene stays at 1:1 pixel size and fades over the real home UI; the growing gradient is vector-drawn with cached objects, never a scaled screenshot/button. Reduced motion skips both effects. Focus loss/detach clean up springs, overlay and snapshot. No permission, alarm schema or signing change. Home here means Orbit home; the user was asked whether they meant watch face and no answer had arrived during implementation. Build and native interaction/transition verification are pending.
+On a completed watch action, Scheduler.act commits immediately and exactly once. The UI then settles the thumb at its destination, with a bounded fallback, and returns to the system watch face through a 760ms translucent vector-light expansion. A single full-resolution snapshot of the old alarm scene stays at 1:1 pixel size and fades over the real watch face; the growing gradient is vector-drawn with cached objects, never a scaled screenshot/button. Reduced motion skips both effects. Focus loss/detach clean up springs, overlay and snapshot. No permission, alarm schema or signing change. The user explicitly selected the watch face. A private, translucent, no-history transition activity in a separate task sits over HOME during the reveal, then finishes; no SYSTEM_ALERT_WINDOW permission is requested. Orbit home stays behind the watch face. Build and native interaction/transition verification are pending.
 
 ## Incoming-call-inspired glints and rubber-band slider — verified debug 90
 
