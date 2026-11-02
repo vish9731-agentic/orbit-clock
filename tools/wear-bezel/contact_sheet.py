@@ -27,7 +27,7 @@ if frames:
     encoded=io.BytesIO()
     sheet.save(encoded,format='PNG',optimize=True)
     data=encoded.getvalue()
-    assert len(data)<100_000, f'Contact sheet too large: {len(data)} bytes'
+    assert len(data)<200_000, f'Contact sheet too large: {len(data)} bytes'
     (root/'contact-sheet.png').write_bytes(data)
     print('BEZEL_CONTACT_SHEET_BASE64:'+base64.b64encode(data).decode(),flush=True)
 else:

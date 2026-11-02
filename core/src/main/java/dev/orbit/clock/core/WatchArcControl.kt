@@ -46,7 +46,7 @@ class WatchArcControl(context: Context, private val snooze: () -> Unit, private 
         thumb.setOnTouchListener { _, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    if (completing) false else {
+                    if (completing || !thumb.containsPill(event.x, event.y)) false else {
                         motion.cancel(); downX = event.rawX; downFraction = fraction; dragging = true
                         tracker?.recycle(); tracker = VelocityTracker.obtain(); track(event)
                         parent.requestDisallowInterceptTouchEvent(true); true
@@ -152,6 +152,14 @@ class WatchArcControl(context: Context, private val snooze: () -> Unit, private 
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xff00564d.toInt() }
         private val bounds = RectF()
         private val glyph = requireNotNull(context.getDrawable(R.drawable.ic_alarm)).mutate().apply { setTint(0xff74e8d7.toInt()) }
+        fun containsPill(x: Float, y: Float): Boolean {
+            val theta = Math.toRadians(tangent.toDouble())
+            val dx = x - width / 2f; val dy = y - height / 2f
+            val localX = (dx * cos(theta).toFloat() + dy * sin(theta).toFloat()) / (1f + stretch)
+            val localY = (-dx * sin(theta).toFloat() + dy * cos(theta).toFloat()) / (1f - stretch * .5f)
+            val endDistance = (abs(localX) - dp(6f)).coerceAtLeast(0f)
+            return endDistance * endDistance + localY * localY <= dp(12f) * dp(12f)
+        }
         override fun onDraw(canvas: Canvas) {
             val saved = canvas.save(); canvas.translate(width / 2f, height / 2f)
             val shape = canvas.save(); canvas.rotate(tangent); canvas.scale(1f + stretch, 1f - stretch * .5f)
