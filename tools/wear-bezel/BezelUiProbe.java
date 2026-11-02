@@ -314,21 +314,30 @@ public final class BezelUiProbe extends Instrumentation {
         require(intermediate.size()>=2,"Arc did not render multiple intermediate positions: "+samples);
         settleAt(thumb,target);
     }
-    private void pointer(int action,float x,float y) {
-        long now=SystemClock.uptimeMillis();
-        if(action==MotionEvent.ACTION_DOWN) injectedDownTime=now;
-        MotionEvent e=MotionEvent.obtain(injectedDownTime,now,action,x,y,0);
-        e.setSource(InputDevice.SOURCE_TOUCHSCREEN); sendPointerSync(e); e.recycle();
+    private void pointer(Activity activity,int action,float x,float y) {
+        ui(() -> {
+            long now=SystemClock.uptimeMillis();
+            if(action==MotionEvent.ACTION_DOWN) injectedDownTime=now;
+            MotionEvent event=MotionEvent.obtain(injectedDownTime,now,action,x,y,0);
+            event.setSource(InputDevice.SOURCE_TOUCHSCREEN); activity.dispatchTouchEvent(event); event.recycle(); return null;
+        });
     }
     private void partialSwipe(Activity a, boolean cancel) throws Exception {
         View thumb=sliderThumb(a), rail=actions(a);
-        float[] p=ui(() -> { int[] xy=new int[2]; thumb.getLocationOnScreen(xy); return new float[]{xy[0]+thumb.getWidth()/2f,xy[1]+thumb.getHeight()/2f,thumb.getTranslationX(),((Number)field(rail,"fraction")).floatValue()}; });
-        float x=p[0],y=p[1]; pointer(MotionEvent.ACTION_DOWN,x,y);
-        require(Math.abs(position(thumb)-p[2])<5*density,"Catching the moving arc thumb jumped");
-        SystemClock.sleep(45); float span=travel(rail,thumb);
-        pointer(MotionEvent.ACTION_MOVE,x+span*.20f,y);
+        // Sample and catch in one UI operation. Sampling on the instrumentation
+        // thread before system injection races the very inertia being tested.
+        float[] p=ui(() -> {
+            int[] xy=new int[2]; thumb.getLocationOnScreen(xy);
+            float x=xy[0]+thumb.getWidth()/2f,y=xy[1]+thumb.getHeight()/2f,before=thumb.getTranslationX();
+            pointer(a,MotionEvent.ACTION_DOWN,x,y);
+            require((Boolean)field(rail,"dragging"),"The actual thumb centre was not caught");
+            require(Math.abs(thumb.getTranslationX()-before)<.1f*density,"Catching the moving arc thumb jumped");
+            return new float[]{x,y,before,((Number)field(rail,"fraction")).floatValue()};
+        });
+        float x=p[0],y=p[1]; SystemClock.sleep(45); float span=travel(rail,thumb);
+        pointer(a,MotionEvent.ACTION_MOVE,x+span*.20f,y);
         require(Math.abs(position(thumb)-arcOffset(span,Math.min(1f,p[3]+.20f)))<3*density,"Arc touch fallback did not follow input");
-        SystemClock.sleep(45); pointer(cancel?MotionEvent.ACTION_CANCEL:MotionEvent.ACTION_UP,x+span*.20f,y);
+        SystemClock.sleep(45); pointer(a,cancel?MotionEvent.ACTION_CANCEL:MotionEvent.ACTION_UP,x+span*.20f,y);
     }
     private View findClock(View root) {
         String desc=root.getContentDescription()==null?"":root.getContentDescription().toString();
