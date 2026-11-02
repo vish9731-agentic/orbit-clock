@@ -42,17 +42,20 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
             bezelSpring?.cancel(); visualVelocity = 0f; thumb.translationX = target; feedback(target); return
         }
         val spring = bezelSpring ?: SpringAnimation(thumb, DynamicAnimation.TRANSLATION_X).apply {
-            this.spring = SpringForce(0f).apply { dampingRatio = .78f; stiffness = 420f }
-            setMinValue(-travel()); setMaxValue(travel()); setMinimumVisibleChange(.15f)
+            this.spring = SpringForce(0f).apply { dampingRatio = 1f; stiffness = 190f }
+            setMinValue(-travel()); setMaxValue(travel()); setMinimumVisibleChange(.05f)
             addUpdateListener { _, value, velocity -> visualVelocity = velocity; feedback(value) }
         }.also { bezelSpring = it }
-        if (!spring.isRunning) spring.setStartVelocity(visualVelocity + bezelVelocity * .18f)
+        if (!spring.isRunning) spring.setStartVelocity(visualVelocity)
         spring.animateToFinalPosition(target)
     }
     fun releaseBezel() {
         if (dragging) return
-        bezelSpring?.cancel(); lastBezelTarget = 0f
-        settle(immediate = !hasWindowFocus(), velocity = visualVelocity); bezelVelocity = 0f
+        lastBezelTarget = 0f; bezelVelocity = 0f
+        if (compact && hasWindowFocus() && OrbitMotion.enabled()) {
+            // Retarget the same spring; retain position and velocity on pause.
+            bezelSpring?.animateToFinalPosition(0f)
+        } else { bezelSpring?.cancel(); settle(immediate = !hasWindowFocus(), velocity = visualVelocity) }
     }
     private lateinit var snoozeLabel: MaterialButton
     private lateinit var stopLabel: MaterialButton
@@ -62,19 +65,19 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
         background = GradientDrawable().apply { setColor(0xff103a35.toInt()); cornerRadius = dp(48).toFloat() }
         fun action(text: String, gravity: Int, callback: () -> Unit) {
             val button = MaterialButton(context).apply {
-                this.text = text; isAllCaps = false; textSize = if (compact) 13f else 22f; typeface = android.graphics.Typeface.create(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL), 450, false); setTextColor(0xffd3e3df.toInt())
+                this.text = text; isAllCaps = false; textSize = if (compact) 11f else 22f; typeface = android.graphics.Typeface.create(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL), 450, false); setTextColor(0xffd3e3df.toInt())
                 backgroundTintList = ColorStateList.valueOf(android.graphics.Color.TRANSPARENT)
                 minWidth = 0; minimumWidth = 0; setPadding(0, 0, 0, 0); insetTop = 0; insetBottom = 0
                 if (compact) {
                     contentDescription = if (text == "Stop") "Dismiss" else "Snooze"
                     maxLines = 1
-                    setPadding(if (gravity == Gravity.END) dp(14) else 0, 0, if (gravity == Gravity.START) dp(14) else 0, 0)
-                    setAutoSizeTextTypeUniformWithConfiguration(9, 13, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+                    setPadding(if (gravity == Gravity.END) dp(6) else 0, 0, if (gravity == Gravity.START) dp(6) else 0, 0)
+                    setAutoSizeTextTypeUniformWithConfiguration(9, 11, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
                 }
                 setOnClickListener { if (!fired) { fired = true; performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM); callback() } }
             }
             if (text == "Snooze") snoozeLabel = button else stopLabel = button
-            addView(button, LayoutParams(dp(if (compact) 56 else 132), -1, gravity))
+            addView(button, LayoutParams(dp(if (compact) 50 else 132), -1, gravity))
         }
         action("Snooze", Gravity.START, snooze)
         action("Stop", Gravity.END, stop)
@@ -82,8 +85,8 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
             setTag(R.id.orbit_motion_bound, true); stateListAnimator = null
             contentDescription = "Alarm slider: swipe left to snooze, right to stop"
             setIconResource(R.drawable.ic_alarm); iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
-            iconTint = ColorStateList.valueOf(0xff74e8d7.toInt()); iconSize = dp(if (compact) 20 else 24); iconPadding = 0
-            minWidth = 0; minimumWidth = 0; setPadding(dp(if (compact) 12 else 34), 0, dp(if (compact) 12 else 34), 0)
+            iconTint = ColorStateList.valueOf(0xff74e8d7.toInt()); iconSize = dp(if (compact) 18 else 24); iconPadding = 0
+            minWidth = 0; minimumWidth = 0; setPadding(dp(if (compact) 8 else 34), 0, dp(if (compact) 8 else 34), 0)
             cornerRadius = dp(40); insetTop = 0; insetBottom = 0
             backgroundTintList = ColorStateList.valueOf(0xff00564d.toInt())
             setOnClickListener { announceForAccessibility("Swipe left to snooze, right to stop") }
@@ -122,11 +125,11 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
                 }
             }
         }
-        addView(thumb, LayoutParams(dp(if (compact) 72 else 96), dp(if (compact) 48 else 64), Gravity.CENTER))
-        VisualHints.bind(this, "ring_controls", directional = true)
+        addView(thumb, LayoutParams(dp(if (compact) 48 else 96), dp(if (compact) 32 else 64), Gravity.CENTER))
+        if (!compact) VisualHints.bind(this, "ring_controls", directional = true)
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
     }
-    private fun travel() = ((width - dp(if (compact) 72 else 96)) / 2f - dp(10)).coerceAtLeast(0f)
+    private fun travel() = ((width - dp(if (compact) 48 else 96)) / 2f - dp(10)).coerceAtLeast(0f)
     private fun track(event: MotionEvent) {
         val raw = MotionEvent.obtain(event)
         raw.offsetLocation(event.rawX - event.x, event.rawY - event.y)
@@ -134,7 +137,12 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
     }
     private fun feedback(offset: Float) {
         val fraction = if (travel() > 0) (offset / travel()).coerceIn(-1f, 1f) else 0f
-        thumb.rotation = if (OrbitMotion.enabled()) fraction * 8f else 0f
+        thumb.rotation = if (!compact && OrbitMotion.enabled()) fraction * 8f else 0f
+        if (compact) {
+            // Render-only deformation: no layout/shape allocation on animation frames.
+            val stretch = if (OrbitMotion.enabled()) (abs(visualVelocity) / dp(700)).coerceIn(0f, .06f) else 0f
+            thumb.scaleX = 1f + stretch; thumb.scaleY = 1f - stretch * .5f
+        }
         snoozeLabel.alpha = if (fraction > 0) 1f - fraction * .45f else 1f
         stopLabel.alpha = if (fraction < 0) 1f + fraction * .45f else 1f
     }

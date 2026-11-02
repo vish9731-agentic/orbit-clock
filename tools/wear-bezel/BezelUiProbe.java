@@ -208,10 +208,10 @@ public final class BezelUiProbe extends Instrumentation {
         require(!stableConfiguration.isEmpty() && SystemClock.elapsedRealtime()-stableSince>=2000,"Wear OS startup did not release a focused, stable MainActivity");
         Bundle setup=new Bundle(); setup.putString("stream","BEZEL SETUP Main ready after "+(SystemClock.elapsedRealtime()-readinessStarted)+" ms\n"); sendStatus(0,setup);
         long at=ui(() -> {
-            long deadline=System.currentTimeMillis()+12000;
+            long deadline=System.currentTimeMillis()+20000;
             fixtureId=id; fixtureAt=deadline;
             JSONObject alarm=new JSONObject().put("id",id).put("hour",7).put("minute",0).put("label","Watch alarm").put("timer",true)
-                .put("days",new JSONArray()).put("enabled",true).put("vibrate",true).put("sound",true).put("snoozeMinutes",10)
+                .put("days",new JSONArray()).put("enabled",true).put("vibrate",false).put("sound",false).put("snoozeMinutes",10)
                 .put("snoozeUntil",deadline).put("skipThrough",0).put("deleted",false).put("revision",System.currentTimeMillis()).put("writer","bezel-ui-probe");
             ClassLoader loader=target.getClassLoader();
             Class<?> storeClass=Class.forName("dev.orbit.clock.core.Store",true,loader);
@@ -248,13 +248,14 @@ public final class BezelUiProbe extends Instrumentation {
     private void motionSamples(View thumb, float from, float target, String name) throws Exception {
         java.util.Set<Integer> intermediate=new java.util.HashSet<>();
         JSONArray samples=new JSONArray();
-        long until=SystemClock.elapsedRealtime()+650;
+        long until=SystemClock.elapsedRealtime()+900;
         while(SystemClock.elapsedRealtime()<until) {
             float value=position(thumb); samples.put(value);
             if(Math.abs(value-from)>.5f && Math.abs(value-target)>.5f) intermediate.add(Math.round(value*2));
             SystemClock.sleep(16);
         }
         save(name+".json",samples.toString());
+        require(ui(() -> thumb.getRotation()==0f),"Watch thumb must move horizontally without wobble");
         require(intermediate.size()>=2,"Slider jumped between detents without intermediate positions: "+samples);
         settleAt(thumb,target);
     }
@@ -276,15 +277,32 @@ public final class BezelUiProbe extends Instrumentation {
         SystemClock.sleep(45);
         pointer(cancel?MotionEvent.ACTION_CANCEL:MotionEvent.ACTION_UP,x+travel(rail,thumb)*.25f,y);
     }
+    private View findClock(View root) {
+        String desc=root.getContentDescription()==null?"":root.getContentDescription().toString();
+        if(desc.startsWith("Alarm time: ")) return root;
+        if(root instanceof ViewGroup) for(int i=0;i<((ViewGroup)root).getChildCount();i++) {
+            View found=findClock(((ViewGroup)root).getChildAt(i)); if(found!=null) return found;
+        }
+        return null;
+    }
     private void layout(Activity a) {
         View rail=actions(a), thumb=sliderThumb(a);
         require(rail.getClass().getName().equals("dev.orbit.clock.core.AlarmSlideControl"),"Watch is not using the actual phone slider class");
-        require(ui(() -> thumb.getWidth()>thumb.getHeight() && thumb.getHeight()>=47.5f*density),"Phone-proportioned pill thumb missing");
+        require(ui(() -> thumb.getWidth()>thumb.getHeight() && thumb.getHeight()>=31.5f*density && thumb.getWidth()<=49*density),"Compact bezel thumb proportions are incorrect");
         control(a,"Snooze"); control(a,"Dismiss");
         for(String desc:new String[]{"Decrease snooze by 5 minutes","Increase snooze by 5 minutes"}) {
             View v=control(a,desc);
             require(ui(() -> v.getWidth()>=55.5f*density && v.getHeight()>=55.5f*density),"Duration button shrank");
         }
+        View clock=ui(() -> findClock(a.getWindow().getDecorView()));
+        require(clock!=null,"Separate time row missing");
+        View label=control(a,"Alarm label: Watch alarm");
+        require(ui(() -> {
+            int[] c=new int[2], l=new int[2], r=new int[2];
+            clock.getLocationOnScreen(c); label.getLocationOnScreen(l); rail.getLocationOnScreen(r);
+            return c[1]+clock.getHeight()<=l[1] && l[1]+label.getHeight()<=r[1]
+                && rail.getHeight()<=45*density && rail.getWidth()/thumb.getWidth()>=3f;
+        }),"Time, label or compact rail proportions overlap");
         Rect r=new Rect();
         require(ui(() -> rail.getGlobalVisibleRect(r) && r.width()==rail.getWidth() && r.height()==rail.getHeight()),"Watch slider is clipped");
     }

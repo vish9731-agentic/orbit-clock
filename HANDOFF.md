@@ -37,7 +37,11 @@ These tests use only rooted disposable API 33 guests, simulated clock changes th
 
 Workspace note: local git metadata predates many existing changes. Remote main is authoritative. Do not push this local branch wholesale. Publish only owned paths in a GitData tree based on a fresh remote head, update with an expected-head lease, and preserve concurrent watch/media work. The final published atmosphere harness is c852d7d7; later uncommitted readiness experimentation is not verified.
 
-## Watch spring slider — pending verification
+## Bezel-first watch proportions — verification pending
+
+The watch retains 56dp plus/minus targets and selected duration, separates live time and alarm label into two rows, and reduces the bottom rail to 44dp with a 48x32dp thumb. Watch colors use a restrained dark-green palette. Rotation amounts and action mapping remain three anticlockwise units Snooze / six clockwise units Dismiss. Compact motion uses a critically damped, retargetable spring (190 stiffness); idle reset retargets the same animation rather than replacing it. Horizontal velocity adds at most six percent render-only stretch; rotation and introductory shimmer are removed on watch. Phone defaults are preserved. Native probe asserts new proportions, time/label separation, intermediate positions, no wobble, reversal, idle/touch interruption, duration limits and exact actions at both round-watch densities. Build and runtime status pending.
+
+## Watch spring slider — superseded proportions
 
 The user supersedes circular watch actions with the current phone slider, proportioned for the watch. Anticlockwise Snooze moves left, clockwise Dismiss right; preserve existing three/six-unit amounts and duration controls. Compact mode uses the same phone rail, pill thumb and labels. Retargetable spring motion preserves velocity across bezel steps and reversals; partial touch swipes return with damped inertia. Physical input alone commits actions; spring animation never does. Verification covers intermediate motion frames, pauses, reversals, touch interruption, thresholds, duration and reduced motion at both watch densities. Build/runtime checks are pending; do not claim a published slider APK before confirmation.
 

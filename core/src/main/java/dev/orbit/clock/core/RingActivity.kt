@@ -99,9 +99,18 @@ class RingActivity : AppCompatActivity() {
         val time = now.format(DateTimeFormatter.ofPattern(if (android.text.format.DateFormat.is24HourFormat(this)) "HH:mm" else "h:mm"))
         if (watch) {
             body.gravity = Gravity.CENTER
-            val heading = label("$time · $name", 16f).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
-            val headingWidth = if (watchWidth < 215) (watchWidth * .48f).toInt() else 136
-            body.addView(heading, LinearLayout.LayoutParams(dp(headingWidth), -2).apply { bottomMargin = dp(8) })
+            val headingWidth = (watchWidth * .64f).toInt()
+            body.addView(label(time, 32f).apply {
+                typeface = Typeface.create(typeface, 350, false)
+                maxLines = 1; fontFeatureSettings = "tnum"
+                contentDescription = "Alarm time: $time"; phoneTime = this
+                setAutoSizeTextTypeUniformWithConfiguration(24, 32, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            }, LinearLayout.LayoutParams(dp(headingWidth), dp(36)))
+            body.addView(label(name, 13f).apply {
+                maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+                contentDescription = "Alarm label: $name"
+                setTextColor(0xffa5bab3.toInt())
+            }, LinearLayout.LayoutParams(dp(headingWidth), dp(20)).apply { bottomMargin = dp(6) })
         } else {
             body.addView(Space(this), LinearLayout.LayoutParams(1, 0, 3.3f))
             body.addView(label(time, 144f).apply {
@@ -119,7 +128,7 @@ class RingActivity : AppCompatActivity() {
         fun control(value: String, callback: () -> Unit) = MaterialButton(this).apply {
             text = value; isAllCaps = false; textSize = 22f; typeface = Typeface.create(Typeface.create("sans-serif", Typeface.NORMAL), 400, false); minWidth = 0; minimumWidth = 0
             setPadding(0, 0, 0, 0); cornerRadius = dp(28); insetTop = 0; insetBottom = 0
-            backgroundTintList = ColorStateList.valueOf(if (watch) colors.containerHigh else android.graphics.Color.TRANSPARENT)
+            backgroundTintList = ColorStateList.valueOf(if (watch) 0xff18332e.toInt() else android.graphics.Color.TRANSPARENT)
             setTextColor(foreground); setOnClickListener { OrbitMotion.tick(this); callback() }
             OrbitMotion.bind(this)
         }
@@ -138,12 +147,12 @@ class RingActivity : AppCompatActivity() {
         stepper.addView(decrease, LinearLayout.LayoutParams(size, size))
         stepper.addView(duration, LinearLayout.LayoutParams(dp(if (watch) 68 else 96), size))
         stepper.addView(increase, LinearLayout.LayoutParams(size, size))
-        body.addView(stepper, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(if (watch) 4 else 16) })
+        body.addView(stepper, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(if (watch) 10 else 16) })
         updateDuration()
         if (watch) {
             val actions = AlarmSlideControl(this, { act(true) }, { act(false) }, compact = true)
             watchActions = actions
-            body.addView(actions, LinearLayout.LayoutParams(dp((watchWidth * .80f).toInt().coerceAtMost(240)), dp(64)).apply { gravity = Gravity.CENTER_HORIZONTAL })
+            body.addView(actions, LinearLayout.LayoutParams(dp((watchWidth * .80f).toInt().coerceAtMost(210)), dp(44)).apply { gravity = Gravity.CENTER_HORIZONTAL })
         } else {
             body.addView(AlarmSlideControl(this,
                 { VisualHints.learn(this, "ring_controls"); act(true) },
@@ -158,7 +167,7 @@ class RingActivity : AppCompatActivity() {
         }
         val scroller = ScrollView(this).apply {
             isFillViewport = true
-            if (watch) setBackgroundColor(background) else {
+            if (watch) setBackgroundColor(0xff090f0d.toInt()) else {
                 val scene = RingAtmosphereDrawable(now.toSecondOfDay() / 60)
                 atmosphere = scene
                 this.background = scene
@@ -224,7 +233,7 @@ class RingActivity : AppCompatActivity() {
         if (alarm == null || !Scheduler.isActive(this, alarm, at)) { finish(); return }
         // Use the actual local clock after every Snooze/new occurrence or resume.
         // Neither the saved alarm hour nor its original occurrence selects the scene.
-        if (!watch) { clockRunning = true; clockHandler.removeCallbacks(clockTick); clockTick.run() }
+        clockRunning = true; clockHandler.removeCallbacks(clockTick); clockTick.run()
     }
     override fun onPause() {
         clockRunning = false
