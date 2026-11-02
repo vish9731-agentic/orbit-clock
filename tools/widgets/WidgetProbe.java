@@ -155,6 +155,7 @@ public class WidgetProbe extends Instrumentation {
   renderAt(System.currentTimeMillis());
   main(()->{float d=c.getResources().getDisplayMetrics().density;square.setLayoutParams(new LinearLayout.LayoutParams((int)(130*d),(int)(130*d)));wide.setLayoutParams(new LinearLayout.LayoutParams((int)(300*d),(int)(130*d)));return null;});
   SystemClock.sleep(400);
+  capture("08-small",Color.rgb(240,235,220));
   require(main(()->{View event=square.findViewById(id("widget_event"));View count=square.findViewById(id("widget_countdown"));return count.getBottom()<=event.getHeight();}),"Small square clips countdown");
   require(main(()->{View event=wide.findViewById(id("widget_event"));View count=wide.findViewById(id("widget_countdown"));return count.getBottom()<=event.getHeight();}),"Small wide clips countdown");
   capture("08-small",Color.rgb(240,235,220));pass("both resized native hosts retain readable countdown geometry");
