@@ -65,38 +65,46 @@ object VisualHints {
             }
         })
     }
+    /** Hollow light fronts expand from the resting thumb's semicircular endcaps. */
     private class Sweep(private val directional: Boolean) : Drawable() {
         var phase = 0f
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG)
-        private val path = Path()
+        private val rail = Path()
         private val matrix = Matrix()
-        private var gradient: LinearGradient? = null
-        private var band = 0f
+        private var gradient: RadialGradient? = null
         private var opacity = 255
         override fun onBoundsChange(bounds: Rect) {
             val w = bounds.width().toFloat(); val h = bounds.height().toFloat()
-            path.rewind()
-            path.addRoundRect(RectF(bounds), h.coerceAtMost(w) / 2, h.coerceAtMost(w) / 2, Path.Direction.CW)
-            band = w * .12f
-            gradient = if (w > 0) LinearGradient(-band, 0f, band, 0f,
-                intArrayOf(Color.TRANSPARENT, Color.argb(24, 131, 238, 212),
-                    Color.argb(88, 224, 255, 245), Color.argb(24, 131, 238, 212), Color.TRANSPARENT),
-                floatArrayOf(0f, .32f, .56f, .76f, 1f), Shader.TileMode.CLAMP) else null
+            rail.rewind()
+            rail.addRoundRect(RectF(bounds), h.coerceAtMost(w) / 2, h.coerceAtMost(w) / 2, Path.Direction.CW)
+            gradient = if (w > 0 && h > 0) RadialGradient(0f, 0f, 1f,
+                intArrayOf(Color.TRANSPARENT, Color.TRANSPARENT, Color.argb(18, 131, 238, 212),
+                    Color.argb(94, 224, 255, 245), Color.argb(12, 131, 238, 212), Color.TRANSPARENT),
+                floatArrayOf(0f, .76f, .84f, .93f, .99f, 1f), Shader.TileMode.CLAMP) else null
         }
         override fun draw(canvas: Canvas) {
             val shader = gradient ?: return
             val w = bounds.width().toFloat(); val h = bounds.height().toFloat()
             val progress = (phase.coerceIn(0f, 1f) * 2f) % 1f
-            val ease = progress * progress * (3f - 2f * progress)
+            val eased = progress * progress * (3f - 2f * progress)
+            // Phone thumb96x64 in an80-high rail: radius.4H, straight half-span.2H.
+            val baseRadius = h * .4f
+            val halfSpan = h * .2f
+            val outerRadius = (w * .5f - halfSpan + h * .15f).coerceAtLeast(baseRadius)
+            val radius = baseRadius + eased * (outerRadius - baseRadius)
+            val cy = bounds.top + h * .5f
             paint.alpha = (opacity * sin(progress * Math.PI).toFloat().coerceAtLeast(0f)).toInt()
-            val save = canvas.save(); canvas.clipPath(path)
+            val save = canvas.save(); canvas.clipPath(rail)
             for (i in 0 until (if (directional) 2 else 1)) {
-                val sign = if (i == 0) -1f else 1f
-                val x = bounds.left + if (directional) w * .5f + sign * w * (.10f + ease * .48f)
-                    else -band + ease * (w + band * 2)
-                matrix.setTranslate(x, bounds.top.toFloat()); shader.setLocalMatrix(matrix)
-                paint.shader = shader
-                canvas.drawRect(x - band, bounds.top.toFloat(), x + band, bounds.top + h, paint)
+                val sign = if (directional && i == 0) -1f else 1f
+                val cx = bounds.left + w * .5f + sign * halfSpan
+                val cap = canvas.save()
+                if (sign < 0) canvas.clipRect(bounds.left.toFloat(), bounds.top.toFloat(), cx, bounds.bottom.toFloat())
+                else canvas.clipRect(cx, bounds.top.toFloat(), bounds.right.toFloat(), bounds.bottom.toFloat())
+                matrix.setScale(radius, radius); matrix.postTranslate(cx, cy)
+                shader.setLocalMatrix(matrix); paint.shader = shader
+                canvas.drawCircle(cx, cy, radius, paint)
+                canvas.restoreToCount(cap)
             }
             paint.shader = null; canvas.restoreToCount(save)
         }
