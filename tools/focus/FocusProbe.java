@@ -76,13 +76,24 @@ public class FocusProbe extends Instrumentation {
             ui(() -> activity.moveTaskToBack(true));
             NotificationManager progress=c.getSystemService(NotificationManager.class);
             boolean pausedFromNotification=false;
-            for(android.service.notification.StatusBarNotification n:progress.getActiveNotifications()) {
-                if(n.getId()==9201 && n.getNotification().actions!=null) {
-                    n.getNotification().actions[0].actionIntent.send(); SystemClock.sleep(400);
-                    pausedFromNotification="Paused".equals(state().getString("status")); break;
+            long notifyLimit=SystemClock.uptimeMillis()+8000;
+            String actionSummary="none";
+            while(SystemClock.uptimeMillis()<notifyLimit && !pausedFromNotification) {
+                for(android.service.notification.StatusBarNotification n:progress.getActiveNotifications()) {
+                    if(n.getId()==9201 && n.getNotification().actions!=null) {
+                        actionSummary=n.getNotification().actions[0].title.toString();
+                        if("Pause".equals(actionSummary)) {
+                            n.getNotification().actions[0].actionIntent.send();
+                            long deliveryLimit=SystemClock.uptimeMillis()+4000;
+                            while(SystemClock.uptimeMillis()<deliveryLimit && !"Paused".equals(state().getString("status"))) SystemClock.sleep(100);
+                            pausedFromNotification="Paused".equals(state().getString("status"));
+                            break;
+                        }
+                    }
                 }
+                if(!pausedFromNotification) SystemClock.sleep(200);
             }
-            require(pausedFromNotification,"background notification pauses session");
+            require(pausedFromNotification,"background notification pauses session; action="+actionSummary+" state="+state());
             act("start");
             long limit=SystemClock.uptimeMillis()+80000;
             while(!"Complete".equals(state().optString("status")) && SystemClock.uptimeMillis()<limit) SystemClock.sleep(1000);
