@@ -1,5 +1,13 @@
 # Verification status
 
+## Thirty-second auto-snooze and drift-free clock deadlines — debug 84
+
+Verified debug build 84, source `5aa2f30fb8c67bb8e6f2e130f82f2c35a65e71c3`: [build/tests/lint/publication](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41386614990) passed, with 82 policy checks and Kotlin/JUnit tests. [Focused Android 15 instrumentation](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41386615119) passed: real clock-alarm receiver deliveries, automatic snoozes measured at 30.593s and 30.067s, selected 5/15-minute overrides, unchanged saved defaults, exact minute-aligned deadlines, manual snooze and a duplicate start after 15s that did not extend the timeout. Eight consecutive five-minute advances and late/exact-boundary handling are covered by the production-policy checks.
+
+The independent same-key probe calls production Store/Scheduler/RingControls and runs the real ringing service, without changing the emulator clock or navigating cold SystemUI. Its silent clock fixtures start with a short existing snooze deadline; it verifies the next installed deadline, not an uninterrupted multi-hour wait. The probe is never bundled in the published APKs. Earlier UI-driven attempts failed at package installation/SystemUI startup and were superseded by this passing probe.
+
+[Phone regression](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41381605781) and [media regression](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41381605583) passed on the same production changes. [Wear regression](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41381605763) failed before ringing when its real timer fixture was not accepted; this is not a Watch runtime pass. Physical phone/watch timing, audio and cross-device delivery still need device acceptance.
+
 ## Localized current-time ringing atmosphere — debug build 81
 
 The phone keeps a black main field with restrained light in an upper corner: blue/orange dawn, fresh yellow morning sunshine, blue-sky noon, gold/teal afternoon, coral/orange sunset, deep-blue late evening, and night with five tiny stars and a small crescent. The 08:00 sunshine scene is an additional seventh period. Neighboring scenes crossfade at their corners without moving across the clock or actions. The existing type, duration stepper, notification actions, ringing-only shimmer and media-pause behavior are preserved.

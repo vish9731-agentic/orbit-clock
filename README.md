@@ -2,7 +2,7 @@
 
 Native Android phone and Wear OS clock apps with a Material You / Material 3 interface, shared alarms, and rotating-bezel controls for Galaxy Watch 4 Classic.
 
-Both debug APKs build successfully. Seven Kotlin/JUnit tests, 71 standalone production-policy checks and phone/watch lint pass. Targeted emulator checks exercise the ringing UI, occurrence snooze selection, volume buttons, real heads-up actions over another app and native motion. See [verification/STATUS.md](verification/STATUS.md) for exact revisions and outcomes. Physical-device testing remains. This is an initial prototype, not full Google Clock parity or a validated alarm replacement.
+Both debug APKs build successfully. Seven Kotlin/JUnit tests, 82 standalone production-policy checks and phone/watch lint pass. Targeted emulator checks exercise the ringing UI, occurrence snooze selection, volume buttons, real heads-up actions over another app and native motion. See [verification/STATUS.md](verification/STATUS.md) for exact revisions and outcomes. Physical-device testing remains. This is an initial prototype, not full Google Clock parity or a validated alarm replacement.
 
 Private repository: [vish9731-agentic/orbit-clock](https://github.com/vish9731-agentic/orbit-clock).
 
@@ -82,6 +82,12 @@ See [verification/STATUS.md](verification/STATUS.md) for the completed build/tes
 - Concurrent alarms/timers, permission revocation, timeout, and signed APK updates.
 
 OS policy controls full-screen presentation, and force-stopping an app prevents alarm delivery until it is opened again. Compilation and policy tests do not establish on-device reliability.
+
+## Automatic and aligned snooze
+
+Clock alarms auto-snooze after 30 seconds of ringing, using the currently selected duration. Manual and automatic snoozes advance from the delivered occurrence's minute-aligned time rather than adding the seconds spent ringing: 08:30 → 08:35 → 08:40 for five-minute snoozes. Passed slots are skipped to the next future slot, and duplicate delivery does not restart the timeout. Saved defaults remain unchanged. Timers retain their existing elapsed-time snooze and ten-minute stop timeout.
+
+Builds, 82 policy checks and focused Android 15 clock-service verification pass. Watch runtime verification remains incomplete; see [verification status](verification/STATUS.md).
 
 ## Volume-button snooze
 

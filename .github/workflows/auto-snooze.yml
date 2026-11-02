@@ -7,7 +7,6 @@ on:
       - 'core/src/main/java/dev/orbit/clock/core/Scheduler.kt'
       - 'core/src/main/java/dev/orbit/clock/core/RingingService.kt'
       - 'core/src/main/java/dev/orbit/clock/core/SnoozeDuration.java'
-      - 'tools/verify-auto-snooze.py'
       - 'tools/auto-snooze/**'
       - '.github/workflows/auto-snooze.yml'
 permissions:
