@@ -1,12 +1,14 @@
 # Reference-based interaction and guidance system
 
-Keep the approved Google Clock ringing layout and quiet typography on phone. Watch ringing uses a compact version of the same rail with native rotary control. Visual affordances must suggest an available action, and state feedback must reflect observed facts.
+Keep the approved Google Clock ringing layout and quiet typography on phone. Watch ringing uses a separate semicircular arc with native rotary control. Visual affordances must suggest an available action, and state feedback must reflect observed facts.
 
 ## References and application
 
 | Reference | Applied pattern |
 | --- | --- |
 | [Google Phone incoming-call announcement](https://support.google.com/phoneapp/thread/351208139/a-new-material-3-expressive-experience-in-the-phone-by-google-app?hl=en-GB) | Horizontal call-control reference; adapted outward glints, not a claim of Google's exact private shimmer curve |
+| [Apple’s slider motion demo (18:07)](https://developer.apple.com/videos/play/wwdc2025/284/?time=1087) | Momentum, bounded capsule deformation and continuous release/re-grab; recreated with Android springs, not private UIKit code |
+| [Apple rubber-banding (17:01)](https://developer.apple.com/videos/play/wwdc2018/803/?time=1021) | Resistance and elastic return while keeping the icon on a separate unscaled layer |
 | [Android spring physics](https://developer.android.com/develop/ui/views/animations/spring-animation) | Measured release velocity, damped inertia and interruptible native spring motion |
 | [Material 3 motion](https://m3.material.io/styles/motion/overview/how-it-works) | Coordinated spatial transitions; short opacity/color effects; native Material component motion |
 | [Reply motion examples](https://codelabs.developers.google.com/codelabs/material-motion-android) | Continuous context between tools, persistent chrome, shared-axis movement with overlapping fades |
@@ -19,7 +21,7 @@ Keep the approved Google Clock ringing layout and quiet typography on phone. Wat
 
 The user now wants shimmer only on the ringing screen. All main-tool bindings are removed, and VisualHints rejects every key except ring_controls. Static edit/remove affordances remain; existing press, ripple, navigation and value feedback remain. No coach-tip rows or captions are restored.
 
-The ringing rail emits two soft, finite outward glints after 450ms, across 1.8 seconds. The cue is eligible on each new visible phone ringing rail, even when the previous hint has been learned; touching cancels it immediately. Cached drawing objects avoid frame allocations. It does not move the thumb, intercept touch or dispatch actions. Visibility, focus, reduced motion and lifecycle cancellation apply. No other screen receives shimmer.
+The ringing rail emits two finite passes of hollow semicircular light fronts after 450ms, across 1.8 seconds. They originate at the resting pill’s round-end centers, expand outward with cached radial gradients and remain clipped to the rail. The light curves like an expanding capsule; it is no longer a translated vertical band. The cue is eligible on each new visible phone ringing rail, even when the previous hint has been learned; touching cancels it immediately. Cached drawing objects avoid frame allocations. It does not move the thumb, intercept touch or dispatch actions. Visibility, focus, reduced motion and lifecycle cancellation apply. No other screen receives shimmer.
 
 ## Ringing type and atmosphere
 
@@ -37,7 +39,7 @@ RingControls stores snooze selection by alarm ID and occurrence timestamp. Full-
 
 The activity header, navigation, FAB and status surface remain mounted while tool contents change. Ordered tools use native Material shared-axis movement with overlapping fades. Native FAB show/hide is preserved. Data refreshes retain keyed item movement and scroll position.
 
-The slider tracks raw finger position/velocity. Its pill stretches horizontally with a gently thinning profile while its alarm glyph is counter-scaled to stay undistorted; rotation stays zero. A native SpringAnimation restores it after an incomplete gesture, carrying release velocity with damped overshoot. A separate retargetable spring controls elastic deformation. Edge tension stays bounded inside the rail. New input cancels the spring at its current position. The existing 70% threshold commits actions only with physical movement beyond native touch slop toward the selected action. Catching/tapping or pulling back an off-centre thumb does not act; spring callbacks never act on alarms. Destination labels fade before the stretching pill overlaps their letters. Reduced motion restores the thumb immediately. Focus loss and detach cancel tracking/animation.
+The slider tracks raw finger position/velocity. Its fixed-size, unscaled FrameLayout contains a geometry-drawn PillSurface and an independent 24dp alarm ImageView. Only the capsule geometry stretches; the icon and its ancestors never scale, and rotation stays zero. Round caps remain circular, while velocity and edge resistance add bounded strain. Held velocity strain relaxes after 110ms. A native SpringAnimation restores it after an incomplete gesture, carrying release velocity with damped overshoot. A separate retargetable spring controls elastic deformation. Edge tension stays bounded inside the rail. New input catches the spring at its current position. Touch interception includes the visibly stretched capsule outside the fixed thumb frame, preventing fall-through to labels. The existing 70% threshold commits actions only with physical movement beyond native touch slop toward the selected action. Catching/tapping or pulling back an off-centre thumb does not act; spring callbacks never act on alarms. Destination labels fade before the stretching pill overlaps their letters. Reduced motion restores the thumb immediately. Focus loss and detach cancel tracking/animation.
 
 Save/delete/start/cancel feedback confirms local state changes. Explicit sync requests show a finite connection check, then a connection/request result or timeout. Neither a reachable node nor a successful Data Layer write is presented as a delivery acknowledgement. No periodic network polling or decorative loading loop is added.
 
@@ -47,6 +49,8 @@ Use full emulator scope for this cross-app change. Focused guidance, ringing-mot
 
 The visual-cue scope records before real timer delivery and includes notification opening in its 40-second window, so internal review can see the actual two-pass shimmer. A shorter home-screen-only recording is not evidence of the visual effect.
 
+The focused same-key native probe now also checks actual hardware-display pixels at rest, slow/fast drag, hold and return, with unchanged 34×34px glyph bounds in the reference emulator. Curvature/symmetry/expansion assertions reject the old vertical bands. ViewGroup dispatch checks the stretched touch edge; native samples check inertia, atomic catch/reversal, accidental-action prevention, lifecycle cleanup and reduced motion. Native frames are internal review feedback, not a physical frame-rate benchmark. Exact sources and passed run links are recorded in verification/STATUS.md.
+
 ## Watch ringing controls
 
-The watch uses the compact production rail with its larger duration controls, native typography and existing anticlockwise Snooze / clockwise Dismiss direction. Existing three-/six-unit amounts and per-occurrence duration semantics remain. Retargetable spring rendering follows detents, but physical input alone commits actions; touch can interrupt animation without jumping. The pill may stretch while its glyph remains undistorted. No on-screen coaching text or percentages are added. Physical Watch 4 Classic feel still needs device acceptance.
+The watch uses the separate WatchArcControl lower semicircle with an upright glyph, native typography and existing anticlockwise Snooze / clockwise Dismiss direction. Three-/six-unit amounts and per-occurrence duration semantics remain. The phone capsule correction does not change that component. See the current watch-arc section of HANDOFF.md for its motion, watch-face reveal and native Wear evidence. No on-screen coaching text or percentages are added. Physical Watch 4 Classic feel still needs device acceptance.
