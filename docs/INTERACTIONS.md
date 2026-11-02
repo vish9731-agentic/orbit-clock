@@ -1,11 +1,13 @@
 # Reference-based interaction and guidance system
 
-Keep the approved Google Clock ringing layout and quiet typography on phone. Watch ringing uses its own circular action layout. Visual affordances must suggest an available action, and state feedback must reflect observed facts.
+Keep the approved Google Clock ringing layout and quiet typography on phone. Watch ringing uses a compact version of the same rail with native rotary control. Visual affordances must suggest an available action, and state feedback must reflect observed facts.
 
 ## References and application
 
 | Reference | Applied pattern |
 | --- | --- |
+| [Google Phone incoming-call announcement](https://support.google.com/phoneapp/thread/351208139/a-new-material-3-expressive-experience-in-the-phone-by-google-app?hl=en-GB) | Horizontal call-control reference; adapted outward glints, not a claim of Google's exact private shimmer curve |
+| [Android spring physics](https://developer.android.com/develop/ui/views/animations/spring-animation) | Measured release velocity, damped inertia and interruptible native spring motion |
 | [Material 3 motion](https://m3.material.io/styles/motion/overview/how-it-works) | Coordinated spatial transitions; short opacity/color effects; native Material component motion |
 | [Reply motion examples](https://codelabs.developers.google.com/codelabs/material-motion-android) | Continuous context between tools, persistent chrome, shared-axis movement with overlapping fades |
 | [Designing Fluid Interfaces](https://developer.apple.com/videos/play/wwdc2018/803/) | Direct finger tracking, raw-coordinate velocity, interruptible native spring return |
@@ -17,7 +19,7 @@ Keep the approved Google Clock ringing layout and quiet typography on phone. Wat
 
 The user now wants shimmer only on the ringing screen. All main-tool bindings are removed, and VisualHints rejects every key except ring_controls. Static edit/remove affordances remain; existing press, ripple, navigation and value feedback remain. No coach-tip rows or captions are restored.
 
-The ringing rail emits two finite outward light sweeps, without moving its thumb or intercepting touch. Visibility, focus, learning, reduced-motion and lifecycle cancellation still apply. No other screen receives shimmer.
+The ringing rail emits two soft, finite outward glints after 450ms, across 1.8 seconds. The cue is eligible on each new visible phone ringing rail, even when the previous hint has been learned; touching cancels it immediately. Cached drawing objects avoid frame allocations. It does not move the thumb, intercept touch or dispatch actions. Visibility, focus, reduced motion and lifecycle cancellation apply. No other screen receives shimmer.
 
 ## Ringing type and atmosphere
 
@@ -35,7 +37,7 @@ RingControls stores snooze selection by alarm ID and occurrence timestamp. Full-
 
 The activity header, navigation, FAB and status surface remain mounted while tool contents change. Ordered tools use native Material shared-axis movement with overlapping fades. Native FAB show/hide is preserved. Data refreshes retain keyed item movement and scroll position.
 
-The slider tracks raw finger position/velocity, and a native SpringAnimation restores it after an incomplete gesture. New input cancels the spring at its current position. A bounded distance threshold commits actions on release; spring callbacks never act on alarms. Reduced motion restores the thumb immediately. Focus loss and detach cancel tracking/animation.
+The slider tracks raw finger position/velocity. Its pill stretches horizontally with a gently thinning profile while its alarm glyph is counter-scaled to stay undistorted; rotation stays zero. A native SpringAnimation restores it after an incomplete gesture, carrying release velocity with damped overshoot. A separate retargetable spring controls elastic deformation. Edge tension stays bounded inside the rail. New input cancels the spring at its current position. A bounded distance threshold commits actions on release; spring callbacks never act on alarms. Reduced motion restores the thumb immediately. Focus loss and detach cancel tracking/animation.
 
 Save/delete/start/cancel feedback confirms local state changes. Explicit sync requests show a finite connection check, then a connection/request result or timeout. Neither a reachable node nor a successful Data Layer write is presented as a delivery acknowledgement. No periodic network polling or decorative loading loop is added.
 

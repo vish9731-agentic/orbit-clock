@@ -9,41 +9,46 @@ import android.view.ViewTreeObserver
 import java.util.WeakHashMap
 import kotlin.math.sin
 
-/** Finite, non-interactive light cues. Never moves controls or dispatches an action. */
+/** Incoming-call-inspired, finite rail glints; no text tips, input interception or actions. */
 object VisualHints {
-    private val sessions = mutableSetOf<String>()
     private val active = WeakHashMap<View, ValueAnimator>()
+    private val consumed = WeakHashMap<View, Boolean>()
     private fun prefs(c: Context) = c.getSharedPreferences("visual_hints", Context.MODE_PRIVATE)
     fun learn(c: Context, key: String) { prefs(c).edit().putBoolean("$key.learned", true).apply() }
-    fun cancel(view: View) { active.remove(view)?.cancel() }
+    fun cancel(view: View) {
+        if (view.isAttachedToWindow && view.hasWindowFocus()) consumed[view] = true
+        active.remove(view)?.cancel()
+    }
     fun bind(view: View, key: String, directional: Boolean = false) {
         if (key != "ring_controls") return
-        val p = prefs(view.context)
-        if (p.getBoolean("$key.learned", false) || key in sessions || p.getInt("$key.shown", 0) >= 3) return
+        consumed.remove(view)
         val light = Sweep(directional)
         val visible = Rect()
         var observer: ViewTreeObserver? = null
         var animator: ValueAnimator? = null
+        var started = false
         fun clear() { animator?.cancel(); view.overlay.remove(light); active.remove(view) }
         val preDraw = object : ViewTreeObserver.OnPreDrawListener {
             override fun onPreDraw(): Boolean {
-                if (!OrbitMotion.enabled() || !view.hasWindowFocus() || view.isPressed || p.getBoolean("$key.learned", false)) {
+                if (consumed[view] == true || !OrbitMotion.enabled() || !view.hasWindowFocus() || view.isPressed) {
                     clear(); return true
                 }
-                if (key !in sessions && view.isShown && view.width > 0 && view.height > 0 &&
+                if (!started && view.isShown && view.width > 0 && view.height > 0 &&
                     view.getGlobalVisibleRect(visible) && visible.height() >= view.height / 2) {
-                    sessions.add(key)
-                    p.edit().putInt("$key.shown", p.getInt("$key.shown", 0) + 1).apply()
+                    started = true
                     light.setBounds(0, 0, view.width, view.height)
                     view.overlay.add(light)
                     animator = ValueAnimator.ofFloat(0f, 1f).apply {
-                        startDelay = 500; duration = 1800
+                        startDelay = 450; duration = 1800
+                        interpolator = android.view.animation.LinearInterpolator()
                         addUpdateListener {
-                            if (!OrbitMotion.enabled() || !view.hasWindowFocus() || !view.isShown || view.isPressed || p.getBoolean("$key.learned", false)) clear()
+                            if (!OrbitMotion.enabled() || !view.hasWindowFocus() || !view.isShown || view.isPressed) clear()
                             else { light.phase = it.animatedValue as Float; light.invalidateSelf() }
                         }
                         addListener(object : android.animation.AnimatorListenerAdapter() {
-                            override fun onAnimationEnd(animation: android.animation.Animator) { view.overlay.remove(light); active.remove(view) }
+                            override fun onAnimationEnd(animation: android.animation.Animator) {
+                                view.overlay.remove(light); active.remove(view)
+                            }
                         })
                         active[view] = this; start()
                     }
@@ -52,32 +57,51 @@ object VisualHints {
             }
         }
         view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
-            override fun onViewAttachedToWindow(v: View) { observer = v.viewTreeObserver; observer?.addOnPreDrawListener(preDraw) }
-            override fun onViewDetachedFromWindow(v: View) { clear(); observer?.takeIf { it.isAlive }?.removeOnPreDrawListener(preDraw); observer = null }
+            override fun onViewAttachedToWindow(v: View) {
+                observer = v.viewTreeObserver; observer?.addOnPreDrawListener(preDraw)
+            }
+            override fun onViewDetachedFromWindow(v: View) {
+                clear(); observer?.takeIf { it.isAlive }?.removeOnPreDrawListener(preDraw); observer = null
+            }
         })
     }
     private class Sweep(private val directional: Boolean) : Drawable() {
         var phase = 0f
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        override fun draw(canvas: Canvas) {
+        private val path = Path()
+        private val matrix = Matrix()
+        private var gradient: LinearGradient? = null
+        private var band = 0f
+        private var opacity = 255
+        override fun onBoundsChange(bounds: Rect) {
             val w = bounds.width().toFloat(); val h = bounds.height().toFloat()
-            if (w <= 0 || h <= 0) return
-            val progress = (phase * 2f) % 1f
-            val strength = sin(progress * Math.PI).toFloat().coerceAtLeast(0f)
-            val band = w * .16f
-            val centers = if (directional) listOf(w * .5f - progress * w * .5f, w * .5f + progress * w * .5f)
-                else listOf(-band + progress * (w + 2 * band))
-            val checkpoint = canvas.save()
-            canvas.clipPath(Path().apply { addRoundRect(RectF(0f, 0f, w, h), h.coerceAtMost(w) / 2, h.coerceAtMost(w) / 2, Path.Direction.CW) })
-            for (x in centers) {
-                paint.shader = LinearGradient(x-band, 0f, x+band, 0f, intArrayOf(Color.TRANSPARENT, Color.argb((36*strength).toInt(), 160, 255, 232), Color.TRANSPARENT), null, Shader.TileMode.CLAMP)
-                canvas.drawRect(x-band, 0f, x+band, h, paint)
-            }
-            paint.shader = null
-            canvas.restoreToCount(checkpoint)
+            path.rewind()
+            path.addRoundRect(RectF(bounds), h.coerceAtMost(w) / 2, h.coerceAtMost(w) / 2, Path.Direction.CW)
+            band = w * .12f
+            gradient = if (w > 0) LinearGradient(-band, 0f, band, 0f,
+                intArrayOf(Color.TRANSPARENT, Color.argb(24, 131, 238, 212),
+                    Color.argb(88, 224, 255, 245), Color.argb(24, 131, 238, 212), Color.TRANSPARENT),
+                floatArrayOf(0f, .32f, .56f, .76f, 1f), Shader.TileMode.CLAMP) else null
         }
-        override fun setAlpha(alpha: Int) = Unit
-        override fun setColorFilter(colorFilter: ColorFilter?) = Unit
+        override fun draw(canvas: Canvas) {
+            val shader = gradient ?: return
+            val w = bounds.width().toFloat(); val h = bounds.height().toFloat()
+            val progress = (phase.coerceIn(0f, 1f) * 2f) % 1f
+            val ease = progress * progress * (3f - 2f * progress)
+            paint.alpha = (opacity * sin(progress * Math.PI).toFloat().coerceAtLeast(0f)).toInt()
+            val save = canvas.save(); canvas.clipPath(path)
+            for (i in 0 until (if (directional) 2 else 1)) {
+                val sign = if (i == 0) -1f else 1f
+                val x = bounds.left + if (directional) w * .5f + sign * w * (.10f + ease * .48f)
+                    else -band + ease * (w + band * 2)
+                matrix.setTranslate(x, bounds.top.toFloat()); shader.setLocalMatrix(matrix)
+                paint.shader = shader
+                canvas.drawRect(x - band, bounds.top.toFloat(), x + band, bounds.top + h, paint)
+            }
+            paint.shader = null; canvas.restoreToCount(save)
+        }
+        override fun setAlpha(alpha: Int) { opacity = alpha.coerceIn(0, 255); invalidateSelf() }
+        override fun setColorFilter(colorFilter: ColorFilter?) { paint.colorFilter = colorFilter; invalidateSelf() }
         @Deprecated("Deprecated in Java") override fun getOpacity() = PixelFormat.TRANSLUCENT
     }
 }
