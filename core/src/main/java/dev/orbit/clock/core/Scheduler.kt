@@ -63,7 +63,9 @@ object Scheduler {
         if (!isActive(c, a, occurrence)) return
         val changed = if (snooze) {
             val minutes = snoozeMinutesOverride?.let { SnoozeDuration.clamp(it) } ?: a.snoozeMinutes
-            a.copy(snoozeUntil = System.currentTimeMillis() + minutes * 60_000L, skipThrough = occurrence)
+            val now = System.currentTimeMillis()
+            val next = if (a.timer) now + minutes * 60_000L else SnoozeDuration.nextAlarm(occurrence, now, minutes)
+            a.copy(snoozeUntil = next, skipThrough = occurrence)
         } else a.copy(snoozeUntil=0, skipThrough=occurrence, enabled=a.days.isNotEmpty())
         store.save(changed)
         RingingService.reconcile(c, changed)

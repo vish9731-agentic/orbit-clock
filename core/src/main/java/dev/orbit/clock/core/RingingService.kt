@@ -45,6 +45,7 @@ class RingingService : Service() {
             if (active.isEmpty()) stopSelf()
             return START_NOT_STICKY
         }
+        if (active[id] == at) return START_NOT_STICKY // Duplicate delivery cannot extend the ring timeout.
         active[id] = at
         updateNotification(true)
         acquireAudioFocus()
@@ -54,9 +55,15 @@ class RingingService : Service() {
         wake.acquire(11*60_000L)
         updateOutputs()
         timeouts.remove(id)?.let { handler.removeCallbacks(it) }
-        val timeout = Runnable { if (active[id] == at) Scheduler.act(this, id, at, false) }
+        val timeout = Runnable {
+            if (active[id] == at) {
+                val current = Store(this).get(id)
+                if (current != null) Scheduler.act(this, id, at, !current.timer,
+                    snoozeMinutesOverride = RingControls.minutes(this, current, at))
+            }
+        }
         timeouts[id] = timeout
-        handler.postDelayed(timeout, 10*60_000L)
+        handler.postDelayed(timeout, if (a.timer) 10*60_000L else 30_000L)
         return START_NOT_STICKY
     }
     private fun updateNotification(fullScreen: Boolean) {

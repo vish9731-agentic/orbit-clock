@@ -18,6 +18,19 @@ public class CoreChecks {
     }
     static void at(String name, String expected, Instant actual) { eq(name,Instant.parse(expected),actual); }
     public static void main(String[] args) {
+        long anchor = Instant.parse("2026-11-02T08:30:00Z").toEpochMilli();
+        long occurrence = anchor;
+        for (int i=1;i<=8;i++) {
+            occurrence = SnoozeDuration.nextAlarm(occurrence, occurrence+30_000L, 5);
+            eq("no drift snooze "+i, anchor+i*300_000L, occurrence);
+        }
+        eq("late handling skips passed slots", anchor+900_000L,
+            SnoozeDuration.nextAlarm(anchor, anchor+610_000L, 5));
+        eq("exact deadline uses future slot", anchor+600_000L,
+            SnoozeDuration.nextAlarm(anchor, anchor+300_000L, 5));
+        eq("old seconds are removed", anchor+300_000L,
+            SnoozeDuration.nextAlarm(anchor+21_000L, anchor+40_000L, 5));
+
         String[] periods={"dawn","morning","noon","afternoon","sunset","blue-hour","night"};
         int[] sampleMinutes={360,480,720,900,1080,1260,60};
         for(int i=0;i<periods.length;i++) eq("local atmosphere "+periods[i],periods[i],RingAtmosphere.period(sampleMinutes[i]));

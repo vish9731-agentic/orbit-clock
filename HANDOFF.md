@@ -1,5 +1,10 @@
 # Orbit Clock handoff
 
+## Thirty-second auto-snooze and aligned clock snoozes
+
+Clock alarms auto-snooze after 30 seconds of ringing using the current occurrence selection. Manual and automatic clock snoozes advance from the delivered occurrence's minute-aligned timestamp, skipping elapsed slots; five-minute sequences remain 08:30→08:35→08:40 without action-time seconds accumulating. Duplicate service starts do not reset the timeout. Timers retain elapsed-time snooze and their prior ten-minute stop timeout. Saved defaults and alarm record schema are unchanged. Build/runtime verification pending.
+
+
 ## Blue-hour stars and cloud wisps
 
 21:00 blue hour now includes five faint stars at 65% of deep-night strength, without the moon. Daylight corner scenes gain three soft, narrow cloud wisps made from cached gradients. The black main field, current-local-time selection and snooze behavior are preserved. Build/tests/lint and APK publication passed in run 41331010277 (source 7c00710f38e05134f7b1535cfd9f9924304dc89e); all 71 production-policy checks pass. Emulator run 41331010227 remains incomplete: evening-to-night verified actual afternoon/night rendered controls and live refresh, then its guest disconnected during the first snooze. Afternoon-to-evening was still active when recorded. Do not claim a full emulator pass or completed visual review of the new 21:00 stars/clouds.
