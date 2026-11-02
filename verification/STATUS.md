@@ -1,5 +1,14 @@
 # Verification status
 
+## Pomodoro Focus mode — build passes; runtime verification blocked
+
+Final production source `b639b3e` (subsequent changes are documentation) passed local JDK17 / SDK35 `:core:testDebugUnitTest :phone:assembleDebug :wear:assembleDebug :phone:lintDebug :wear:lintDebug`. All 12 tests passed (seven alarm, five Focus). Both debug APK signatures match the existing development certificate `d3c6b53474417ca21c9e094ffa4a1eefd021af614f6267a2c882b993397e4f4a`. The final same-key FocusProbe APK compiles. Earlier cloud policy checks passed all 82 core and 39 widget checks.
+
+Partial native evidence: the Wear diagnostic run exercised deliberate clockwise Start/Resume, anticlockwise Pause, latch protection, touch Pause/Resume, remainder preservation and End cancellation successfully. Its background-notification Pause assertion failed; the test now waits for asynchronous delivery. The phone probe encountered a transient missing Resume label; local controls now update immediately and the test waits for rendered labels. Those final runtime changes have not passed a rerun. GitHub rejected run [41511960503](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41511960503) before either job started because recent account payments failed or the Actions spending limit needs increasing. This workspace has no `/dev/kvm`, so the local build is not an emulator substitute.
+
+Implementation is in [draft PR #4](https://github.com/vish9731-agentic/orbit-clock/pull/4). No main-branch merge, updated published APKs, successful final runtime checks or physical/paired-device acceptance are claimed. Existing widgets remain unchanged. Resolve GitHub Actions billing, rerun the dedicated Focus workflow, fix any remaining failures, inspect native renders and complete the normal build/publication workflow before delivery. See [Focus architecture and limits](../docs/FOCUS.md).
+
+
 ## Apple-referenced pill stretch and expanding semicircular shimmer — verified debug 98
 
 The approved correction replaces straight light bands with two hollow, curved fronts expanding from the resting thumb’s semicircular endcaps. Cached radial gradients are clipped outward and to the rail. The phone receives two finite passes after 450ms over 1.8s, canceled by touch, lost focus, detach or reduced motion. No other-screen shimmer or hint prose is added.
