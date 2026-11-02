@@ -9,7 +9,7 @@ import java.util.*; import java.util.concurrent.*; import org.json.*;
 public class WidgetProbe extends Instrumentation {
  Context c; Activity activity; Object companion,storeCompanion; Class<?> storeClass,alarmClass;
  AppWidgetHost host; AppWidgetManager manager; AppWidgetHostView square,wide,actualSquare,actualWide; boolean previewMode; int squareId,wideId;
- LinearLayout stage; File evidence; int checks; int squareDp=160,wideDp=340,heightDp=160;
+ LinearLayout stage; File evidence; int checks; int squareDp=160,wideDp=340,heightDp=160,wideHeightDp=80;
  interface Check { boolean ok() throws Exception; }
  <T> T main(Callable<T> call)throws Exception {FutureTask<T> f=new FutureTask<>(call);runOnMainSync(f);return f.get();}
  void require(boolean ok,String message){if(!ok)throw new AssertionError(message);}
@@ -45,9 +45,9 @@ public class WidgetProbe extends Instrumentation {
     if(preview){square.setAppWidget(squareId,manager.getAppWidgetInfo(squareId));wide.setAppWidget(wideId,manager.getAppWidgetInfo(wideId));}
     float d=c.getResources().getDisplayMetrics().density;
     stage.addView(square,new LinearLayout.LayoutParams((int)(160*d),(int)(160*d)));
-    stage.addView(wide,new LinearLayout.LayoutParams((int)(340*d),(int)(160*d)));previewMode=preview;
+    stage.addView(wide,new LinearLayout.LayoutParams((int)(340*d),(int)(80*d)));previewMode=preview;
    }
-   RemoteViews sv=(RemoteViews)v.invoke(companion,c,false,s,now,squareDp,heightDp),wv=(RemoteViews)v.invoke(companion,c,true,s,now,wideDp,heightDp);
+   RemoteViews sv=(RemoteViews)v.invoke(companion,c,false,s,now,squareDp,heightDp),wv=(RemoteViews)v.invoke(companion,c,true,s,now,wideDp,wideHeightDp);
    if(preview){square.updateAppWidget(sv);wide.updateAppWidget(wv);}else{manager.updateAppWidget(squareId,sv);manager.updateAppWidget(wideId,wv);}return null;});
   waitFor(()->main(()->square.findViewById(id("widget_clock"))!=null),"Host did not inflate");SystemClock.sleep(300);
  }
@@ -107,7 +107,8 @@ public class WidgetProbe extends Instrumentation {
   main(()->{stage=new LinearLayout(activity);stage.setOrientation(LinearLayout.VERTICAL);stage.setPadding(16,40,16,16);
    ((android.widget.FrameLayout)activity.findViewById(android.R.id.content)).addView(stage,new android.widget.FrameLayout.LayoutParams(-1,-1));
    manager=AppWidgetManager.getInstance(c);host=new AppWidgetHost(c,8765);host.startListening();
-   squareId=host.allocateAppWidgetId();wideId=host.allocateAppWidgetId();square=bind("AlarmWidget",squareId,160,160);wide=bind("WideAlarmWidget",wideId,340,160);actualSquare=square;actualWide=wide;return null;});
+   squareId=host.allocateAppWidgetId();wideId=host.allocateAppWidgetId();square=bind("AlarmWidget",squareId,160,160);wide=bind("WideAlarmWidget",wideId,340,80);actualSquare=square;actualWide=wide;return null;});
+  require(manager.getAppWidgetInfo(wideId).targetCellHeight==1 && manager.getAppWidgetInfo(wideId).targetCellWidth==4,"Wide picker metadata must be 4x1");
   refresh();renderAt(System.currentTimeMillis());visible(false);capture("01-clock-dark",Color.rgb(25,32,45));capture("02-clock-light",Color.rgb(230,225,210));
   pass("both real AppWidgetHost bindings, transparent idle clock only, stable empty right half");
   Calendar cal=Calendar.getInstance();cal.add(Calendar.MINUTE,10);
@@ -186,13 +187,15 @@ public class WidgetProbe extends Instrumentation {
   main(()->{c.startActivity(new Intent().setClassName(c.getPackageName(),"dev.orbit.clock.phone.MainActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP));return null;});
   waitFor(()->activity.hasWindowFocus(),"Main activity did not regain focus");
   renderAt(System.currentTimeMillis());
-  main(()->{float d=c.getResources().getDisplayMetrics().density;square.setLayoutParams(new LinearLayout.LayoutParams((int)(130*d),(int)(130*d)));wide.setLayoutParams(new LinearLayout.LayoutParams((int)(250*d),(int)(130*d)));squareDp=130;wideDp=250;heightDp=130;return null;});
+  main(()->{float d=c.getResources().getDisplayMetrics().density;square.setLayoutParams(new LinearLayout.LayoutParams((int)(130*d),(int)(130*d)));wide.setLayoutParams(new LinearLayout.LayoutParams((int)(250*d),(int)(70*d)));squareDp=130;wideDp=250;heightDp=130;wideHeightDp=70;return null;});
   renderAt(System.currentTimeMillis());
   SystemClock.sleep(400);checkSurface();
+  require(main(()->wide.getHeight()<=Math.ceil(70*c.getResources().getDisplayMetrics().density)),"Wide host is not one row tall");
+  require(main(()->{Rect shown=new Rect();View count=wide.findViewById(id("widget_countdown"));return count.getGlobalVisibleRect(shown) && shown.height()==count.getHeight();}),"One-row countdown is clipped");
   capture("08-small",Color.rgb(240,235,220));
   require(main(()->{View event=square.findViewById(id("widget_event"));View count=square.findViewById(id("widget_countdown"));return count.getBottom()<=event.getHeight();}),"Small square clips countdown");
   require(main(()->{View event=wide.findViewById(id("widget_event"));View count=wide.findViewById(id("widget_countdown"));return count.getBottom()<=event.getHeight();}),"Small wide clips countdown");
-  capture("08-small",Color.rgb(240,235,220));pass("both resized native hosts retain readable countdown geometry");
+  capture("08-small",Color.rgb(240,235,220));pass("square and 4x1 strip retain readable countdown geometry at minimum sizes");
   click(square.findViewById(id("widget_event")));main(()->{stage.setVisibility(View.GONE);return null;});
   waitFor(()->{for(Window w:new Window[]{activity.getWindow()})if(main(()->hasText(w.getDecorView(),"Edit alarm")))return true;
    return getUiAutomation().getRootInActiveWindow()!=null && getUiAutomation().getRootInActiveWindow().findAccessibilityNodeInfosByText("Edit alarm").size()>0;},"Alarm deep link");

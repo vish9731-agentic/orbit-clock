@@ -105,10 +105,10 @@ open class AlarmWidget : AppWidgetProvider() {
         }
 
         fun views(c: Context, wide: Boolean, s: Snapshot, now: Long): RemoteViews {
-            return viewsAtSize(c, wide, s, now, if (wide) 340 else 160, 160)
+            return viewsAtSize(c, wide, s, now, if (wide) 340 else 160, if (wide) 80 else 160)
         }
         fun viewsAtSize(c: Context, wide: Boolean, s: Snapshot, now: Long, widthDp: Int, heightDp: Int): RemoteViews {
-            val layout = if (!wide) R.layout.dynamic_widget_square else if (widthDp < 280) R.layout.dynamic_widget_wide_small else R.layout.dynamic_widget_wide
+            val layout = if (!wide) R.layout.dynamic_widget_square else if (widthDp < 280) R.layout.dynamic_widget_strip_small else R.layout.dynamic_widget_strip
             val v = RemoteViews(c.packageName, layout)
             val event = s.kind != "clock"
             val alarm = s.kind == "alarm" || s.kind == "ringing"
@@ -121,7 +121,7 @@ open class AlarmWidget : AppWidgetProvider() {
             // One full-size background layer. Content containers never carry backgrounds.
             if (!event) v.setImageViewResource(R.id.widget_backdrop, 0)
             if (event) v.setImageViewBitmap(R.id.widget_backdrop, WidgetBackdrop.render(c, wide,
-                (widthDp - 16).coerceAtLeast(100), (heightDp - 16).coerceAtLeast(100), !alarm))
+                (widthDp - 16).coerceAtLeast(100), (heightDp - 16).coerceAtLeast(if (wide) 48 else 100), !alarm))
             v.setImageViewResource(R.id.widget_icon, when { !alarm -> R.drawable.widget_moon; snoozed -> R.drawable.widget_snooze; else -> R.drawable.widget_alarm })
             val title = when (s.kind) {
                 "ringing" -> "Alarm ringing"
@@ -131,9 +131,11 @@ open class AlarmWidget : AppWidgetProvider() {
                 else -> ""
             }
             val eventTime = if (s.at > 0) time(c, s.at) else ""
-            v.setTextViewText(R.id.widget_title, if (!wide && alarm) eventTime else title)
+            val summary = if (!wide) { if (alarm) eventTime else title }
+                else if (alarm) "$eventTime · $title" else if (s.kind == "bedtime") "$title · $eventTime" else title
+            v.setTextViewText(R.id.widget_title, summary)
             v.setTextViewText(R.id.widget_event_time, eventTime)
-            v.setViewVisibility(R.id.widget_event_time, if (wide) View.VISIBLE else View.GONE)
+            v.setViewVisibility(R.id.widget_event_time, View.GONE)
             val countdown = s.kind == "alarm" || s.kind == "bedtime"
             v.setViewVisibility(R.id.widget_countdown, if (countdown) View.VISIBLE else View.GONE)
             v.setChronometerCountDown(R.id.widget_countdown, true)
@@ -160,7 +162,7 @@ open class AlarmWidget : AppWidgetProvider() {
                 val wide = manager.getAppWidgetInfo(id)?.provider?.className == WideAlarmWidget::class.java.name
                 val options = manager.getAppWidgetOptions(id)
                 val width = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, if (wide) 340 else 160).coerceIn(if (wide) 250 else 130, 900)
-                val height = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 160).coerceIn(130, 500)
+                val height = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, if (wide) 80 else 160).coerceIn(if (wide) 70 else 130, 500)
                 manager.updateAppWidget(id, viewsAtSize(c, wide, s, now, width, height))
             }
             if (s.boundaryAt > now) {

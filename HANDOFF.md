@@ -1,5 +1,12 @@
 # Orbit Clock handoff
 
+## Wide widget 4×1 strip — verification pending
+
+User requests converting the wide 4×2 widget to 4×1. Provider identity is preserved; metadata targets four columns/one row with70dp minimum height. New dynamic_widget_strip layouts place the icon, a two-line time/label + countdown block, and48dp toggle beside the clock instead of stacking a tall header. Alarm time comes first in the summary so long labels can truncate safely. Narrow-wide anchors remain; the continuous full-viewport alpha field is retained and sized to the real one-row bounds. Square remains2×2. Existing launcher placements may retain two rows until the user resizes; new placements default4×1. Android owns the grid allocation.
+
+Native verification now binds wide hosts at340×80dp and250×70dp, asserts 4×1 picker metadata and fully visible countdowns, and reuses real alarm/snooze/bedtime and migration checks at100%/130% text. Verification is pending.
+
+
 ## Home-screen widget surface rebuild — verified debug 0.1.109
 
 The user rejected the old transparency treatment and explicitly requested rebuilding the widgets. The old right-hand rounded container created a visible separate tile. Active dynamic_widget_* layouts now have one full-bounds background layer behind native content; wide uses independent RelativeLayout anchors rather than two equal weighted square panels. No content container has a background. WidgetBackdrop draws one same-RGB alpha field whose eased opacity continues to the far outer edge; there is no early opaque plateau or interior rounded edge. Idle is entirely transparent. Square still presents one state; wide keeps its live clock and adds reminder content. Text/icon hierarchy was rebuilt and decorative icon disks removed.

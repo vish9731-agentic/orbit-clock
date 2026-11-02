@@ -19,7 +19,7 @@ object WidgetBackdrop {
         val red = (Color.red(tone) * .62f).toInt()
         val green = (Color.green(tone) * .62f).toInt()
         val blue = (Color.blue(tone) * .62f).toInt()
-        val start = if (wide) { if (widthDp < 264) .28f else .32f } else 0f
+        val start = if (wide) { if (widthDp < 264) .255f else .26f } else 0f
         val colors = IntArray(257) { index ->
             val t = ((index / 256f - start) / (1f - start)).coerceIn(0f, 1f)
             val remaining = 1f - t

@@ -1,0 +1,30 @@
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@android:id/background"
+ android:layout_width="match_parent" android:layout_height="match_parent">
+ <ImageView android:id="@+id/widget_backdrop" android:layout_width="match_parent" android:layout_height="match_parent"
+  android:scaleType="fitXY" android:importantForAccessibility="no" android:visibility="gone"/>
+ <RelativeLayout android:layout_width="match_parent" android:layout_height="match_parent">
+  <TextClock android:id="@+id/widget_clock" android:format12Hour="h:mm" android:format24Hour="HH:mm" android:maxLines="1"
+   android:layout_width="match_parent" android:layout_height="match_parent" android:layout_toStartOf="@+id/widget_event"
+   android:layout_marginStart="4dp" android:layout_marginEnd="4dp" android:gravity="center" android:fontFamily="sans-serif-light"
+   android:textColor="#FFFFFFFF" android:textSize="42sp" android:shadowColor="#B3000000" android:shadowRadius="2" android:shadowDy="1"
+   android:autoSizeTextType="uniform" android:autoSizeMinTextSize="20sp" android:autoSizeMaxTextSize="42sp" android:autoSizeStepGranularity="1sp"/>
+  <FrameLayout android:id="@id/widget_event" android:layout_width="160dp" android:layout_height="match_parent"
+   android:layout_alignParentEnd="true" android:visibility="invisible">
+   <RelativeLayout android:layout_width="match_parent" android:layout_height="match_parent" android:paddingStart="8dp" android:paddingEnd="8dp">
+    <ImageView android:id="@+id/widget_icon" android:layout_width="24dp" android:layout_height="24dp" android:layout_centerVertical="true" android:importantForAccessibility="no"/>
+    <TextView android:id="@+id/widget_toggle" android:layout_width="48dp" android:layout_height="48dp" android:layout_alignParentEnd="true"
+     android:layout_centerVertical="true" android:gravity="center" android:textColor="#FFFFFFFF" android:textSize="12sp"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="44dp" android:layout_centerVertical="true"
+     android:layout_toEndOf="@id/widget_icon" android:layout_toStartOf="@id/widget_toggle" android:layout_marginStart="4dp" android:orientation="vertical" android:gravity="center_vertical">
+     <TextView android:id="@+id/widget_title" android:layout_width="match_parent" android:layout_height="18dp"
+      android:textColor="#FFFFFFFF" android:textSize="13sp" android:maxLines="1" android:ellipsize="end"
+      android:autoSizeTextType="uniform" android:autoSizeMinTextSize="10sp" android:autoSizeMaxTextSize="13sp" android:autoSizeStepGranularity="1sp"/>
+     <TextView android:id="@+id/widget_event_time" android:layout_width="match_parent" android:layout_height="0dp" android:visibility="gone"/>
+     <Chronometer android:id="@+id/widget_countdown" android:layout_width="match_parent" android:layout_height="26dp"
+      android:textColor="#FFFFFFFF" android:textSize="20sp" android:fontFamily="sans-serif-medium" android:maxLines="1"
+      android:autoSizeTextType="uniform" android:autoSizeMinTextSize="11sp" android:autoSizeMaxTextSize="20sp" android:autoSizeStepGranularity="1sp"/>
+    </LinearLayout>
+   </RelativeLayout>
+  </FrameLayout>
+ </RelativeLayout>
+</FrameLayout>
