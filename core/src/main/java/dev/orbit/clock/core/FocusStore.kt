@@ -41,7 +41,9 @@ object FocusStore {
         val old = read(c); val now = now(c, old); var next = old.act(action, now)
         if (next == old) return
         if (action == "start") next = next.copy(id = old.id.ifEmpty { UUID.randomUUID().toString() }, owner = device(c))
-        write(c, next.copy(revision = maxOf(now, old.revision + 1), writer = device(c)), true)
+        val changed = next.copy(revision = maxOf(System.currentTimeMillis(), old.revision + 1), writer = device(c))
+        write(c, changed, true)
+        if (old.status == "Running" && changed.status == "Complete" && old.owner == device(c)) notify(c, changed, true)
     }
     @Synchronized fun configure(c: Context, focus: Int, short: Int, long: Int) {
         val old = read(c)
@@ -88,7 +90,7 @@ object FocusStore {
         if (s != read(c)) return
         val manager = c.getSystemService(AlarmManager::class.java)
         val pi = pending(c, s); manager.cancel(pi)
-        if (s.status != "Complete") c.getSystemService(NotificationManager::class.java).cancel(9201)
+        c.getSystemService(NotificationManager::class.java).cancel(9201)
         if (s.status == "Running" && s.owner == device(c)) {
             val at = maxOf(SystemClock.elapsedRealtime() + 50, elapsedDeadline(c, s))
             try {
@@ -96,7 +98,7 @@ object FocusStore {
                 else manager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, pi)
             } catch (_: SecurityException) { manager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, pi) }
         }
-        if (s.status in listOf("Running", "Paused")) notify(c, s, false)
+        if (s.status in listOf("Running", "Paused", "Complete")) notify(c, s, false)
     }
     @Synchronized fun finish(c: Context, revision: Long) {
         val s = read(c); val now = now(c, s)
@@ -115,7 +117,7 @@ object FocusStore {
         val action = if (s.status == "Running") "pause" else "start"
         val label = if (s.status == "Running") "Pause" else if (s.status == "Paused") "Resume" else if (s.phase == "Focus") "Start break" else "Start focus"
         val control = PendingIntent.getBroadcast(c, 9202, Intent(c, FocusReceiver::class.java).setAction(action).putExtra("revision", s.revision), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val n = Notification.Builder(c, channel).setSmallIcon(R.drawable.ic_timer).setContentTitle(if (alert) "${s.phase} complete" else "${s.phase} · ${s.status}")
+        val n = Notification.Builder(c, channel).setSmallIcon(R.drawable.ic_timer).setContentTitle(if (s.status == "Complete") "${s.phase} complete" else "${s.phase} · ${s.status}")
             .setContentText("${s.completed} focus sessions completed").setContentIntent(open).setOnlyAlertOnce(!alert)
             .setOngoing(s.status == "Running").setAutoCancel(alert)
             .addAction(Notification.Action.Builder(null, label, control).build())
