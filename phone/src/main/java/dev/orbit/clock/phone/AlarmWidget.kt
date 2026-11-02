@@ -105,7 +105,11 @@ open class AlarmWidget : AppWidgetProvider() {
         }
 
         fun views(c: Context, wide: Boolean, s: Snapshot, now: Long): RemoteViews {
-            val v = RemoteViews(c.packageName, if (wide) R.layout.alarm_widget_wide else R.layout.alarm_widget)
+            return viewsAtSize(c, wide, s, now, if (wide) 340 else 160, 160)
+        }
+        fun viewsAtSize(c: Context, wide: Boolean, s: Snapshot, now: Long, widthDp: Int, heightDp: Int): RemoteViews {
+            val layout = if (!wide) R.layout.dynamic_widget_square else if (widthDp < 280) R.layout.dynamic_widget_wide_small else R.layout.dynamic_widget_wide
+            val v = RemoteViews(c.packageName, layout)
             val event = s.kind != "clock"
             val alarm = s.kind == "alarm" || s.kind == "ringing"
             val snoozed = alarm && s.alarm?.snoozeUntil?.let { it > now } == true
@@ -113,8 +117,11 @@ open class AlarmWidget : AppWidgetProvider() {
             v.setOnClickPendingIntent(R.id.widget_clock, open)
             v.setViewVisibility(R.id.widget_clock, if (wide || !event) View.VISIBLE else View.GONE)
             v.setViewVisibility(R.id.widget_event, if (event) View.VISIBLE else if (wide) View.INVISIBLE else View.GONE)
-            val background = if (wide) { if (alarm) R.drawable.widget_alarm_gradient_wide else R.drawable.widget_bedtime_gradient_wide } else { if (alarm) R.drawable.widget_alarm_gradient else R.drawable.widget_bedtime_gradient }
-            v.setInt(R.id.widget_event, "setBackgroundResource", if (event) background else 0)
+            v.setViewVisibility(R.id.widget_backdrop, if (event) View.VISIBLE else View.GONE)
+            // One full-size background layer. Content containers never carry backgrounds.
+            if (!event) v.setImageViewResource(R.id.widget_backdrop, 0)
+            if (event) v.setImageViewBitmap(R.id.widget_backdrop, WidgetBackdrop.render(c, wide,
+                (widthDp - 16).coerceAtLeast(100), (heightDp - 16).coerceAtLeast(100), !alarm))
             v.setImageViewResource(R.id.widget_icon, when { !alarm -> R.drawable.widget_moon; snoozed -> R.drawable.widget_snooze; else -> R.drawable.widget_alarm })
             val title = when (s.kind) {
                 "ringing" -> "Alarm ringing"
@@ -133,7 +140,7 @@ open class AlarmWidget : AppWidgetProvider() {
             v.setChronometer(R.id.widget_countdown, SystemClock.elapsedRealtime() + (s.at - now).coerceAtLeast(0), "In %s", countdown)
             v.setContentDescription(R.id.widget_event, "$title${if (s.at > 0) " at ${time(c, s.at)}" else ""}. Tap to ${if (alarm) "edit alarm" else "open bedtime"}.")
             v.setOnClickPendingIntent(R.id.widget_event, if (alarm) launch(c, EDIT, s.alarm?.id) else launch(c, BEDTIME))
-            v.setViewVisibility(R.id.widget_toggle, if (alarm && s.alarm != null) View.VISIBLE else View.GONE)
+            v.setViewVisibility(R.id.widget_toggle, if (alarm && s.alarm != null) View.VISIBLE else View.INVISIBLE)
             s.alarm?.let { a ->
                 v.setTextViewText(R.id.widget_toggle, if (a.enabled) "On" else "Off")
                 v.setContentDescription(R.id.widget_toggle, "${a.label}: ${if (a.enabled) "on, turn off" else "off, turn on"}")
@@ -151,7 +158,10 @@ open class AlarmWidget : AppWidgetProvider() {
             val s = snapshot(c, now)
             ids.forEach { id ->
                 val wide = manager.getAppWidgetInfo(id)?.provider?.className == WideAlarmWidget::class.java.name
-                manager.updateAppWidget(id, views(c, wide, s, now))
+                val options = manager.getAppWidgetOptions(id)
+                val width = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, if (wide) 340 else 160).coerceIn(if (wide) 250 else 130, 900)
+                val height = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 160).coerceIn(130, 500)
+                manager.updateAppWidget(id, viewsAtSize(c, wide, s, now, width, height))
             }
             if (s.boundaryAt > now) {
                 // Non-wakeup visual boundary only. Ring delivery remains the core scheduler's job.

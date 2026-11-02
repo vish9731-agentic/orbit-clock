@@ -1,5 +1,12 @@
 # Orbit Clock handoff
 
+## Home-screen widget surface rebuild — verification pending
+
+The user rejected the old transparency treatment and requested a rebuild. Its gradient was attached to a separately rounded right-hand container, producing a visible inner tile. New dynamic_widget_* layouts use one full-bounds background ImageView behind all native content, a single continuous same-RGB alpha field (WidgetBackdrop), and independent RelativeLayout anchors instead of two weighted square panels. Only the outer widget corners are rounded. Content containers have no background. Both providers retain their identity and settings; new layout resource IDs force existing hosts to inflate the rebuilt hierarchy after update. Alarm/snooze/bedtime policy and the concurrent watch implementation are preserved.
+
+The background is sized from widget options, with dedicated narrow-wide anchors. Idle is fully transparent; the square still shows one state and the wide still keeps its clock visible. Native clock/countdown views remain live. Removed inner gradient drawables and icon badge disks. The native widget probe now checks alpha continuity/monotonicity, clear clock edge, full-viewport background bounds and absence of inner-card corner clipping, plus busy wallpaper and larger cropped visual feedback. Build and emulator verification are pending; do not call this rebuild verified until the new runs and frames have been inspected.
+
+
 ## Short bottom arc and flipped watch directions — verified debug 0.1.107
 
 The user explicitly reverses the previous watch mapping: **clockwise Snooze on the left (three units), anticlockwise Dismiss on the right (six units)**. RingActivity now passes Wear's raw encoder axis directly to the existing logical gesture; phone input and gesture thresholds are unchanged. Accessibility descriptions and native rotary assertions follow the new physical direction.

@@ -9,7 +9,7 @@ import java.util.*; import java.util.concurrent.*; import org.json.*;
 public class WidgetProbe extends Instrumentation {
  Context c; Activity activity; Object companion,storeCompanion; Class<?> storeClass,alarmClass;
  AppWidgetHost host; AppWidgetManager manager; AppWidgetHostView square,wide,actualSquare,actualWide; boolean previewMode; int squareId,wideId;
- LinearLayout stage; File evidence; int checks;
+ LinearLayout stage; File evidence; int checks; int squareDp=160,wideDp=340,heightDp=160;
  interface Check { boolean ok() throws Exception; }
  <T> T main(Callable<T> call)throws Exception {FutureTask<T> f=new FutureTask<>(call);runOnMainSync(f);return f.get();}
  void require(boolean ok,String message){if(!ok)throw new AssertionError(message);}
@@ -38,7 +38,7 @@ public class WidgetProbe extends Instrumentation {
  void remove(String id)throws Exception {save(record(id).put("deleted",true).put("enabled",false));}
  void renderAt(long now)throws Exception {
   Object s=snapshot(now);
-  main(()->{Method v=companion.getClass().getMethod("views",Context.class,boolean.class,s.getClass(),long.class);
+  main(()->{Method v=companion.getClass().getMethod("viewsAtSize",Context.class,boolean.class,s.getClass(),long.class,int.class,int.class);
    boolean preview=Math.abs(now-System.currentTimeMillis())>60000;
    if(preview!=previewMode){
     stage.removeAllViews();square=preview?new AppWidgetHostView(c):actualSquare;wide=preview?new AppWidgetHostView(c):actualWide;
@@ -47,9 +47,21 @@ public class WidgetProbe extends Instrumentation {
     stage.addView(square,new LinearLayout.LayoutParams((int)(160*d),(int)(160*d)));
     stage.addView(wide,new LinearLayout.LayoutParams((int)(340*d),(int)(160*d)));previewMode=preview;
    }
-   RemoteViews sv=(RemoteViews)v.invoke(companion,c,false,s,now),wv=(RemoteViews)v.invoke(companion,c,true,s,now);
+   RemoteViews sv=(RemoteViews)v.invoke(companion,c,false,s,now,squareDp,heightDp),wv=(RemoteViews)v.invoke(companion,c,true,s,now,wideDp,heightDp);
    if(preview){square.updateAppWidget(sv);wide.updateAppWidget(wv);}else{manager.updateAppWidget(squareId,sv);manager.updateAppWidget(wideId,wv);}return null;});
   waitFor(()->main(()->square.findViewById(id("widget_clock"))!=null),"Host did not inflate");SystemClock.sleep(300);
+ }
+ void checkSurface()throws Exception {
+  main(()->{
+   View event=wide.findViewById(id("widget_event"));require(event.getBackground()==null,"Reminder still owns a separate background");
+   ImageView image=(ImageView)wide.findViewById(id("widget_backdrop"));require(image.getVisibility()==View.VISIBLE,"Missing full-widget backdrop");
+   require(image.getWidth()>event.getWidth(),"Backdrop is confined to a half tile");
+   Bitmap bitmap=((android.graphics.drawable.BitmapDrawable)image.getDrawable()).getBitmap();int w=bitmap.getWidth(),h=bitmap.getHeight();
+   require(Color.alpha(bitmap.getPixel(w/4,h/2))==0,"Clock edge is not transparent");
+   require(Color.alpha(bitmap.getPixel(w-3,h/2))>=250,"Reminder contrast too low");
+   int previous=0;for(int x=0;x<w;x++){int alpha=Color.alpha(bitmap.getPixel(x,h/2));require(alpha>=previous,"Gradient reverses opacity");require(alpha-previous<=6,"Hard alpha seam");previous=alpha;}
+   int x=(int)(w*.60f);require(Math.abs(Color.alpha(bitmap.getPixel(x,2))-Color.alpha(bitmap.getPixel(x,h/2)))<=2,"Interior rounded-card edge remains");
+   return null;});
  }
  void refresh()throws Exception {main(()->{companion.getClass().getMethod("refresh",Context.class).invoke(companion,c);return null;});}
  void visible(boolean event)throws Exception {
@@ -58,7 +70,12 @@ public class WidgetProbe extends Instrumentation {
   require(main(()->wide.findViewById(id("widget_event")).getVisibility()==(event?View.VISIBLE:View.INVISIBLE)),"Wide event visibility");
  }
  void capture(String name,int background)throws Exception {
-  main(()->{stage.setBackgroundColor(background);Bitmap b=Bitmap.createBitmap(stage.getWidth(),stage.getHeight(),Bitmap.Config.ARGB_8888);stage.draw(new Canvas(b));
+  main(()->{if(name.contains("pattern"))stage.setBackground(new android.graphics.drawable.Drawable(){
+    public void draw(Canvas canvas){Paint p=new Paint();int cell=36;for(int y=0;y<getBounds().height();y+=cell)for(int x=0;x<getBounds().width();x+=cell){p.setColor(((x/cell+y/cell)%2==0)?Color.rgb(247,241,223):Color.rgb(156,168,173));canvas.drawRect(x,y,x+cell,y+cell,p);}}
+    public void setAlpha(int a){}public void setColorFilter(ColorFilter f){}public int getOpacity(){return android.graphics.PixelFormat.OPAQUE;}
+   });else stage.setBackgroundColor(background);
+   int height=stage.getChildAt(stage.getChildCount()-1).getBottom()+stage.getPaddingBottom();
+   Bitmap b=Bitmap.createBitmap(stage.getWidth(),Math.min(stage.getHeight(),height),Bitmap.Config.ARGB_8888);stage.draw(new Canvas(b));
    try(FileOutputStream f=new FileOutputStream(new File(evidence,name+".png"))){b.compress(Bitmap.CompressFormat.PNG,100,f);}b.recycle();return null;});
  }
  boolean hasText(View view,String wanted){
@@ -96,7 +113,8 @@ public class WidgetProbe extends Instrumentation {
   Calendar cal=Calendar.getInstance();cal.add(Calendar.MINUTE,10);
   save(alarm("Near alarm",cal.get(Calendar.HOUR_OF_DAY),cal.get(Calendar.MINUTE),new JSONArray()));
   waitFor(()->kind(System.currentTimeMillis()).equals("alarm"),"Alarm not near");renderAt(System.currentTimeMillis());visible(true);
-  capture("03-alarm-dark",Color.rgb(25,32,45));capture("04-alarm-light",Color.rgb(240,235,220));
+  capture("03-alarm-dark",Color.rgb(25,32,45));capture("04-alarm-light",Color.rgb(240,235,220));capture("04b-alarm-pattern",0);
+  checkSurface();pass("one full-width backdrop, no inner tile, continuous alpha and transparent clock edge");
   long now=System.currentTimeMillis();for(int minutes:new int[]{10,15,30,45,60,90}){
    c.getSharedPreferences("widget",0).edit().putInt("alarmWindow",minutes).commit();
    JSONObject a=record("Near alarm").put("snoozeUntil",now+(minutes+1)*60000L);save(a);
@@ -125,8 +143,8 @@ public class WidgetProbe extends Instrumentation {
   LocalDate monday=LocalDate.now().plusDays(14).with(TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY));
   long bed=monday.atTime(23,0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
   long before=bed-10*60000;
-  require(kind(before).equals("bedtime"),"Saved sleep-goal bedtime");renderAt(before);visible(true);capture("06-bedtime",Color.rgb(25,32,45));
-  require(main(()->text(square,"widget_toggle").getVisibility()==View.GONE),"Bedtime has alarm control");
+  require(kind(before).equals("bedtime"),"Saved sleep-goal bedtime");renderAt(before);visible(true);capture("06-bedtime",Color.rgb(25,32,45));capture("06b-bedtime-pattern",0);
+  require(main(()->text(square,"widget_toggle").getVisibility()!=View.VISIBLE),"Bedtime has alarm control");
   require(kind(bed).equals("bednow"),"Bedtime arrival");renderAt(bed);capture("07-bednow",Color.rgb(25,32,45));
   click(square.findViewById(id("widget_event")));main(()->{stage.setVisibility(View.GONE);return null;});
   waitFor(()->main(()->hasText(activity.getWindow().getDecorView(),"A rhythm for your rest")),"Bedtime deep link");
@@ -163,8 +181,9 @@ public class WidgetProbe extends Instrumentation {
   main(()->{c.startActivity(new Intent().setClassName(c.getPackageName(),"dev.orbit.clock.phone.MainActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP));return null;});
   waitFor(()->activity.hasWindowFocus(),"Main activity did not regain focus");
   renderAt(System.currentTimeMillis());
-  main(()->{float d=c.getResources().getDisplayMetrics().density;square.setLayoutParams(new LinearLayout.LayoutParams((int)(130*d),(int)(130*d)));wide.setLayoutParams(new LinearLayout.LayoutParams((int)(250*d),(int)(130*d)));return null;});
-  SystemClock.sleep(400);
+  main(()->{float d=c.getResources().getDisplayMetrics().density;square.setLayoutParams(new LinearLayout.LayoutParams((int)(130*d),(int)(130*d)));wide.setLayoutParams(new LinearLayout.LayoutParams((int)(250*d),(int)(130*d)));squareDp=130;wideDp=250;heightDp=130;return null;});
+  renderAt(System.currentTimeMillis());
+  SystemClock.sleep(400);checkSurface();
   capture("08-small",Color.rgb(240,235,220));
   require(main(()->{View event=square.findViewById(id("widget_event"));View count=square.findViewById(id("widget_countdown"));return count.getBottom()<=event.getHeight();}),"Small square clips countdown");
   require(main(()->{View event=wide.findViewById(id("widget_event"));View count=wide.findViewById(id("widget_countdown"));return count.getBottom()<=event.getHeight();}),"Small wide clips countdown");
