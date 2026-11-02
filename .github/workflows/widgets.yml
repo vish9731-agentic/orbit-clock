@@ -71,7 +71,9 @@ jobs:
             python -c "from pathlib import Path; s=Path('widget-evidence.txt').read_text(); print(s); assert 'WIDGET_RESULT_PASS' in s and 'WIDGET_FAILURE' not in s; assert 'FATAL EXCEPTION' not in Path('widget-crashes.txt').read_text()"
       - name: Internal visual feedback
         if: always()
-        run: python tools/widgets/contact_sheet.py
+        run: |
+          python -m pip install pillow
+          python tools/widgets/contact_sheet.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

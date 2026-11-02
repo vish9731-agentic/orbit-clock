@@ -8,7 +8,7 @@ import java.util.*; import java.util.concurrent.*; import org.json.*;
 /** Same-key native host and real scheduler tests. Never bundled in Orbit. */
 public class WidgetProbe extends Instrumentation {
  Context c; Activity activity; Object companion,storeCompanion; Class<?> storeClass,alarmClass;
- AppWidgetHost host; AppWidgetManager manager; AppWidgetHostView square,wide; int squareId,wideId;
+ AppWidgetHost host; AppWidgetManager manager; AppWidgetHostView square,wide,actualSquare,actualWide; boolean previewMode; int squareId,wideId;
  LinearLayout stage; File evidence; int checks;
  interface Check { boolean ok() throws Exception; }
  <T> T main(Callable<T> call)throws Exception {FutureTask<T> f=new FutureTask<>(call);runOnMainSync(f);return f.get();}
@@ -39,8 +39,16 @@ public class WidgetProbe extends Instrumentation {
  void renderAt(long now)throws Exception {
   Object s=snapshot(now);
   main(()->{Method v=companion.getClass().getMethod("views",Context.class,boolean.class,s.getClass(),long.class);
-   manager.updateAppWidget(squareId,(RemoteViews)v.invoke(companion,c,false,s,now));
-   manager.updateAppWidget(wideId,(RemoteViews)v.invoke(companion,c,true,s,now));return null;});
+   boolean preview=Math.abs(now-System.currentTimeMillis())>60000;
+   if(preview!=previewMode){
+    stage.removeAllViews();square=preview?new AppWidgetHostView(c):actualSquare;wide=preview?new AppWidgetHostView(c):actualWide;
+    if(preview){square.setAppWidget(squareId,manager.getAppWidgetInfo(squareId));wide.setAppWidget(wideId,manager.getAppWidgetInfo(wideId));}
+    float d=c.getResources().getDisplayMetrics().density;
+    stage.addView(square,new LinearLayout.LayoutParams((int)(160*d),(int)(160*d)));
+    stage.addView(wide,new LinearLayout.LayoutParams((int)(340*d),(int)(160*d)));previewMode=preview;
+   }
+   RemoteViews sv=(RemoteViews)v.invoke(companion,c,false,s,now),wv=(RemoteViews)v.invoke(companion,c,true,s,now);
+   if(preview){square.updateAppWidget(sv);wide.updateAppWidget(wv);}else{manager.updateAppWidget(squareId,sv);manager.updateAppWidget(wideId,wv);}return null;});
   waitFor(()->main(()->square.findViewById(id("widget_clock"))!=null),"Host did not inflate");SystemClock.sleep(300);
  }
  void refresh()throws Exception {main(()->{companion.getClass().getMethod("refresh",Context.class).invoke(companion,c);return null;});}
@@ -82,7 +90,7 @@ public class WidgetProbe extends Instrumentation {
   main(()->{stage=new LinearLayout(activity);stage.setOrientation(LinearLayout.VERTICAL);stage.setPadding(16,40,16,16);
    ((android.widget.FrameLayout)activity.findViewById(android.R.id.content)).addView(stage,new android.widget.FrameLayout.LayoutParams(-1,-1));
    manager=AppWidgetManager.getInstance(c);host=new AppWidgetHost(c,8765);host.startListening();
-   squareId=host.allocateAppWidgetId();wideId=host.allocateAppWidgetId();square=bind("AlarmWidget",squareId,160,160);wide=bind("WideAlarmWidget",wideId,340,160);return null;});
+   squareId=host.allocateAppWidgetId();wideId=host.allocateAppWidgetId();square=bind("AlarmWidget",squareId,160,160);wide=bind("WideAlarmWidget",wideId,340,160);actualSquare=square;actualWide=wide;return null;});
   refresh();renderAt(System.currentTimeMillis());visible(false);capture("01-clock-dark",Color.rgb(25,32,45));capture("02-clock-light",Color.rgb(230,225,210));
   pass("both real AppWidgetHost bindings, transparent idle clock only, stable empty right half");
   Calendar cal=Calendar.getInstance();cal.add(Calendar.MINUTE,10);
