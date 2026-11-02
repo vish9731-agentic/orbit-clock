@@ -70,8 +70,11 @@ class FocusActivity : AppCompatActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) { super.onWindowFocusChanged(hasFocus); if (!hasFocus) resetRotary() }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     private fun update() {
-        val s = FocusStore.read(this); val left = s.left(FocusStore.now(this, s))
-        if (s.status == "Running" && left == 0L && s.owner == FocusStore.device(this)) { FocusStore.finish(this, s.revision); return }
+        val saved = FocusStore.read(this)
+        val now = FocusStore.now(this, saved)
+        val left = saved.left(now)
+        if (saved.status == "Running" && left == 0L && saved.owner == FocusStore.device(this)) { FocusStore.finish(this, saved.revision); return }
+        val s = saved.complete(now)
         phase.text = "${s.phase} · ${s.status}"
         sessions.text = "${s.completed} focus sessions · ${s.completed % 4}/4 this cycle"
         val seconds = (left + 999) / 1000
