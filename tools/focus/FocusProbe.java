@@ -68,6 +68,16 @@ public class FocusProbe extends Instrumentation {
             require("Running".equals(state().getString("status")),"cancel end keeps session");
             // Wait for a real one-minute AlarmManager deadline with the activity stopped.
             ui(() -> activity.moveTaskToBack(true));
+            NotificationManager progress=c.getSystemService(NotificationManager.class);
+            boolean pausedFromNotification=false;
+            for(android.service.notification.StatusBarNotification n:progress.getActiveNotifications()) {
+                if(n.getId()==9201 && n.getNotification().actions!=null) {
+                    n.getNotification().actions[0].actionIntent.send(); SystemClock.sleep(400);
+                    pausedFromNotification="Paused".equals(state().getString("status")); break;
+                }
+            }
+            require(pausedFromNotification,"background notification pauses session");
+            act("start");
             long limit=SystemClock.uptimeMillis()+80000;
             while(!"Complete".equals(state().optString("status")) && SystemClock.uptimeMillis()<limit) SystemClock.sleep(1000);
             require("Complete".equals(state().getString("status")),"background AlarmManager completion");

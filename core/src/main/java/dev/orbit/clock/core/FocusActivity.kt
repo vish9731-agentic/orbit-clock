@@ -111,7 +111,7 @@ class FocusActivity : AppCompatActivity() {
             return EditText(this).apply { setText(value.toString()); inputType = android.text.InputType.TYPE_CLASS_NUMBER; contentDescription = "$label minutes"; body.addView(this) }
         }
         val focus = field("Focus", s.focus); val short = field("Short break", s.shortBreak); val long = field("Long break", s.longBreak)
-        val dialog = MaterialAlertDialogBuilder(this).setTitle("Focus durations").setView(body).setNegativeButton("Cancel", null).setPositiveButton("Save", null).create()
+        val dialog = MaterialAlertDialogBuilder(this).setTitle("Focus durations").setView(ScrollView(this).apply { addView(body) }).setNegativeButton("Cancel", null).setPositiveButton("Save", null).create()
         dialog.setOnShowListener { dialog.getButton(-1).setOnClickListener {
             val values = listOf(focus, short, long).map { it.text.toString().toIntOrNull() }
             if (values.any { it == null || it !in 1..180 }) { focus.error = "Use 1–180 minutes for each duration" }
