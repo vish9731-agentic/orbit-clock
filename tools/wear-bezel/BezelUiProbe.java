@@ -67,9 +67,14 @@ public final class BezelUiProbe extends Instrumentation {
         });
     }
     private void homeAfterAction() throws Exception {
-        android.content.pm.ResolveInfo home=target.getPackageManager().resolveActivity(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
-        require(home!=null,"System HOME component was not resolved");
-        String homeComponent=new android.content.ComponentName(home.activityInfo.packageName,home.activityInfo.name).flattenToShortString();
+        // Android package visibility intentionally hides HOME from Orbit's
+        // app-side queries. Resolve through the test shell, without adding a
+        // production queries/permission declaration just for verification.
+        String resolution=shell("cmd package resolve-activity --brief --user 0 -a android.intent.action.MAIN -c android.intent.category.HOME");
+        String resolved="";
+        for(String line:resolution.split("\\n")) if(line.trim().contains("/") && !line.trim().contains(" ")) resolved=line.trim();
+        require(!resolved.isEmpty(),"Test shell could not resolve HOME: "+resolution);
+        final String homeComponent=resolved;
         waitUntil(() -> {
             if(android.animation.ValueAnimator.areAnimatorsEnabled() && faceFrames.size()<2) {
                 boolean visible=ui(() -> {
