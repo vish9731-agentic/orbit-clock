@@ -28,7 +28,8 @@ class RingActivity : AppCompatActivity() {
     private lateinit var increase: MaterialButton
     private lateinit var progress: TextView
     private lateinit var indicator: LinearProgressIndicator
-    private var watchActions: AlarmSlideControl? = null
+    private var watchActions: WatchArcControl? = null
+    private var completingAction = false
     private var phoneTime: TextView? = null
     private var atmosphere: RingAtmosphereDrawable? = null
     private var clockRunning = false
@@ -55,6 +56,7 @@ class RingActivity : AppCompatActivity() {
     private val changes = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
             val a = Store(c).get(id)
+            if (completingAction) return
             if (a == null || !Scheduler.isActive(c, a, at)) finish()
             else if (::duration.isInitialized) {
                 selectedMinutes = RingControls.minutes(c, a, at, selectedMinutes); updateDuration()
@@ -89,6 +91,8 @@ class RingActivity : AppCompatActivity() {
             text = value; textSize = size; typeface = Typeface.create(Typeface.create("sans-serif", Typeface.NORMAL), 400, false); gravity = Gravity.CENTER; setTextColor(foreground); includeFontPadding = false
         }
         val watchWidth = resources.configuration.screenWidthDp
+        val watchHeight = resources.configuration.screenHeightDp
+        val watchRoot = if (watch) FrameLayout(this).apply { setBackgroundColor(0xff090f0d.toInt()); isFocusableInTouchMode = true } else null
         val sidePadding = if (watch) ((watchWidth - 180) / 2).coerceIn(0, 20) else 16
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
@@ -98,19 +102,21 @@ class RingActivity : AppCompatActivity() {
         val now = LocalTime.now()
         val time = now.format(DateTimeFormatter.ofPattern(if (android.text.format.DateFormat.is24HourFormat(this)) "HH:mm" else "h:mm"))
         if (watch) {
-            body.gravity = Gravity.CENTER
-            val headingWidth = (watchWidth * .64f).toInt()
-            body.addView(label(time, 32f).apply {
+            val timeWidth = (watchWidth * .76f).toInt()
+            val timeHeight = (watchHeight * .28f).toInt()
+            val timeTop = (watchHeight * .045f).toInt()
+            watchRoot!!.addView(label(time, 48f).apply {
                 typeface = Typeface.create(typeface, 350, false)
                 maxLines = 1; fontFeatureSettings = "tnum"
                 contentDescription = "Alarm time: $time"; phoneTime = this
-                setAutoSizeTextTypeUniformWithConfiguration(24, 32, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
-            }, LinearLayout.LayoutParams(dp(headingWidth), dp(32)))
-            body.addView(label(name, 13f).apply {
+                setAutoSizeTextTypeUniformWithConfiguration(30, 48, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            }, FrameLayout.LayoutParams(dp(timeWidth), dp(timeHeight), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(timeTop) })
+            watchRoot.addView(label(name, 18f).apply {
                 maxLines = 1; ellipsize = TextUtils.TruncateAt.END
                 contentDescription = "Alarm label: $name"
                 setTextColor(0xffa5bab3.toInt())
-            }, LinearLayout.LayoutParams(dp(headingWidth), dp(20)).apply { bottomMargin = dp(4) })
+                setAutoSizeTextTypeUniformWithConfiguration(12, 18, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            }, FrameLayout.LayoutParams(dp((watchWidth * .66f).toInt()), dp((watchHeight * .125f).toInt()), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp((watchHeight * .325f).toInt()) })
         } else {
             body.addView(Space(this), LinearLayout.LayoutParams(1, 0, 3.3f))
             body.addView(label(time, 144f).apply {
@@ -139,20 +145,21 @@ class RingActivity : AppCompatActivity() {
             decrease.textSize = 28f; increase.textSize = 28f
             decrease.cornerRadius = dp(28); increase.cornerRadius = dp(28)
         }
-        duration = label("", if (watch) 20f else 16f).apply {
+        duration = label("", if (watch) 12f else 16f).apply {
             typeface = Typeface.create(typeface, 500, false); accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
-            if (watch) { maxLines = 1; setAutoSizeTextTypeUniformWithConfiguration(14, 20, 1, android.util.TypedValue.COMPLEX_UNIT_SP) }
+            if (watch) { maxLines = 1; setAutoSizeTextTypeUniformWithConfiguration(10, 12, 1, android.util.TypedValue.COMPLEX_UNIT_SP) }
         }
         val size = dp(if (watch) 56 else 48)
         stepper.addView(decrease, LinearLayout.LayoutParams(size, size))
-        stepper.addView(duration, LinearLayout.LayoutParams(dp(if (watch) 68 else 96), size))
+        stepper.addView(duration, LinearLayout.LayoutParams(dp(if (watch) 38 else 96), size))
         stepper.addView(increase, LinearLayout.LayoutParams(size, size))
-        body.addView(stepper, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(if (watch) 6 else 16) })
+        if (watch) watchRoot!!.addView(stepper, FrameLayout.LayoutParams(dp(150), dp(56), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp((watchHeight * .45f).toInt()) })
+        else body.addView(stepper, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
         updateDuration()
         if (watch) {
-            val actions = AlarmSlideControl(this, { act(true) }, { act(false) }, compact = true)
+            val actions = WatchArcControl(this, { act(true) }, { act(false) })
             watchActions = actions
-            body.addView(actions, LinearLayout.LayoutParams(dp((watchWidth * .76f).toInt().coerceAtMost(210)), dp(42)).apply { gravity = Gravity.CENTER_HORIZONTAL })
+            watchRoot!!.addView(actions, 0, FrameLayout.LayoutParams(-1, -1))
         } else {
             body.addView(AlarmSlideControl(this,
                 { VisualHints.learn(this, "ring_controls"); act(true) },
@@ -174,7 +181,7 @@ class RingActivity : AppCompatActivity() {
             }
             addView(body, FrameLayout.LayoutParams(-1, -2))
         }
-        setContentView(scroller)
+        if (watch) setContentView(watchRoot) else setContentView(scroller)
         ViewCompat.setOnApplyWindowInsetsListener(scroller) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             v.setPadding(bars.left, bars.top, bars.right, bars.bottom); WindowInsetsCompat.CONSUMED
@@ -187,9 +194,10 @@ class RingActivity : AppCompatActivity() {
                 hide(WindowInsetsCompat.Type.statusBars())
             }
         }
-        OrbitMotion.bindTree(body)
+        OrbitMotion.bindTree(if (watch) watchRoot!! else body)
         if (state == null && !watch) { OrbitMotion.enter(body.getChildAt(1)); OrbitMotion.enter(body.getChildAt(2), 30) }
-        ViewCompat.requestApplyInsets(scroller); body.requestFocus()
+        ViewCompat.requestApplyInsets(if (watch) watchRoot!! else scroller)
+        if (watch) watchRoot!!.requestFocus() else body.requestFocus()
     }
     private fun updateDuration() {
         OrbitMotion.text(duration, "$selectedMinutes min")
@@ -205,8 +213,21 @@ class RingActivity : AppCompatActivity() {
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); recreate() }
     private fun act(snooze: Boolean) {
+        if (completingAction) return
+        completingAction = true
+        bezelHandler.removeCallbacks(resetBezelFeedback)
+        decrease.isEnabled = false; increase.isEnabled = false
+        // Commit now. Alarm silence and persistence never depend on animation.
         Scheduler.act(this, id, at, snooze, snoozeMinutesOverride = if (snooze) selectedMinutes else null)
-        finish()
+        if (watch && hasWindowFocus() && watchActions != null) {
+            val actions = watchActions!!
+            actions.complete(snooze) {
+                if (!isFinishing && !isDestroyed) {
+                    val point = actions.thumbCenter()
+                    WatchRingTransition.openHome(this, point.first, point.second)
+                }
+            }
+        } else finish()
     }
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
@@ -230,7 +251,7 @@ class RingActivity : AppCompatActivity() {
         super.onResume()
         // A restored task must not bring a previously snoozed occurrence back on screen.
         val alarm = Store(this).get(id)
-        if (alarm == null || !Scheduler.isActive(this, alarm, at)) { finish(); return }
+        if (!completingAction && (alarm == null || !Scheduler.isActive(this, alarm, at))) { finish(); return }
         // Use the actual local clock after every Snooze/new occurrence or resume.
         // Neither the saved alarm hour nor its original occurrence selects the scene.
         clockRunning = true; clockHandler.removeCallbacks(clockTick); clockTick.run()
@@ -239,6 +260,7 @@ class RingActivity : AppCompatActivity() {
         clockRunning = false
         clockHandler.removeCallbacks(clockTick)
         volumeKey = KeyEvent.KEYCODE_UNKNOWN
+        if (completingAction && !isFinishing) finish()
         super.onPause()
     }
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {

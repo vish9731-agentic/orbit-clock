@@ -5,6 +5,9 @@ on:
     paths:
       - 'core/src/main/java/dev/orbit/clock/core/RingActivity.kt'
       - 'core/src/main/java/dev/orbit/clock/core/AlarmSlideControl.kt'
+      - 'core/src/main/java/dev/orbit/clock/core/WatchArcControl.kt'
+      - 'core/src/main/java/dev/orbit/clock/core/WatchRingTransition.kt'
+      - 'wear/src/main/java/dev/orbit/clock/wear/MainActivity.kt'
       - 'core/src/main/java/dev/orbit/clock/core/RotaryGesture.java'
       - 'core/src/main/java/dev/orbit/clock/core/RingingService.kt'
       - 'core/src/main/java/dev/orbit/clock/core/Scheduler.kt'
@@ -16,6 +19,9 @@ on:
     paths:
       - 'core/src/main/java/dev/orbit/clock/core/RingActivity.kt'
       - 'core/src/main/java/dev/orbit/clock/core/AlarmSlideControl.kt'
+      - 'core/src/main/java/dev/orbit/clock/core/WatchArcControl.kt'
+      - 'core/src/main/java/dev/orbit/clock/core/WatchRingTransition.kt'
+      - 'wear/src/main/java/dev/orbit/clock/wear/MainActivity.kt'
       - 'core/src/main/java/dev/orbit/clock/core/RotaryGesture.java'
       - 'core/src/main/java/dev/orbit/clock/core/RingingService.kt'
       - 'core/src/main/java/dev/orbit/clock/core/Scheduler.kt'

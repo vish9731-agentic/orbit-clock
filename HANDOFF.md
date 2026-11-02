@@ -1,5 +1,11 @@
 # Orbit Clock handoff
 
+## Time-first watch arc and translucent completion — verification pending
+
+Time now receives the largest type and vertical region, followed by the label. Snooze duration is 10–12sp with unchanged 56dp plus/minus targets. A native vector lower semicircle follows the round screen; the pill follows its tangent while the alarm glyph remains upright. Anticlockwise Snooze / clockwise Dismiss retain three/six units, reversal, idle reset and selected duration. Phone controls and current phone glint implementation are preserved.
+
+On a completed watch action, Scheduler.act commits immediately and exactly once. The UI then settles the thumb at its destination, with a bounded fallback, and returns to Orbit's home screen through a 760ms translucent vector-light expansion. A single full-resolution snapshot of the old alarm scene stays at 1:1 pixel size and fades over the real home UI; the growing gradient is vector-drawn with cached objects, never a scaled screenshot/button. Reduced motion skips both effects. Focus loss/detach clean up springs, overlay and snapshot. No permission, alarm schema or signing change. Home here means Orbit home; the user was asked whether they meant watch face and no answer had arrived during implementation. Build and native interaction/transition verification are pending.
+
 ## Incoming-call-inspired glints and rubber-band slider — verified debug 90
 
 The user requested Google Phone incoming-call-style shimmer, horizontal thumb stretch instead of tumble, and proper inertia. Reference: [Google's horizontal incoming-call announcement](https://support.google.com/phoneapp/thread/351208139/a-new-material-3-expressive-experience-in-the-phone-by-google-app?hl=en-GB) and [Android native spring guidance](https://developer.android.com/develop/ui/views/animations/spring-animation). Google's exact proprietary shimmer timing is not publicly documented; this is an adaptation, not a frame-exact reproduction.

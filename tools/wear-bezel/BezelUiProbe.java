@@ -40,6 +40,34 @@ public final class BezelUiProbe extends Instrumentation {
     private long injectedDownTime;
     private String fixtureId = "";
     private long fixtureAt;
+    private final List<JSONArray> exitMotions = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<Bitmap> exitFrames = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private void observeExit(Activity activity) {
+        View overlay=find(activity.getWindow().getDecorView(),null,"watch_exit_reveal");
+        if(overlay==null) return;
+        try {
+            android.animation.ValueAnimator animation=(android.animation.ValueAnimator)field(overlay,"animator");
+            JSONArray samples=new JSONArray(); exitMotions.add(samples);
+            final boolean[] captured={false,false};
+            animation.addUpdateListener(frame -> {
+                try {
+                    float p=((Number)field(overlay,"revealProgress")).floatValue();
+                    float radius=((Number)field(overlay,"revealRadius")).floatValue();
+                    float alpha=((Number)field(overlay,"sceneAlpha")).floatValue();
+                    samples.put(new JSONArray().put(p).put(radius).put(alpha));
+                    if(exitFrames.size()<2 && ((!captured[0] && p>.22f) || (!captured[1] && p>.60f))) {
+                        if(p>.60f) captured[1]=true; else captured[0]=true;
+                        Bitmap image=Bitmap.createBitmap(overlay.getWidth(),overlay.getHeight(),Bitmap.Config.ARGB_8888);
+                        activity.getWindow().getDecorView().draw(new Canvas(image)); exitFrames.add(image);
+                    }
+                } catch(Exception failure) { throw new AssertionError(failure); }
+            });
+        } catch(Exception failure) { throw new AssertionError(failure); }
+    }
+    private void homeAfterAction() throws Exception {
+        waitUntil(() -> ui(() -> resumed!=null && resumed.getClass().getName().equals(MAIN) && resumed.hasWindowFocus()),4000,"Action did not return to Orbit home");
+        waitUntil(() -> ui(() -> find(resumed.getWindow().getDecorView(),null,"watch_exit_reveal")==null),3000,"Exit overlay did not release the home screen");
+    }
 
     private interface Task<T> { T call() throws Exception; }
     private interface Condition { boolean ready() throws Exception; }
@@ -241,7 +269,8 @@ public final class BezelUiProbe extends Instrumentation {
 
     private View sliderThumb(Activity a) { return ui(() -> (View) field(actions(a), "thumb")); }
     private float position(View thumb) { return ui(thumb::getTranslationX); }
-    private float travel(View rail, View thumb) { return ui(() -> (rail.getWidth()-thumb.getWidth())/2f-10*density); }
+    private float travel(View rail, View thumb) { return ui(() -> ((Number)field(rail,"radius")).floatValue()); }
+    private float arcOffset(float span,float fraction) { return span*(float)Math.sin(fraction*Math.PI/2); }
     private void settleAt(View thumb, float target) throws Exception {
         waitUntil(() -> Math.abs(position(thumb)-target)<density,1200,"Slider did not settle at its input target");
     }
@@ -266,16 +295,14 @@ public final class BezelUiProbe extends Instrumentation {
         e.setSource(InputDevice.SOURCE_TOUCHSCREEN); sendPointerSync(e); e.recycle();
     }
     private void partialSwipe(Activity a, boolean cancel) throws Exception {
-        View thumb=sliderThumb(a); View rail=actions(a);
-        float[] p=ui(() -> { int[] xy=new int[2]; thumb.getLocationOnScreen(xy); return new float[]{xy[0]+thumb.getWidth()/2f,xy[1]+thumb.getHeight()/2f,thumb.getTranslationX()}; });
-        float before=p[2], x=p[0], y=p[1];
-        pointer(MotionEvent.ACTION_DOWN,x,y);
-        require(Math.abs(position(thumb)-before)<3*density,"Catching a moving thumb caused a position jump");
-        SystemClock.sleep(45);
-        pointer(MotionEvent.ACTION_MOVE,x+travel(rail,thumb)*.25f,y);
-        require(Math.abs(position(thumb)-(before+travel(rail,thumb)*.25f))<2*density,"Touch drag did not follow the finger");
-        SystemClock.sleep(45);
-        pointer(cancel?MotionEvent.ACTION_CANCEL:MotionEvent.ACTION_UP,x+travel(rail,thumb)*.25f,y);
+        View thumb=sliderThumb(a), rail=actions(a);
+        float[] p=ui(() -> { int[] xy=new int[2]; thumb.getLocationOnScreen(xy); return new float[]{xy[0]+thumb.getWidth()/2f,xy[1]+thumb.getHeight()/2f,thumb.getTranslationX(),((Number)field(rail,"fraction")).floatValue()}; });
+        float x=p[0],y=p[1]; pointer(MotionEvent.ACTION_DOWN,x,y);
+        require(Math.abs(position(thumb)-p[2])<5*density,"Catching the moving arc thumb jumped");
+        SystemClock.sleep(45); float span=travel(rail,thumb);
+        pointer(MotionEvent.ACTION_MOVE,x+span*.20f,y);
+        require(Math.abs(position(thumb)-arcOffset(span,Math.min(1f,p[3]+.20f)))<3*density,"Arc touch fallback did not follow input");
+        SystemClock.sleep(45); pointer(cancel?MotionEvent.ACTION_CANCEL:MotionEvent.ACTION_UP,x+span*.20f,y);
     }
     private View findClock(View root) {
         String desc=root.getContentDescription()==null?"":root.getContentDescription().toString();
@@ -287,24 +314,30 @@ public final class BezelUiProbe extends Instrumentation {
     }
     private void layout(Activity a) {
         View rail=actions(a), thumb=sliderThumb(a);
-        require(rail.getClass().getName().equals("dev.orbit.clock.core.AlarmSlideControl"),"Watch is not using the actual phone slider class");
-        require(ui(() -> thumb.getWidth()>thumb.getHeight() && thumb.getHeight()>=31.5f*density && thumb.getWidth()<=49*density),"Compact bezel thumb proportions are incorrect");
-        control(a,"Snooze"); control(a,"Dismiss");
+        require(rail.getClass().getName().equals("dev.orbit.clock.core.WatchArcControl"),"Semicircular watch control missing");
         for(String desc:new String[]{"Decrease snooze by 5 minutes","Increase snooze by 5 minutes"}) {
             View v=control(a,desc);
-            require(ui(() -> v.getWidth()>=55.5f*density && v.getHeight()>=55.5f*density),"Duration button shrank");
+            require(ui(() -> v.getWidth()>=55.5f*density && v.getHeight()>=55.5f*density),"Duration tap target shrank");
         }
-        View clock=ui(() -> findClock(a.getWindow().getDecorView()));
-        require(clock!=null,"Separate time row missing");
-        View label=control(a,"Alarm label: Watch alarm");
+        TextView clock=(TextView)ui(() -> findClock(a.getWindow().getDecorView()));
+        TextView label=(TextView)control(a,"Alarm label: Watch alarm");
+        TextView minutes=(TextView)ui(() -> findDuration(a.getWindow().getDecorView()));
+        require(clock!=null && minutes!=null,"Clock or duration missing");
+        require(ui(() -> clock.getTextSize()>label.getTextSize()*1.6f && label.getTextSize()>minutes.getTextSize()*1.2f),"Time/label/duration visual hierarchy is incorrect");
         require(ui(() -> {
-            int[] c=new int[2], l=new int[2], r=new int[2];
-            clock.getLocationOnScreen(c); label.getLocationOnScreen(l); rail.getLocationOnScreen(r);
-            return c[1]+clock.getHeight()<=l[1] && l[1]+label.getHeight()<=r[1]
-                && rail.getHeight()<=45*density && rail.getWidth()/thumb.getWidth()>=3f;
-        }),"Time, label or compact rail proportions overlap");
-        Rect r=new Rect();
-        require(ui(() -> rail.getGlobalVisibleRect(r) && r.width()==rail.getWidth() && r.height()==rail.getHeight()),"Watch slider is clipped");
+            int[] c=new int[2],l=new int[2],m=new int[2]; clock.getLocationOnScreen(c); label.getLocationOnScreen(l); minutes.getLocationOnScreen(m);
+            return c[1]+clock.getHeight()<=l[1]+density && l[1]+label.getHeight()<=m[1]+density;
+        }),"Time, label and adjustment row overlap");
+        require(ui(() -> thumb.getTranslationY()<=density),"Arc thumb left the lower semicircle");
+        control(a,"Snooze"); control(a,"Dismiss");
+    }
+    private View findDuration(View root) {
+        String desc=root.getContentDescription()==null?"":root.getContentDescription().toString();
+        if(desc.startsWith("Snooze duration: ")) return root;
+        if(root instanceof ViewGroup) for(int i=0;i<((ViewGroup)root).getChildCount();i++) {
+            View found=findDuration(((ViewGroup)root).getChildAt(i)); if(found!=null) return found;
+        }
+        return null;
     }
     private void exercise() throws Exception {
         require(target.getPackageManager().hasSystemFeature("android.hardware.type.watch"),"Wear OS required");
@@ -314,16 +347,17 @@ public final class BezelUiProbe extends Instrumentation {
         click(control(a,"Increase snooze by 5 minutes")); selected(a,15);
         a=recreate(a); selected(a,15); layout(a);
         require(record("slider-snooze").getInt("snoozeMinutes")==10,"Duration changed saved default");
-        pass("Actual phone slider scaled for round watch; larger duration controls and recreation preserve selection");
+        pass("Time dominates label and compact duration; 56dp adjustment targets, semicircular rail and recreated selection fit watch");
         displayScreenshot("display-idle"); screenshot("01-idle");
         View rail=actions(a), thumb=sliderThumb(a);
         float span=travel(rail,thumb);
         rotate(a,1);
-        motionSamples(thumb,0,-span/3f,"left-motion");
+        motionSamples(thumb,0,arcOffset(span,-1f/3f),"left-motion");
         require(record("slider-snooze").getLong("snoozeUntil")<System.currentTimeMillis(),"A partial bezel turn fired an action");
+        require(ui(() -> sliderThumb(resumed).getTranslationY() < -2*density),"Thumb did not follow the curved rail");
         screenshot("02-left-partial");
         float from=position(thumb); rotate(a,-1);
-        motionSamples(thumb,from,span/6f,"reverse-motion");
+        motionSamples(thumb,from,arcOffset(span,1f/6f),"reverse-motion");
         screenshot("03-reversal");
         pass("Bezel detents produce continuous intermediate positions and interruptible directional reversal");
         SystemClock.sleep(2200); settleAt(thumb,0);
@@ -340,14 +374,16 @@ public final class BezelUiProbe extends Instrumentation {
         waitUntil(() -> record("slider-snooze").getLong("snoozeUntil")>=earliest,3000,"Anticlockwise snooze failed");
         JSONObject changed=record("slider-snooze");
         require(changed.getLong("snoozeUntil")<=after+15*60000L+1000 && changed.getInt("snoozeMinutes")==10,"Selected snooze duration not preserved");
-        pass("Anticlockwise three-unit threshold snoozes for selected duration without changing default");
+        homeAfterAction();
+        pass("Anticlockwise threshold commits selected snooze, then translucent expansion returns to Orbit home");
         a=delivered("slider-dismiss"); rail=actions(a); thumb=sliderThumb(a); span=travel(rail,thumb);
-        rotate(a,-3); settleAt(thumb,span*.5f); screenshot("04-right-partial");
+        rotate(a,-3); settleAt(thumb,arcOffset(span,.5f)); screenshot("04-right-partial");
         require(record("slider-dismiss").getBoolean("enabled"),"Dismiss fired early");
         rotate(a,-2); require(record("slider-dismiss").getBoolean("enabled"),"Dismiss fired before six units");
         rotate(a,-1);
         waitUntil(() -> !record("slider-dismiss").getBoolean("enabled"),3000,"Clockwise six-unit dismiss failed");
-        pass("Clockwise moves right and retains exact six-unit dismissal threshold");
+        homeAfterAction();
+        pass("Clockwise follows arc, retains six-unit dismissal and transitions home");
         a=delivered("slider-limits");
         click(control(a,"Decrease snooze by 5 minutes")); selected(a,5);
         require(!ui(control(a,"Decrease snooze by 5 minutes")::isEnabled),"Minimum control enabled");
@@ -359,15 +395,28 @@ public final class BezelUiProbe extends Instrumentation {
         displayScreenshot("display-large-type"); screenshot("06-large-type-60");
         click(control(a,"Dismiss"));
         waitUntil(() -> !record("slider-limits").getBoolean("enabled"),3000,"Touch Stop failed");
-        pass("Duration limits and 130 percent text fit watch; native Stop touch fallback works");
+        homeAfterAction();
+        pass("Duration limits and 130 percent text fit watch; native Stop fallback transitions home");
         shell("settings put system font_scale 1.0"); SystemClock.sleep(600);
         a=delivered("slider-touch-snooze"); click(control(a,"Increase snooze by 5 minutes")); selected(a,15);
         shell("settings put global animator_duration_scale 0");
         waitUntil(() -> !android.animation.ValueAnimator.areAnimatorsEnabled(),3000,"Reduced motion not applied");
-        rotate(a,.5f); settleAt(sliderThumb(a),-travel(actions(a),sliderThumb(a))/6f);
+        rotate(a,.5f); settleAt(sliderThumb(a),arcOffset(travel(actions(a),sliderThumb(a)),-1f/6f));
         click(control(a,"Snooze"));
         require(record("slider-touch-snooze").getLong("snoozeUntil")>System.currentTimeMillis()+14*60000L,"Touch Snooze failed");
-        pass("Native Snooze touch fallback and reduced-motion bezel feedback retain selected duration");
+        homeAfterAction();
+        require(ui(() -> find(resumed.getWindow().getDecorView(),null,"watch_exit_reveal")==null),"Reduced motion left a reveal overlay");
+        require(exitMotions.size()>=2,"Native completion transitions were not observed");
+        for(int i=0;i<exitMotions.size();i++) {
+            JSONArray samples=exitMotions.get(i); save("exit-motion-"+i+".json",samples.toString());
+            require(samples.length()>=3,"Transition did not produce intermediate frames");
+            float firstRadius=(float)samples.getJSONArray(0).getDouble(1);
+            float lastRadius=(float)samples.getJSONArray(samples.length()-1).getDouble(1);
+            float lastAlpha=(float)samples.getJSONArray(samples.length()-1).getDouble(2);
+            require(lastRadius>firstRadius+50*density && lastAlpha<.05f,"Expansion/transparency did not progress to home");
+        }
+        for(int i=0;i<exitFrames.size();i++) try(FileOutputStream stream=new FileOutputStream(new File(out,"07-exit-"+i+".png"))) { exitFrames.get(i).compress(Bitmap.CompressFormat.PNG,100,stream); exitFrames.get(i).recycle(); }
+        pass("Native Snooze fallback, expanding/fading transition frames, overlay cleanup and reduced-motion immediate home return");
     }
     @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); start(); }
     @Override public void onStart() {
@@ -378,6 +427,7 @@ public final class BezelUiProbe extends Instrumentation {
             public void onActivityCreated(Activity a,Bundle s) { }
             public void onActivityStarted(Activity a) { }
             public void onActivityResumed(Activity a) { resumed=a; }
+            public void onActivityPostResumed(Activity a) { if(a.getClass().getName().equals(MAIN)) observeExit(a); }
             public void onActivityPaused(Activity a) { }
             public void onActivityStopped(Activity a) { }
             public void onActivitySaveInstanceState(Activity a,Bundle s) { }
