@@ -84,9 +84,10 @@ public class FocusProbe extends Instrumentation {
             activity=startActivitySync(new Intent().setClassName(c,"dev.orbit.clock.core.FocusActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             SystemClock.sleep(1200); waitForIdleSync();
             boolean watch=c.getPackageManager().hasSystemFeature("android.hardware.type.watch");
-            tap("Durations");
-            // Dialog fields are tested by setting configuration through the production store after dismissing.
-            tapDialog("Cancel"); SystemClock.sleep(300);
+            // The watch IME can launch a separate startup Activity after opening an
+            // editor. Configure the short timer through the production store so
+            // bezel scenarios begin on the Focus screen, without that unrelated IME.
+            if(!watch) { tap("Durations"); tapDialog("Cancel"); SystemClock.sleep(300); }
             ui(() -> { try { call("configure",new Class[]{Context.class,int.class,int.class,int.class},c,1,1,2); }catch(Exception e){throw new RuntimeException(e);} });
             if(watch) {
                 long focusLimit=SystemClock.uptimeMillis()+6000;
@@ -95,7 +96,12 @@ public class FocusProbe extends Instrumentation {
                     ui(() -> focused[0]=activity.hasWindowFocus());
                     if(!focused[0]) SystemClock.sleep(100);
                 }
-                require(focused[0],"Focus screen owns rotary input after dialog closes");
+                String active="Orbit";
+                if(!focused[0]) {
+                    android.view.accessibility.AccessibilityNodeInfo node=getUiAutomation().getRootInActiveWindow();
+                    active=node==null?"unknown":String.valueOf(node.getPackageName());
+                }
+                require(focused[0],"Focus screen owns rotary input; active window="+active);
                 rotate(-1); require("Ready".equals(state().getString("status")),"single detent cannot start");
                 rotate(-2); require("Running".equals(state().getString("status")),"clockwise starts");
                 rotate(6); require("Running".equals(state().getString("status")),"continued rotation latched");
