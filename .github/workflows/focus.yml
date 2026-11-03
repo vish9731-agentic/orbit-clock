@@ -76,6 +76,7 @@ jobs:
             adb logcat -d -b crash > focus-results/crashes.txt
             adb logcat -d -s AndroidRuntime > focus-results/runtime.txt
             cat focus-results/crashes.txt
+            adb shell run-as dev.orbit.clock cat files/focus-results/failure.png > focus-results/failure.png || true
             grep -q 'PASS .* Focus runtime checks' focus-results/checks.txt
             adb shell run-as dev.orbit.clock cat files/focus-results/focus.png > focus-results/focus.png
             adb logcat -d -b crash > focus-results/crashes.txt

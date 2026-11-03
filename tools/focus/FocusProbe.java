@@ -42,6 +42,29 @@ public class FocusProbe extends Instrumentation {
         }
         if(!clicked[0]) throw new AssertionError("Missing " + text);
     }
+    private void tapDialog(String text) {
+        long limit=SystemClock.uptimeMillis()+6000;
+        boolean[] clicked={false};
+        while(!clicked[0] && SystemClock.uptimeMillis()<limit) {
+            ui(() -> {
+                for(View root:android.view.inspector.WindowInspector.getGlobalWindowViews()) {
+                    if(root==activity.getWindow().getDecorView() || !root.isShown()) continue;
+                    View v=find(root,text);
+                    if(v!=null) { v.performClick(); clicked[0]=true; break; }
+                }
+            });
+            if(!clicked[0]) SystemClock.sleep(100);
+        }
+        if(!clicked[0]) throw new AssertionError("Missing dialog action " + text);
+    }
+    private void capture(String name) throws Exception {
+        java.io.File dir=new java.io.File(c.getFilesDir(),"focus-results"); dir.mkdirs();
+        android.graphics.Bitmap bitmap=getUiAutomation().takeScreenshot();
+        if(bitmap!=null) {
+            java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(dir,name+".png"));
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out); out.close();
+        }
+    }
     private void act(String action) throws Exception { ui(() -> { try { call("act",new Class[]{Context.class,String.class},c,action); }catch(Exception e){throw new RuntimeException(e);} }); }
     private void rotate(float delta) {
         ui(() -> {
@@ -63,7 +86,7 @@ public class FocusProbe extends Instrumentation {
             boolean watch=c.getPackageManager().hasSystemFeature("android.hardware.type.watch");
             tap("Durations");
             // Dialog fields are tested by setting configuration through the production store after dismissing.
-            sendKeyDownUpSync(KeyEvent.KEYCODE_BACK); SystemClock.sleep(300);
+            tapDialog("Cancel"); SystemClock.sleep(300);
             ui(() -> { try { call("configure",new Class[]{Context.class,int.class,int.class,int.class},c,1,1,2); }catch(Exception e){throw new RuntimeException(e);} });
             if(watch) {
                 long focusLimit=SystemClock.uptimeMillis()+6000;
@@ -83,7 +106,7 @@ public class FocusProbe extends Instrumentation {
             SystemClock.sleep(1500); tap("Pause");
             long left=state().getLong("remaining"); require(left>0 && left<60000,"pause preserves remaining time");
             tap("Resume"); require("Running".equals(state().getString("status")),"touch resumes");
-            tap("End session"); sendKeyDownUpSync(KeyEvent.KEYCODE_BACK); SystemClock.sleep(300);
+            tap("End session"); tapDialog("Keep session"); SystemClock.sleep(300);
             require("Running".equals(state().getString("status")),"cancel end keeps session");
             // Wait for a real one-minute AlarmManager deadline with the activity stopped.
             ui(() -> activity.moveTaskToBack(true));
@@ -137,7 +160,10 @@ public class FocusProbe extends Instrumentation {
             act("end"); require("Ready".equals(state().getString("status")),"end resets cycle");
             require(state().getInt("focus")==1,"end keeps durations");
             result.putString("stream","PASS " + checks + " Focus runtime checks"); finish(Activity.RESULT_OK,result);
-        } catch(Throwable failure) { result.putString("stream",android.util.Log.getStackTraceString(failure)); finish(Activity.RESULT_CANCELED,result); }
+        } catch(Throwable failure) {
+            try { capture("failure"); } catch(Throwable ignored) { }
+            result.putString("stream",android.util.Log.getStackTraceString(failure)); finish(Activity.RESULT_CANCELED,result);
+        }
     }
     @Override public void onCreate(Bundle b) { super.onCreate(b); start(); }
 }
