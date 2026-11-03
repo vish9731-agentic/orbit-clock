@@ -11,7 +11,7 @@ import java.lang.reflect.*;
 /** Same-key, separate test APK. No exported production test hooks. */
 public class FocusProbe extends Instrumentation {
     private Context c;
-    private Activity activity;
+    private volatile Activity activity;
     private Class<?> store;
     private Object singleton;
     private int checks;
@@ -75,15 +75,56 @@ public class FocusProbe extends Instrumentation {
             activity.dispatchGenericMotionEvent(e); e.recycle();
         });
     }
+    private String shell(String command) throws Exception {
+        try(ParcelFileDescriptor fd=getUiAutomation().executeShellCommand(command);
+            java.io.FileInputStream in=new java.io.FileInputStream(fd.getFileDescriptor());
+            java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream()) {
+            byte[] buffer=new byte[4096]; int count;
+            while((count=in.read(buffer))!=-1) out.write(buffer,0,count);
+            return out.toString("UTF-8");
+        }
+    }
+    private void awaitReady(boolean watch) throws Exception {
+        // Match the established Wear probe: boot_completed precedes the Wear OS
+        // TrayInitializationOverlay closing, sometimes by more than a minute.
+        long until=SystemClock.uptimeMillis()+(watch?90000:15000);
+        long stableSince=SystemClock.uptimeMillis(); String previous="";
+        while(SystemClock.uptimeMillis()<until) {
+            String[] current={""};
+            ui(() -> {
+                if(activity!=null && !activity.isFinishing() && activity.hasWindowFocus() && activity.getWindow().getDecorView().isLaidOut())
+                    current[0]=System.identityHashCode(activity)+":"+activity.getResources().getConfiguration();
+            });
+            if(current[0].isEmpty() || !current[0].equals(previous)) { previous=current[0]; stableSince=SystemClock.uptimeMillis(); }
+            else if(SystemClock.uptimeMillis()-stableSince>=2000) break;
+            SystemClock.sleep(100);
+        }
+        require(!previous.isEmpty() && SystemClock.uptimeMillis()-stableSince>=2000,"OS startup released a stable Focus screen");
+        shell("appops set dev.orbit.clock SCHEDULE_EXACT_ALARM allow");
+        long permissionLimit=SystemClock.uptimeMillis()+10000;
+        AlarmManager alarms=c.getSystemService(AlarmManager.class);
+        while(!alarms.canScheduleExactAlarms() && SystemClock.uptimeMillis()<permissionLimit) SystemClock.sleep(100);
+        require(alarms.canScheduleExactAlarms(),"exact alarm permission fixture is ready");
+    }
     @Override public void onStart() {
         Bundle result=new Bundle();
         try {
             c=getTargetContext(); store=c.getClassLoader().loadClass("dev.orbit.clock.core.FocusStore"); singleton=store.getField("INSTANCE").get(null);
+            ((Application)c.getApplicationContext()).registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
+                public void onActivityCreated(Activity a,Bundle b) { }
+                public void onActivityStarted(Activity a) { }
+                public void onActivityResumed(Activity a) { if(a.getClass().getName().equals("dev.orbit.clock.core.FocusActivity")) activity=a; }
+                public void onActivityPaused(Activity a) { }
+                public void onActivityStopped(Activity a) { }
+                public void onActivitySaveInstanceState(Activity a,Bundle b) { }
+                public void onActivityDestroyed(Activity a) { }
+            });
             c.getSharedPreferences("focus",0).edit().clear().commit();
             Bundle launch=new Bundle(); launch.putString("stream","Launching Focus activity\n"); sendStatus(0,launch);
             activity=startActivitySync(new Intent().setClassName(c,"dev.orbit.clock.core.FocusActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             SystemClock.sleep(1200); waitForIdleSync();
             boolean watch=c.getPackageManager().hasSystemFeature("android.hardware.type.watch");
+            awaitReady(watch);
             // The watch IME can launch a separate startup Activity after opening an
             // editor. Configure the short timer through the production store so
             // bezel scenarios begin on the Focus screen, without that unrelated IME.
