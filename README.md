@@ -139,3 +139,5 @@ The wide widget uses a one-row layout, verified in debug **0.1.111** at normal a
 ## Pomodoro Focus mode
 
 Timer → Focus mode offers phone/watch focus and break cycles, configurable durations, Pause/Resume and confirmed End. The focused watch screen supports clockwise Start/Resume and anticlockwise Pause. See [Focus behavior, timing and sync limits](docs/FOCUS.md). Existing widgets are unchanged. See HANDOFF.md for verification status before treating a build as ready.
+
+Verified Pomodoro test APKs: [preview 0.1.119](https://github.com/vish9731-agentic/orbit-clock/releases/tag/pomodoro-preview-0.1.119). Phone and Wear OS Focus runtime checks pass; PR #4 awaits approval for integration into main.
