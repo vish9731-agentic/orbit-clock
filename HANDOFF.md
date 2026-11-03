@@ -1,5 +1,16 @@
 # Orbit Clock handoff
 
+## Pomodoro Focus mode — verified preview delivery
+
+Source `ea52d0e` passed [cloud build 119](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41564872610): both APKs, all 12 unit tests, 82 core policy checks, 39 widget timing checks and both lints. [Focused runtime verification](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41564872807) passed all **17 phone / 23 watch checks** with real one-minute background alarms, notification Pause, explicit phase transitions, recreation persistence, state convergence, rotary thresholds/latch and End reset. Native phone/watch renders were inspected. Both APKs are version `0.1.119` / code `120` and retain the existing development certificate.
+
+The probe waits for Wear's post-boot TrayInitializationOverlay to release a stable screen, confirms exact-alarm access after installation, follows configuration-driven Activity recreation, closes test dialogs explicitly and uses a fresh task to test reopening. These are test-harness changes; Focus production behavior remains as documented in [docs/FOCUS.md](docs/FOCUS.md). Latest main-branch widget changes are preserved; Pomodoro widget integration remains deferred.
+
+PR #4 is ready for review. Default-branch merge awaits explicit user approval. Separate preview delivery is published at [Pomodoro preview 0.1.119](https://github.com/vish9731-agentic/orbit-clock/releases/tag/pomodoro-preview-0.1.119), using immutable, checksum-verified APKs from the successful Actions build. [Preview publication 41566241231](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41566241231) succeeded; both public assets are uploaded and their server-side SHA-256 digests match the locally signature-verified build artifacts. Direct connector-backed CLI asset upload failed authentication on uploads.github.com, so the dedicated publisher uses the Actions release token. Do not claim a main-branch merge or a new debug-latest publication.
+
+The separate broad ringing workflow [41564872605](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41564872605) lost both emulator connections (ADB exit 255; port 5554 refused); it did not establish broad ringing verification. No ringing UI source was changed for Focus. Physical watch feel/direction and paired-device transport still need device acceptance.
+
+
 ## Glance-first widget UX — verification pending
 
 User says transparency remains poor and the UI needs more thought for real use. The 4×1/2×2 sizes and dynamic windows are retained. New glance_widget_* layouts prioritize readable whole minutes, with the exact alarm time/label secondary. Busy second-by-second digits are replaced by a shared non-wakeup minute boundary while a reminder is active. WidgetBackdrop is now a feathered readability scrim with transparent top/bottom/right edges, not a clipped opaque capsule. A recognizable switch replaces the ambiguous On text; disabling shows Alarm off + visible Undo for10 seconds. Undo restores the prior snooze deadline only if the current revision/writer still matches, and expired/stale actions cannot overwrite newer edits. A Dark clock text setting lets users choose contrast for their wallpaper; white remains the default. All active layouts use new IDs so existing hosts reinflate.

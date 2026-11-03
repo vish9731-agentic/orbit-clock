@@ -16,12 +16,14 @@ object Sync {
         }
     }
     fun refresh(context: Context) {
+        FocusStore.push(context)
         Store(context).all().forEach { push(context, it) }
         Wearable.getDataClient(context).dataItems.addOnSuccessListener { items ->
             try { items.forEach { accept(context, it) } } finally { items.release() }
         }
     }
     fun accept(context: Context, item: DataItem) {
+        if (FocusStore.accept(context, item)) return
         if (item.uri.path?.startsWith("/orbit/alarms/") != true) return
         val raw = DataMapItem.fromDataItem(item).dataMap.getString("record") ?: return
         runCatching { Store(context).merge(Store.decode(JSONObject(raw))) }
