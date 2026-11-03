@@ -66,6 +66,13 @@ public class FocusProbe extends Instrumentation {
             sendKeyDownUpSync(KeyEvent.KEYCODE_BACK); SystemClock.sleep(300);
             ui(() -> { try { call("configure",new Class[]{Context.class,int.class,int.class,int.class},c,1,1,2); }catch(Exception e){throw new RuntimeException(e);} });
             if(watch) {
+                long focusLimit=SystemClock.uptimeMillis()+6000;
+                boolean[] focused={false};
+                while(!focused[0] && SystemClock.uptimeMillis()<focusLimit) {
+                    ui(() -> focused[0]=activity.hasWindowFocus());
+                    if(!focused[0]) SystemClock.sleep(100);
+                }
+                require(focused[0],"Focus screen owns rotary input after dialog closes");
                 rotate(-1); require("Ready".equals(state().getString("status")),"single detent cannot start");
                 rotate(-2); require("Running".equals(state().getString("status")),"clockwise starts");
                 rotate(6); require("Running".equals(state().getString("status")),"continued rotation latched");
@@ -107,7 +114,9 @@ public class FocusProbe extends Instrumentation {
             require(state().getInt("completed")==1,"completion counts once");
             NotificationManager nm=c.getSystemService(NotificationManager.class);
             require(nm.getActiveNotifications().length>0,"completion notification delivered");
-            activity=startActivitySync(new Intent().setClassName(c,"dev.orbit.clock.core.FocusActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            // NEW_TASK alone reuses the background task and startActivitySync then waits
+            // forever for a new Activity. Clear that task to verify durable restoration.
+            activity=startActivitySync(new Intent().setClassName(c,"dev.orbit.clock.core.FocusActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
             SystemClock.sleep(800); tap("Start break");
             require("Break".equals(state().getString("phase")),"manual break transition");
             tap("Pause"); long paused=state().getLong("remaining");
