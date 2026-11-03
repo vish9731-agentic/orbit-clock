@@ -2,41 +2,42 @@ package dev.orbit.clock.phone
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.LinearGradient
-import android.graphics.Paint
-import android.graphics.Shader
 
-/** One full-viewport alpha field, behind all native widget content. */
+/** An edge-feathered readability scrim; no opaque card or clipped capsule perimeter. */
 object WidgetBackdrop {
+    private fun smooth(value: Float): Float {
+        val t = value.coerceIn(0f, 1f)
+        return t * t * (3f - 2f * t)
+    }
     fun render(c: Context, wide: Boolean, widthDp: Int, heightDp: Int, bedtime: Boolean): Bitmap {
         val density = c.resources.displayMetrics.density
         val width = (widthDp * density).toInt().coerceIn(64, 1600)
         val height = (heightDp * density).toInt().coerceIn(64, 900)
         val tone = c.getColor(if (bedtime) R.color.widget_bedtime_tone else R.color.widget_alarm_tone)
-        // A deep wallpaper-accent tone keeps white type readable even on bright wallpaper.
         val red = (Color.red(tone) * .62f).toInt()
         val green = (Color.green(tone) * .62f).toInt()
         val blue = (Color.blue(tone) * .62f).toInt()
-        val start = if (wide) { if (widthDp < 264) .255f else .26f } else 0f
-        val colors = IntArray(257) { index ->
-            val t = ((index / 256f - start) / (1f - start)).coerceIn(0f, 1f)
-            val remaining = 1f - t
-            // The fade continues to the outer edge, with no early opaque plateau.
-            val transmission = if (wide) remaining * remaining * remaining
-                else remaining * remaining * remaining * remaining * remaining
-            val alpha = (255f * (1f - transmission)).toInt()
-            // Identical RGB at every stop, including transparent ones: no grey/black fringe.
-            Color.argb(alpha, red, green, blue)
+        val start = if (wide) { if (widthDp < 264) .15f else .23f } else 0f
+        val feather = minOf(10f * density, height * .18f)
+        val radius = minOf(24f * density, (height - 1) / 2f)
+        val horizontal = FloatArray(width) { x ->
+            val t = ((x.toFloat() / (width - 1) - start) / (1f - start)).coerceIn(0f, 1f)
+            val r = 1f - t
+            val transmission = if (wide) r*r*r*r else r*r*r*r*r
+            1f - transmission
         }
-        val positions = FloatArray(colors.size) { it / 256f }
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG).apply {
-            shader = LinearGradient(0f, 0f, width.toFloat(), 0f, colors, positions, Shader.TileMode.CLAMP)
+        val pixels = IntArray(width * height)
+        for (y in 0 until height) {
+            val dy = maxOf(radius - y, y - (height - 1 - radius), 0f)
+            for (x in 0 until width) {
+                val dx = maxOf(radius - x, x - (width - 1 - radius), 0f)
+                val distance = if (dx > 0f && dy > 0f) radius - kotlin.math.sqrt(dx * dx + dy * dy)
+                    else minOf(x.toFloat(), (width - 1 - x).toFloat(), y.toFloat(), (height - 1 - y).toFloat())
+                val alpha = (212f * horizontal[x] * smooth(distance / feather)).toInt()
+                pixels[y * width + x] = Color.argb(alpha, red, green, blue)
+            }
         }
-        return Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
-            val radius = minOf(24f * density, height / 2f)
-            Canvas(bitmap).drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), radius, radius, paint)
-        }
+        return Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
     }
 }

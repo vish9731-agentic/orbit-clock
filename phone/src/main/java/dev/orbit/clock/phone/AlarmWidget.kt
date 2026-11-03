@@ -18,6 +18,7 @@ import dev.orbit.clock.core.RingingService
 import dev.orbit.clock.core.Scheduler
 import dev.orbit.clock.core.Store
 import java.time.*
+import org.json.JSONObject
 
 /** Both sizes use the same saved schedules; no polling service or per-minute wakeups. */
 open class AlarmWidget : AppWidgetProvider() {
@@ -30,11 +31,26 @@ open class AlarmWidget : AppWidgetProvider() {
                 // Re-read before changing. Repeated/stale taps cannot overwrite alarm edits.
                 if (alarm.enabled != enabled) {
                     val updated = Store(context).save(alarm.copy(enabled = enabled, snoozeUntil = 0, skipThrough = 0))
+                    if (!enabled) context.getSharedPreferences("widget_feedback", Context.MODE_PRIVATE).edit()
+                        .putString("previous", Store.encode(alarm).toString()).putString("id", alarm.id)
+                        .putLong("revision", updated.revision).putString("writer", updated.writer).putLong("until", System.currentTimeMillis() + 10_000).commit()
                     RingingService.reconcile(context, updated)
                 }
             }
         }
-        if (intent.action in setOf(TOGGLE, REFRESH, Store.CHANGED, Intent.ACTION_TIME_CHANGED,
+        if (intent.action == UNDO) {
+            val feedback = context.getSharedPreferences("widget_feedback", Context.MODE_PRIVATE)
+            val id = intent.getStringExtra("id")
+            val current = id?.let { Store(context).get(it) }
+            val previous = feedback.getString("previous", null)?.let { runCatching { Store.decode(JSONObject(it)) }.getOrNull() }
+            if (current != null && previous != null && current.id == feedback.getString("id", null) &&
+                previous.id == current.id && !current.deleted && !current.enabled &&
+                current.revision == feedback.getLong("revision", 0) && current.writer == feedback.getString("writer", null) && System.currentTimeMillis() < feedback.getLong("until", 0)) {
+                Store(context).save(current.copy(enabled = previous.enabled, snoozeUntil = previous.snoozeUntil, skipThrough = previous.skipThrough))
+            }
+            if (id != null && id == feedback.getString("id", null)) feedback.edit().clear().commit()
+        }
+        if (intent.action in setOf(TOGGLE, UNDO, REFRESH, Store.CHANGED, Intent.ACTION_TIME_CHANGED,
                 Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED,
                 AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED)) refresh(context)
     }
@@ -47,6 +63,7 @@ open class AlarmWidget : AppWidgetProvider() {
         const val EDIT = "dev.orbit.clock.widget.EDIT"
         const val ADD = "dev.orbit.clock.widget.ADD"
         const val BEDTIME = "dev.orbit.clock.widget.BEDTIME"
+        private const val UNDO = "dev.orbit.clock.widget.UNDO"
         private const val TOGGLE = "dev.orbit.clock.widget.TOGGLE"
         private const val REFRESH = "dev.orbit.clock.widget.REFRESH"
         private fun boundary(c: Context) = PendingIntent.getBroadcast(c, 0,
@@ -61,6 +78,9 @@ open class AlarmWidget : AppWidgetProvider() {
             Intent(c, AlarmWidget::class.java).setAction(TOGGLE)
                 .setData(Uri.parse("orbit://widget/toggle/${Uri.encode(a.id)}/${!a.enabled}"))
                 .putExtra("id", a.id).putExtra("enabled", !a.enabled),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        private fun undo(c: Context, id: String) = PendingIntent.getBroadcast(c, 0,
+            Intent(c, AlarmWidget::class.java).setAction(UNDO).setData(Uri.parse("orbit://widget/undo/${Uri.encode(id)}")).putExtra("id", id),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         private fun time(c: Context, at: Long): String = DateFormat.getTimeFormat(c).format(java.util.Date(at))
 
@@ -92,8 +112,12 @@ open class AlarmWidget : AppWidgetProvider() {
                     }
                 }.filter { it + WidgetTiming.BEDTIME_GRACE > now }.sorted()
             val bed = beds.firstOrNull() ?: 0L
-            val kind = WidgetTiming.kind(now, next?.second ?: 0, ringing != null, bed, aw, bw)
-            val chosen = ringing ?: next?.first
+            val ordinary = WidgetTiming.kind(now, next?.second ?: 0, ringing != null, bed, aw, bw)
+            val feedback = c.getSharedPreferences("widget_feedback", Context.MODE_PRIVATE)
+            val until = feedback.getLong("until", 0)
+            val off = all.firstOrNull { it.id == feedback.getString("id", null) && !it.enabled && it.revision == feedback.getLong("revision", 0) && it.writer == feedback.getString("writer", null) }
+            val kind = if (ordinary != "ringing" && off != null && now < until) "off" else ordinary
+            val chosen = if (kind == "off") off else ringing ?: next?.first
             val boundaries = mutableListOf<Long>()
             next?.second?.let { boundaries += if (it - now > aw) it - aw else it }
             beds.forEach { b -> boundaries += when { b - now > bw -> b - bw; b > now -> b; else -> b + WidgetTiming.BEDTIME_GRACE } }
@@ -101,6 +125,11 @@ open class AlarmWidget : AppWidgetProvider() {
             val waiting = all.any { it.enabled && state.getLong("${it.id}.scheduled", 0) in (now - 60_000)..now && state.getLong("${it.id}.scheduled", 0) > 0 }
             if (waiting) boundaries += now + 5_000
             val at = when (kind) { "ringing" -> state.getLong("${ringing?.id}.active", 0); "alarm" -> next?.second ?: 0; "bedtime", "bednow" -> bed; else -> 0 }
+            if ((kind == "alarm" || kind == "bedtime") && at > now) {
+                val minutes = ((at - now + 59_999) / 60_000).coerceAtLeast(1)
+                boundaries += at - (minutes - 1) * 60_000
+            }
+            if (kind == "off") boundaries += until
             return Snapshot(kind, chosen, at, boundaries.filter { it > now }.minOrNull() ?: 0)
         }
 
@@ -108,13 +137,15 @@ open class AlarmWidget : AppWidgetProvider() {
             return viewsAtSize(c, wide, s, now, if (wide) 340 else 160, if (wide) 80 else 160)
         }
         fun viewsAtSize(c: Context, wide: Boolean, s: Snapshot, now: Long, widthDp: Int, heightDp: Int): RemoteViews {
-            val layout = if (!wide) R.layout.dynamic_widget_square else if (widthDp < 280) R.layout.dynamic_widget_strip_small else R.layout.dynamic_widget_strip
+            val layout = if (!wide) R.layout.glance_widget_square else if (widthDp < 280) R.layout.glance_widget_strip_small else R.layout.glance_widget_strip
             val v = RemoteViews(c.packageName, layout)
             val event = s.kind != "clock"
-            val alarm = s.kind == "alarm" || s.kind == "ringing"
+            val alarm = s.kind == "alarm" || s.kind == "ringing" || s.kind == "off"
             val snoozed = alarm && s.alarm?.snoozeUntil?.let { it > now } == true
             val open = launch(c, Intent.ACTION_MAIN)
             v.setOnClickPendingIntent(R.id.widget_clock, open)
+            val darkClock = c.getSharedPreferences("widget", Context.MODE_PRIVATE).getBoolean("darkClockText", false)
+            v.setTextColor(R.id.widget_clock, if (darkClock) android.graphics.Color.rgb(20, 28, 24) else android.graphics.Color.WHITE)
             v.setViewVisibility(R.id.widget_clock, if (wide || !event) View.VISIBLE else View.GONE)
             v.setViewVisibility(R.id.widget_event, if (event) View.VISIBLE else if (wide) View.INVISIBLE else View.GONE)
             v.setViewVisibility(R.id.widget_backdrop, if (event) View.VISIBLE else View.GONE)
@@ -124,29 +155,44 @@ open class AlarmWidget : AppWidgetProvider() {
                 (widthDp - 16).coerceAtLeast(100), (heightDp - 16).coerceAtLeast(if (wide) 48 else 100), !alarm))
             v.setImageViewResource(R.id.widget_icon, when { !alarm -> R.drawable.widget_moon; snoozed -> R.drawable.widget_snooze; else -> R.drawable.widget_alarm })
             val title = when (s.kind) {
+                "off" -> "Alarm off"
                 "ringing" -> "Alarm ringing"
                 "alarm" -> if (snoozed) "Snoozed" else if (wide) s.alarm?.label?.ifBlank { "Alarm" } ?: "Alarm" else "Alarm"
                 "bedtime" -> "Bedtime"
                 "bednow" -> "It’s bedtime"
                 else -> ""
             }
-            val eventTime = if (s.at > 0) time(c, s.at) else ""
-            val summary = if (!wide) { if (alarm) eventTime else title }
-                else if (alarm) "$eventTime · $title" else if (s.kind == "bedtime") "$title · $eventTime" else title
-            v.setTextViewText(R.id.widget_title, summary)
-            v.setTextViewText(R.id.widget_event_time, eventTime)
+            val eventTime = if (s.at > 0) time(c, s.at) else s.alarm?.let {
+                time(c, LocalDate.now().atTime(it.hour, it.minute).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli())
+            } ?: ""
+            val minutes = ((s.at - now + 59_999) / 60_000).coerceAtLeast(1)
+            val primary = when (s.kind) {
+                "alarm", "bedtime" -> if (wide) "In $minutes min" else "$minutes min"
+                "ringing" -> "Ringing"
+                "bednow" -> "Time for bed"
+                "off" -> "Alarm off"
+                else -> ""
+            }
+            val secondary = when (s.kind) {
+                "bedtime" -> if (wide) "Bedtime · $eventTime" else "Until bedtime"
+                "bednow" -> "Bedtime"
+                "off" -> s.alarm?.label?.ifBlank { "Alarm" } ?: "Alarm"
+                else -> if (wide) "$eventTime · $title" else if (snoozed) "Snoozed · $eventTime" else eventTime
+            }
+            v.setTextViewText(R.id.widget_title, secondary)
+            v.setTextViewText(R.id.widget_countdown, primary)
             v.setViewVisibility(R.id.widget_event_time, View.GONE)
-            val countdown = s.kind == "alarm" || s.kind == "bedtime"
-            v.setViewVisibility(R.id.widget_countdown, if (countdown) View.VISIBLE else View.GONE)
-            v.setChronometerCountDown(R.id.widget_countdown, true)
-            v.setChronometer(R.id.widget_countdown, SystemClock.elapsedRealtime() + (s.at - now).coerceAtLeast(0), "In %s", countdown)
-            v.setContentDescription(R.id.widget_event, "$title${if (s.at > 0) " at ${time(c, s.at)}" else ""}. Tap to ${if (alarm) "edit alarm" else "open bedtime"}.")
+            v.setViewVisibility(R.id.widget_countdown, View.VISIBLE)
+            v.setContentDescription(R.id.widget_event, "$title${if (s.at > 0) " at $eventTime" else ""}. $primary. Tap to ${if (alarm) "edit alarm" else "open bedtime"}.")
             v.setOnClickPendingIntent(R.id.widget_event, if (alarm) launch(c, EDIT, s.alarm?.id) else launch(c, BEDTIME))
             v.setViewVisibility(R.id.widget_toggle, if (alarm && s.alarm != null) View.VISIBLE else View.INVISIBLE)
             s.alarm?.let { a ->
-                v.setTextViewText(R.id.widget_toggle, if (a.enabled) "On" else "Off")
-                v.setContentDescription(R.id.widget_toggle, "${a.label}: ${if (a.enabled) "on, turn off" else "off, turn on"}")
-                v.setOnClickPendingIntent(R.id.widget_toggle, toggle(c, a))
+                v.setTextViewText(R.id.widget_toggle, if (s.kind == "off") "Undo" else "")
+                val padding = if (s.kind == "off") 0 else (8 * c.resources.displayMetrics.density).toInt()
+                v.setViewPadding(R.id.widget_toggle, padding, padding, padding, padding)
+                v.setTextViewCompoundDrawablesRelative(R.id.widget_toggle, if (s.kind == "off") 0 else R.drawable.widget_switch_on, 0, 0, 0)
+                v.setContentDescription(R.id.widget_toggle, if (s.kind == "off") "Undo turning off ${a.label}" else "${a.label}: on, turn off")
+                v.setOnClickPendingIntent(R.id.widget_toggle, if (s.kind == "off") undo(c, a.id) else toggle(c, a))
             }
             return v
         }

@@ -55,8 +55,12 @@ class WidgetSettingsActivity : AppCompatActivity() {
             text = "Bedtime reminders"; isChecked = prefs.getBoolean("bedtimeEnabled", true)
             setOnCheckedChangeListener { _, checked -> prefs.edit().putBoolean("bedtimeEnabled", checked).apply(); AlarmWidget.refresh(this@WidgetSettingsActivity) }
         }, LinearLayout.LayoutParams(-1, dp(64)))
+        body.addView(MaterialSwitch(this).apply {
+            text = "Dark clock text"; isChecked = prefs.getBoolean("darkClockText", false)
+            setOnCheckedChangeListener { _, checked -> prefs.edit().putBoolean("darkClockText", checked).apply(); AlarmWidget.refresh(this@WidgetSettingsActivity) }
+        }, LinearLayout.LayoutParams(-1, dp(64)))
         body.addView(TextView(this).apply {
-            text = "Bedtime follows your Wake up alarm and sleep goal in Orbit Clock. “It’s bedtime” stays for 15 minutes. Nearby alarms and snoozes take priority. These settings apply to all Orbit widgets.\n\nAndroid may delay visual changes while the phone is asleep. Transparent clock text is white with a shadow; choose a wallpaper with enough contrast."
+            text = "Bedtime follows your Wake up alarm and sleep goal in Orbit Clock. “It’s bedtime” stays for 15 minutes. Nearby alarms and snoozes take priority. These settings apply to all Orbit widgets.\n\nAndroid may delay visual changes while the phone is asleep. Use dark clock text on light wallpaper, or light text on dark wallpaper. The reminder uses a soft shade for readability. Turning an alarm off offers Undo for 10 seconds."
             textSize = 14f; setPadding(0, dp(16), 0, dp(16))
         })
         fun action(title: String, action: String) {
