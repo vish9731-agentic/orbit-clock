@@ -1,13 +1,14 @@
 # Verification status
 
-## Pomodoro Focus mode — build passes; runtime verification blocked
+## Pomodoro Focus mode — preview verified
 
-Final production source `b639b3e` (subsequent changes are documentation) passed local JDK17 / SDK35 `:core:testDebugUnitTest :phone:assembleDebug :wear:assembleDebug :phone:lintDebug :wear:lintDebug`. All 12 tests passed (seven alarm, five Focus). Both debug APK signatures match the existing development certificate `d3c6b53474417ca21c9e094ffa4a1eefd021af614f6267a2c882b993397e4f4a`. The final same-key FocusProbe APK compiles. Earlier cloud policy checks passed all 82 core and 39 widget checks.
+Source `ea52d0e`: [Actions build 119](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41564872610) passed both APKs, all 12 unit tests, 82 core checks, 39 widget checks and both lints. [Runtime run 41564872807](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41564872807) passed **17 Android15 phone / 23 Wear OS API33 checks**. These include actual one-minute background AlarmManager completion, notification controls, pause/resume, phase transitions, recreation, stale/replayed state handling, bezel direction/threshold/latch and confirmed-End cancellation/reset. Native renders were reviewed internally.
 
-Partial native evidence: the Wear diagnostic run exercised deliberate clockwise Start/Resume, anticlockwise Pause, latch protection, touch Pause/Resume, remainder preservation and End cancellation successfully. Its background-notification Pause assertion failed; the test now waits for asynchronous delivery. The phone probe encountered a transient missing Resume label; local controls now update immediately and the test waits for rendered labels. Those final runtime changes have not passed a rerun. GitHub rejected run [41511960503](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41511960503) before either job started because recent account payments failed or the Actions spending limit needs increasing. This workspace has no `/dev/kvm`, so the local build is not an emulator substitute.
+The matching APK pair is version `0.1.119`, version code `120`. Both signatures match development certificate `d3c6b53474417ca21c9e094ffa4a1eefd021af614f6267a2c882b993397e4f4a`. Phone SHA-256: `29ced339aa2e64470450dcd9322f34c8ec3a89b38fa6be838c6339e48b2817cc`. Watch SHA-256: `19857e3b2e087d94a1b54805431deca7f531813b630c806f6a84e96e98cb7388`.
 
-Implementation is in [draft PR #4](https://github.com/vish9731-agentic/orbit-clock/pull/4). No main-branch merge, updated published APKs, successful final runtime checks or physical/paired-device acceptance are claimed. Existing widgets remain unchanged. Resolve GitHub Actions billing, rerun the dedicated Focus workflow, fix any remaining failures, inspect native renders and complete the normal build/publication workflow before delivery. See [Focus architecture and limits](../docs/FOCUS.md).
+[PR #4](https://github.com/vish9731-agentic/orbit-clock/pull/4) awaits explicit approval for default-branch integration. A separate preview publisher attaches exactly these verified build artifacts to `pomodoro-preview-0.1.119`; publication availability must be checked from its workflow and assets before providing links. This is not a debug-latest update or a main-branch merge. Widget integration remains deferred.
 
+The separate existing ringing workflow 41564872605 failed when both emulators disappeared (ADB exit255 / port5554 refused); broad ringing validation is not claimed. Physical watch direction/feel, real paired-device synchronization and hardware reliability remain acceptance checks. See [Focus behavior and limits](../docs/FOCUS.md).
 
 ## Apple-referenced pill stretch and expanding semicircular shimmer — verified debug 98
 
