@@ -27,7 +27,7 @@ object FocusHandoff {
     private fun prefs(c: Context) = c.getSharedPreferences("focus_handoff", 0)
     fun isWatch(c: Context) = c.packageManager.hasSystemFeature(PackageManager.FEATURE_WATCH)
     private fun boot(c: Context) = Settings.Global.getInt(c.contentResolver, Settings.Global.BOOT_COUNT, -1)
-    private fun matches(a: FocusSession, b: FocusSession) = a.id == b.id && a.revision == b.revision && a.writer == b.writer
+    private fun matches(a: FocusSession, b: FocusSession) = a == b
     private fun status(c: Context, code: String, text: String) {
         prefs(c).edit().putString("status", text).putString("code", code).apply()
         c.sendBroadcast(Intent(CHANGED).setPackage(c.packageName))
@@ -135,7 +135,7 @@ object FocusHandoff {
                     val actual = FocusStore.decode(j.getString("record"))
                     if (!j.optBoolean("accepted") || !matches(p.session, actual)) {
                         FocusStore.merge(c, FocusStore.encode(actual))
-                        finish(p, "changed", "Watch has a newer session. Check the synced timer, then retry.")
+                        finish(p, "changed", "Watch did not accept this session. Check both apps, then retry.")
                         return@runCatching
                     }
                     p.opening = true

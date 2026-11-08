@@ -15,6 +15,7 @@ public class FocusProbe extends Instrumentation {
     private Class<?> store;
     private Object singleton;
     private int checks;
+    private boolean recoveredLauncher;
     private Object call(String method, Class<?>[] types, Object... args) throws Exception {
         return store.getMethod(method, types).invoke(singleton, args);
     }
@@ -84,17 +85,40 @@ public class FocusProbe extends Instrumentation {
             return out.toString("UTF-8");
         }
     }
+    private void recoverKnownLauncherAnr() throws Exception {
+        android.view.accessibility.AccessibilityNodeInfo root=getUiAutomation().getRootInActiveWindow();
+        if(root==null) return;
+        boolean known=false;
+        for(android.view.accessibility.AccessibilityNodeInfo node:root.findAccessibilityNodeInfosByText("Pixel Launcher"))
+            if(String.valueOf(node.getText()).replace("’", "'").equalsIgnoreCase("Pixel Launcher isn't responding")) known=true;
+        if(!known) return;
+        if(recoveredLauncher) throw new AssertionError("Pixel Launcher repeatedly failed during emulator startup");
+        boolean closed=false;
+        for(android.view.accessibility.AccessibilityNodeInfo node:root.findAccessibilityNodeInfosByText("Close app")) {
+            if(!String.valueOf(node.getText()).equalsIgnoreCase("Close app")) continue;
+            android.view.accessibility.AccessibilityNodeInfo action=node;
+            for(int i=0;i<4 && action!=null && !action.isClickable();i++) action=action.getParent();
+            if(action!=null && action.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)) { closed=true; break; }
+        }
+        if(!closed) throw new AssertionError("Identified Pixel Launcher ANR has no usable Close app action");
+        shell("am force-stop com.google.android.apps.nexuslauncher"); recoveredLauncher=true;
+        Bundle note=new Bundle(); note.putString("stream","SETUP recovered the unused Pixel Launcher ANR once\n"); sendStatus(0,note);
+    }
     private void awaitReady(boolean watch) throws Exception {
         // Match the established Wear probe: boot_completed precedes the Wear OS
         // TrayInitializationOverlay closing, sometimes by more than a minute.
         long until=SystemClock.uptimeMillis()+(watch?90000:45000);
         long stableSince=SystemClock.uptimeMillis(); String previous="";
+        long nextLauncherCheck=0;
         while(SystemClock.uptimeMillis()<until) {
             String[] current={""};
             ui(() -> {
                 if(activity!=null && !activity.isFinishing() && activity.hasWindowFocus() && activity.getWindow().getDecorView().isLaidOut())
                     current[0]=System.identityHashCode(activity)+":"+activity.getResources().getConfiguration();
             });
+            if(!watch && current[0].isEmpty() && SystemClock.uptimeMillis()>=nextLauncherCheck) {
+                recoverKnownLauncherAnr(); nextLauncherCheck=SystemClock.uptimeMillis()+1000;
+            }
             if(current[0].isEmpty() || !current[0].equals(previous)) { previous=current[0]; stableSince=SystemClock.uptimeMillis(); }
             else if(SystemClock.uptimeMillis()-stableSince>=2000) break;
             SystemClock.sleep(100);
@@ -121,6 +145,8 @@ public class FocusProbe extends Instrumentation {
     }
     private void syncChecks(boolean watch) throws Exception {
         String peer=watch?"phone":"watch";
+        int advertised=c.getResources().getIdentifier("android_wear_capabilities","array",c.getPackageName());
+        require(advertised!=0 && java.util.Arrays.asList(c.getResources().getStringArray(advertised)).contains("orbit_focus_sync_v1"),"both device variants advertise the shared Focus sync capability");
         JSONObject remote=state().put("id",java.util.UUID.randomUUID().toString()).put("phase","Focus").put("status","Paused")
             .put("remaining",45000).put("deadline",0).put("completed",0).put("revision",state().getLong("revision")+100)
             .put("writer",java.util.UUID.randomUUID().toString());
@@ -134,6 +160,7 @@ public class FocusProbe extends Instrumentation {
             if(!rendered[0]) SystemClock.sleep(100);
         }
         require(rendered[0],watch?"incoming phone timer renders and keeps the watch display awake":"incoming watch timer renders without keeping the phone awake");
+        capture("sync-from-peer");
         JSONObject stale=acceptSync(remote);
         require(!stale.getBoolean("matched") && new JSONObject(stale.getString("record")).getLong("revision")==running.getLong("revision"),"stale peer snapshot returns newer local state instead of resetting the timer");
         JSONObject paused=new JSONObject(running.toString()).put("status","Paused").put("deadline",0).put("remaining",40000).put("revision",running.getLong("revision")+1);
@@ -144,6 +171,7 @@ public class FocusProbe extends Instrumentation {
         }
         require(released[0],"pause releases the display hold");
         require(acceptSync(paused).getBoolean("matched") && state().getLong("revision")==paused.getLong("revision"),"replayed matching snapshot is idempotent");
+        require(!acceptSync(new JSONObject(paused.toString()).put("remaining",12345)).getBoolean("matched"),"same revision with different timer data cannot falsely confirm synchronization");
         act("end");
     }
     private void handoffChecks(boolean watch) throws Exception {
@@ -179,6 +207,7 @@ public class FocusProbe extends Instrumentation {
             if(!shown[0]) SystemClock.sleep(100);
         }
         require(shown[0],"prepared remote URI opens the native Focus screen from watch home");
+        capture("handoff");
         require(state().getLong("deadline")==remote.getLong("deadline") && state().getString("owner").equals(remote.getString("owner")),"watch launch preserves the phone deadline and completion owner");
         require(handoff("consumeLaunch",new Class[]{Context.class,android.net.Uri.class},c,uri)==null,"remote launch URI is one use");
         require(handoff("consumeLaunch",new Class[]{Context.class,android.net.Uri.class},c,android.net.Uri.parse("dev.orbit.clock.focus://handoff/open?nonce=unprepared"))==null,"unprepared external URI cannot authorize a watch launch");

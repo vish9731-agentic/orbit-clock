@@ -80,6 +80,8 @@ jobs:
             adb shell run-as dev.orbit.clock cat files/focus-results/failure.png > focus-results/failure.png || true
             grep -q 'PASS .* Focus runtime checks' focus-results/checks.txt
             adb shell run-as dev.orbit.clock cat files/focus-results/focus.png > focus-results/focus.png
+            adb shell run-as dev.orbit.clock cat files/focus-results/sync-from-peer.png > focus-results/sync-from-peer.png
+            if [ "${{ matrix.module }}" = "wear" ]; then adb shell run-as dev.orbit.clock cat files/focus-results/handoff.png > focus-results/handoff.png; fi
             adb logcat -d -b crash > focus-results/crashes.txt
             test ! -s focus-results/crashes.txt
       - uses: actions/upload-artifact@v4

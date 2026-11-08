@@ -17,7 +17,7 @@ object FocusSync {
     private data class Delivery(val c: Context, val node: String, val nonce: String, val state: FocusSession)
     private val waiting = mutableMapOf<String, Delivery>() // main looper only
     private fun prefs(c: Context) = c.getSharedPreferences("focus_sync", 0)
-    private fun same(a: FocusSession, b: FocusSession) = a.id == b.id && a.revision == b.revision && a.writer == b.writer
+    private fun same(a: FocusSession, b: FocusSession) = a == b
     private fun peer(c: Context) = if (FocusHandoff.isWatch(c)) "phone" else "watch"
     private fun status(c: Context, code: String, message: String) {
         prefs(c).edit().putString("code", code).putString("message", message).apply()
@@ -66,7 +66,7 @@ object FocusSync {
         FocusStore.merge(c, raw)
         val actual = FocusStore.read(c)
         if (same(incoming, actual)) status(c, "received", "Received session from ${peer(c)}.")
-        else status(c, "current", "Kept the newer local session; sending it to ${peer(c)}.")
+        else status(c, "current", "Kept the current local session; sending it to ${peer(c)}.")
         JSONObject().put("nonce", nonce).put("record", FocusStore.encode(actual))
             .put("matched", same(incoming, actual)).toString().toByteArray(Charsets.UTF_8)
     }.getOrNull()
@@ -86,7 +86,7 @@ object FocusSync {
                 if (same(actual, FocusStore.read(c))) {
                     if (same(actual, d.state)) status(c, "synced", "Synced with ${peer(c)}.")
                     else status(c, "updated", "Updated to the newer session from ${peer(c)}.")
-                }
+                } else status(c, "conflict", "Session data differs. End and restart the session to reconcile both devices.")
             }
         }
         return true

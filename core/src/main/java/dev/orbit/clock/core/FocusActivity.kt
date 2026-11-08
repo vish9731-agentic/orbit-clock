@@ -123,7 +123,7 @@ class FocusActivity : AppCompatActivity() {
         end.visibility = if (s.status == "Ready") View.GONE else View.VISIBLE
         syncStatus.text = FocusSync.statusText(this)
         syncStatus.visibility = if (syncStatus.text.isNotEmpty()) View.VISIBLE else View.GONE
-        retrySync.visibility = if (FocusSync.statusCode(this) in listOf("disconnected", "unconfirmed", "unavailable")) View.VISIBLE else View.GONE
+        retrySync.visibility = if (FocusSync.statusCode(this) in listOf("disconnected", "unconfirmed", "unavailable", "conflict")) View.VISIBLE else View.GONE
         watchStatus?.let {
             it.text = FocusHandoff.statusText(this)
             it.visibility = if (s.id.isNotEmpty() && it.text.isNotEmpty()) View.VISIBLE else View.GONE
