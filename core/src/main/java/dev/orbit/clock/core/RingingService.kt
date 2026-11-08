@@ -42,7 +42,19 @@ class RingingService : Service() {
         val at = intent?.getLongExtra("at", 0) ?: 0
         val a = id?.let { Store(this).get(it) }
         if (id == null || a == null || !Scheduler.isActive(this, a, at)) {
-            if (active.isEmpty()) stopSelf()
+            if (active.isEmpty()) {
+                // Disable may win after receiver delivery but before this start runs.
+                // Fulfil the foreground-service contract even for a cancelled start.
+                val cancelled = Notification.Builder(this, "ringing")
+                    .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+                    .setContentTitle("Alarm stopped").setSilent(true).setOnlyAlertOnce(true)
+                    .setCategory(Notification.CATEGORY_SERVICE)
+                if (Build.VERSION.SDK_INT >= 31)
+                    cancelled.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_DEFERRED)
+                startForeground(1, cancelled.build())
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf(startId)
+            }
             return START_NOT_STICKY
         }
         if (active[id] == at) return START_NOT_STICKY // Duplicate delivery cannot extend the ring timeout.
