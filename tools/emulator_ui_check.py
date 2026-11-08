@@ -517,7 +517,8 @@ try:
         find('Morning routine'); passed('Create labeled repeating alarm')
         switch = find(desc='Morning routine enabled')
         assert switch.attrib.get('checked') == 'true'
-        tap_xy(xy(switch)); assert find(desc='Morning routine enabled').attrib.get('checked') == 'false'
+        tap_xy(xy(switch)); find('Turn back on?'); click('Keep off')
+        assert find(desc='Morning routine enabled').attrib.get('checked') == 'false'
         click(desc='Morning routine enabled'); passed('Alarm switch updates enabled state')
         adb('shell', 'am', 'force-stop', PKG)
         adb('shell', 'am', 'start', '-W', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
