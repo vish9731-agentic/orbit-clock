@@ -1,5 +1,9 @@
 # Orbit Clock handoff
 
+## Alarm-list edit affordance cleanup — verification pending
+
+User requested removing the redundant Edit affordance because tapping an alarm already opens editing. The phone alarm time no longer attaches the pencil compound drawable or its padding/tint. Existing time/card taps, accessible edit descriptions, the enable switch and editor remain. Watch cards already had no phone-only pencil. Existing phone UI verification opens and cancels the saved alarm's editor from its card. Build/runtime verification pending. Preserve concurrent smart-resume, Focus and widget changes.
+
 ## Smart next-occurrence skip — source published, runtime verification pending
 
 Source f97c049715bc7dd7cea9af460e0569a43747a55a adds a disable-first Material resume sheet to shared phone/watch alarm-list toggles. Tuesday night on a weekday alarm skips Wednesday and offers Thursday, retaining Monday–Friday. Weekend/custom/weekly schedules preserve selected days; relevant daily/one-shot weekend alternatives are deduplicated. Cancel/Back/Keep off leave it disabled. Choosing a date immediately enables it with existing synced skipThrough=target−1; no new schema or re-enable worker. The clock search starts at a future cutoff so weekly pauses beyond eight days still schedule. Exact disabled-record/version checks reject edits/deletion, elapsed targets and changed-zone wall times. Pending choices restore across recreation; future skips show a resume date. Widget bedtime excludes skipped wake dates and restricts once-only wake reminders to their single regular target. Existing widget off/Undo behavior is preserved; the smart sheet currently applies to alarm-list switches.

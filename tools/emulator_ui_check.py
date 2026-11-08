@@ -525,6 +525,9 @@ try:
         find('Morning routine'); assert find(desc='Morning routine enabled').attrib.get('checked') == 'true'
         passed('Alarm survives process restart')
         screenshot('alarms-light')
+        click('Morning routine'); find('Edit alarm')
+        tap_xy(xy(scroll_find('Cancel'))); find('Morning routine')
+        passed('Alarm card opens its editor directly without a separate Edit control')
         click('Clock'); find('London'); passed('World clocks navigation')
         click(desc='Add city'); fill('Paris'); click('Europe · Paris')
         scroll_find('Paris'); passed('Search and add a world clock')
