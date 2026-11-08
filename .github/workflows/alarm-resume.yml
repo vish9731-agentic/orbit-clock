@@ -1,0 +1,91 @@
+name: Smart alarm resume suggestions
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'core/src/main/java/dev/orbit/clock/core/AlarmResume*'
+      - 'core/src/main/java/dev/orbit/clock/core/AlarmTiming.java'
+      - 'core/src/main/java/dev/orbit/clock/core/Store.kt'
+      - 'core/src/main/java/dev/orbit/clock/core/ClockActivity.kt'
+      - 'phone/src/main/java/dev/orbit/clock/phone/AlarmWidget.kt'
+      - 'phone/src/main/java/dev/orbit/clock/phone/MainActivity.kt'
+      - 'tools/alarm-resume/**'
+      - '.github/workflows/alarm-resume.yml'
+permissions:
+  contents: read
+jobs:
+  native:
+    if: ${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[ui:alarm-resume]') }}
+    name: Smart resume native interactions
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;34.0.0'
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build production app and independent verification APK
+        run: |
+          ./gradlew --no-daemon -Pkotlin.compiler.execution.strategy=in-process :phone:assembleDebug
+          bash tools/alarm-resume/build-probe.sh
+      - name: Prepare runner
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android/sdk/ndk
+          sudo chmod 666 /dev/kvm
+      - name: Verify suggestions, schedules and native UI at normal and large text
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 2048M
+          heap-size: 256M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 2048
+          disable-animations: false
+          emulator-boot-timeout: 360
+          script: |
+            adb shell settings put global device_provisioned 1
+            adb shell settings put secure user_setup_complete 1
+            adb shell pm disable-user --user 0 com.google.android.googlesdksetup || true
+            adb shell am force-stop com.google.android.apps.nexuslauncher
+            adb shell pm disable-user --user 0 com.google.android.settings.intelligence || true
+            adb shell cmd alarm set-timezone UTC
+            adb shell wm size 720x1600
+            adb shell wm density 280
+            adb shell settings put system haptic_feedback_enabled 0
+            adb shell settings put system font_scale 1.0
+            adb shell svc power stayon true
+            adb install phone/build/outputs/apk/debug/phone-debug.apk
+            adb shell pm grant dev.orbit.clock android.permission.POST_NOTIFICATIONS
+            adb shell appops set dev.orbit.clock SCHEDULE_EXACT_ALARM allow
+            adb shell appops set dev.orbit.clock USE_FULL_SCREEN_INTENT allow || true
+            adb install build/alarm-resume-probe/probe.apk
+            mkdir -p resume-feedback
+            adb logcat -c
+            adb shell am instrument -w -e scale 100 dev.orbit.clock.resumeprobe/dev.orbit.clock.resumeprobe.ResumeProbe > resume-feedback/evidence-100.txt
+            adb exec-out run-as dev.orbit.clock tar -C files -cf - resume-feedback > resume-feedback/frames-100.tar || true
+            adb exec-out screencap -p > resume-feedback/display-100.png || true
+            adb logcat -d -b crash > resume-feedback/crashes-100.txt
+            python -c "from pathlib import Path; s=Path('resume-feedback/evidence-100.txt').read_text(); print(s); assert 'ALARM_RESUME_RESULT_PASS' in s and 'ALARM_RESUME_FAILURE' not in s"
+            adb shell am force-stop dev.orbit.clock
+            adb shell settings put system font_scale 1.3
+            adb shell am instrument -w -e scale 130 -e checkRestart true dev.orbit.clock.resumeprobe/dev.orbit.clock.resumeprobe.ResumeProbe > resume-feedback/evidence-130.txt
+            adb exec-out run-as dev.orbit.clock tar -C files -cf - resume-feedback > resume-feedback/frames-130.tar || true
+            adb exec-out screencap -p > resume-feedback/display-130.png || true
+            adb logcat -d -b crash > resume-feedback/crashes-130.txt
+            python -c "from pathlib import Path; s=Path('resume-feedback/evidence-130.txt').read_text(); print(s); assert 'ALARM_RESUME_RESULT_PASS' in s and 'ALARM_RESUME_FAILURE' not in s"
+            python -c "from pathlib import Path; s='\n'.join(p.read_text() for p in Path('resume-feedback').glob('crashes-*.txt')); assert 'FATAL EXCEPTION' not in s and 'Fatal signal' not in s, s"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: alarm-resume-feedback
+          retention-days: 3
+          path: resume-feedback/
