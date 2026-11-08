@@ -152,7 +152,7 @@ public class ResumeProbe extends Instrumentation {
   File directory=new File(c.getFilesDir(),"resume-feedback");directory.mkdirs();try(FileOutputStream out=new FileOutputStream(new File(directory,name+"-"+scale+".png"))){bitmap.compress(Bitmap.CompressFormat.PNG,100,out);}bitmap.recycle();
  }
  void showPrompt(String id) throws Exception {
-  waitFor(()->main(()->find(activity.getWindow().getDecorView(),"alarm_toggle:"+id)!=null),8000,"Alarm toggle not rendered");
+  waitFor(()->main(()->{View current=find(activity.getWindow().getDecorView(),"alarm_toggle:"+id);return current instanceof CompoundButton && ((CompoundButton)current).isChecked();}),8000,"Latest enabled alarm toggle not rendered");
   View toggle=main(()->find(activity.getWindow().getDecorView(),"alarm_toggle:"+id));click(toggle);
   waitFor(()->main(()->dialogView("alarm_resume_option_0")!=null),7000,"Turn-back-on prompt absent");
   require(!row(id).getBoolean("enabled") && state().getLong(id+".scheduled",0)==0,"Prompt did not immediately turn alarm off");
