@@ -19,4 +19,9 @@ java -cp "$check_dir" CoreChecks
   "$project_dir/phone/src/main/java/dev/orbit/clock/phone/WidgetTiming.java" \
   "$project_dir/tools/WidgetChecks.java"
 java -cp "$check_dir" WidgetChecks
+"${compiler[@]}" -source 17 -target 17 -Xlint:-options -d "$check_dir" \
+  "$project_dir/core/src/main/java/dev/orbit/clock/core/AlarmTiming.java" \
+  "$project_dir/core/src/main/java/dev/orbit/clock/core/AlarmResumeTiming.java" \
+  "$project_dir/tools/ResumeChecks.java"
+java -cp "$check_dir" ResumeChecks
 
