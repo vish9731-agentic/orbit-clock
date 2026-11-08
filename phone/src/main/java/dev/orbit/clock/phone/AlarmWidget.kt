@@ -102,12 +102,15 @@ open class AlarmWidget : AppWidgetProvider() {
             val goal = c.getSharedPreferences("tools", Context.MODE_PRIVATE).getInt("sleepGoal", 8).coerceIn(4, 12)
             // Same Wake up + sleep-goal schedule as the app. Snoozes never shift bedtime.
             val wake = all.firstOrNull { it.label == "Wake up" && it.enabled }
+            val onceWake = if (wake != null && wake.days.isEmpty() && wake.snoozeUntil == 0L &&
+                    !Scheduler.isActive(c, wake, state.getLong("${wake.id}.active", 0)))
+                wake.next(Instant.ofEpochMilli(now), zone)?.toEpochMilli() ?: 0L else 0L
             val beds = if (wake == null || !prefs.getBoolean("bedtimeEnabled", true)) emptyList() else
                 (-1L..3L).mapNotNull { offset ->
                     val day = date.plusDays(offset)
                     if (wake.days.isNotEmpty() && day.dayOfWeek.value !in wake.days) null else {
                         val at = day.atTime(wake.hour, wake.minute).atZone(zone).toInstant().toEpochMilli()
-                        if (wake.days.isEmpty() && at <= now) null else
+                        if (at <= wake.skipThrough || (wake.days.isEmpty() && at != onceWake)) null else
                             day.atTime(wake.hour, wake.minute).minusHours(goal.toLong()).atZone(zone).toInstant().toEpochMilli()
                     }
                 }.filter { it + WidgetTiming.BEDTIME_GRACE > now }.sorted()
