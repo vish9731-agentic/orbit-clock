@@ -4,6 +4,8 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
+import java.time.Instant
+import java.time.ZoneId
 
 class Store(private val context: Context) {
     private val prefs = context.getSharedPreferences("alarms", Context.MODE_PRIVATE)
@@ -23,6 +25,38 @@ class Store(private val context: Context) {
         Sync.push(context, updated)
         context.sendBroadcast(android.content.Intent(CHANGED).setPackage(context.packageName))
         updated
+    }
+    /** Disable first: dismissing the suggestion must never silently re-enable an alarm. */
+    fun disableWithSuggestions(id: String, now: Instant = Instant.now(),
+            zone: ZoneId = ZoneId.systemDefault(), expectedRevision: Long? = null,
+            expectedWriter: String? = null): AlarmResume.Plan? = synchronized(lock) {
+        val source = get(id) ?: return@synchronized null
+        if (!source.enabled || source.deleted || source.timer) return@synchronized null
+        if ((expectedRevision != null && source.revision != expectedRevision) ||
+                (expectedWriter != null && source.writer != expectedWriter)) return@synchronized null
+        val occurrence = context.getSharedPreferences("scheduled_occurrences", Context.MODE_PRIVATE)
+            .getLong("$id.active", 0)
+        val active = occurrence.takeIf { Scheduler.isActive(context, source, it) } ?: 0L
+        val disabled = save(source.copy(enabled = false, snoozeUntil = 0))
+        RingingService.reconcile(context, disabled)
+        AlarmResume.plan(source, disabled, active, now, zone)
+    }
+    /** Read the latest record, so a stale visible row cannot overwrite a paired-device edit. */
+    fun enable(id: String): Alarm? = synchronized(lock) {
+        val current = get(id) ?: return@synchronized null
+        if (current.deleted || current.timer) return@synchronized null
+        if (current.enabled) return@synchronized current
+        save(current.copy(enabled = true, snoozeUntil = 0, skipThrough = 0))
+    }
+    fun resumeSuggestion(plan: AlarmResume.Plan, option: AlarmResume.Option,
+            now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): Alarm? = synchronized(lock) {
+        val expected = plan.disabled
+        val current = get(expected.id) ?: return@synchronized null
+        if (current != expected || current.enabled || current.deleted || current.timer ||
+                option !in plan.options || !option.at.isAfter(plan.skipped) ||
+                !AlarmResumeTiming.validTarget(current.hour, current.minute, current.days, option.at, now, zone))
+            return@synchronized null
+        save(current.copy(enabled = true, snoozeUntil = 0, skipThrough = option.at.toEpochMilli() - 1))
     }
     fun merge(incoming: Alarm) = synchronized(lock) {
         val old = get(incoming.id)
