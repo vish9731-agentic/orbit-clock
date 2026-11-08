@@ -43,6 +43,7 @@ object FocusStore {
         if (action == "start") next = next.copy(id = old.id.ifEmpty { UUID.randomUUID().toString() }, owner = device(c))
         val changed = next.copy(revision = maxOf(System.currentTimeMillis(), old.revision + 1), writer = device(c))
         write(c, changed, true)
+        if (action == "start" && changed.status == "Running" && !FocusHandoff.isWatch(c)) FocusHandoff.open(c, changed)
         if (old.status == "Running" && changed.status == "Complete" && old.owner == device(c)) notify(c, changed, true)
     }
     @Synchronized fun configure(c: Context, focus: Int, short: Int, long: Int) {
@@ -53,11 +54,13 @@ object FocusStore {
     }
     private fun write(c: Context, s: FocusSession, sync: Boolean) {
         prefs(c).edit().putString("session", encode(s)).commit()
+        FocusHandoff.sessionChanged(c, s)
         schedule(c, s)
         c.sendBroadcast(Intent(CHANGED).setPackage(c.packageName))
         if (sync) push(c, s)
     }
     fun push(c: Context, s: FocusSession = read(c)) {
+        FocusSync.publish(c, s)
         if (s.revision == 0L) return
         Wearable.getDataClient(c).putDataItem(PutDataMapRequest.create(PATH).apply { dataMap.putString("record", encode(s)) }.asPutDataRequest().setUrgent())
     }

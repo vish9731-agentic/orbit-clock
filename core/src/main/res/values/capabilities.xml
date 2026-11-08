@@ -1,0 +1,5 @@
+<resources>
+    <string-array name="android_wear_capabilities">
+        <item>orbit_focus_sync_v1</item>
+    </string-array>
+</resources>

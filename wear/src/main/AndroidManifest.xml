@@ -5,6 +5,14 @@
     <!-- Preserve the special-access flow on Android 12 / API 31–32 only. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
     <application android:enableOnBackInvokedCallback="true" android:theme="@style/Theme.OrbitClock" android:label="Orbit Clock" android:allowBackup="false" android:supportsRtl="true">
+        <activity android:name="dev.orbit.clock.core.FocusLinkActivity" android:exported="true" android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="dev.orbit.clock.focus" android:host="handoff" android:path="/open"/>
+            </intent-filter>
+        </activity>
         <meta-data android:name="com.google.android.wearable.standalone" android:value="true" />
         <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
             <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>

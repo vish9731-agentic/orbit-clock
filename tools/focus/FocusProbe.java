@@ -15,6 +15,7 @@ public class FocusProbe extends Instrumentation {
     private Class<?> store;
     private Object singleton;
     private int checks;
+    private boolean recoveredLauncher;
     private Object call(String method, Class<?>[] types, Object... args) throws Exception {
         return store.getMethod(method, types).invoke(singleton, args);
     }
@@ -84,17 +85,40 @@ public class FocusProbe extends Instrumentation {
             return out.toString("UTF-8");
         }
     }
+    private void recoverKnownLauncherAnr() throws Exception {
+        android.view.accessibility.AccessibilityNodeInfo root=getUiAutomation().getRootInActiveWindow();
+        if(root==null) return;
+        boolean known=false;
+        for(android.view.accessibility.AccessibilityNodeInfo node:root.findAccessibilityNodeInfosByText("Pixel Launcher"))
+            if(String.valueOf(node.getText()).replace("’", "'").equalsIgnoreCase("Pixel Launcher isn't responding")) known=true;
+        if(!known) return;
+        if(recoveredLauncher) throw new AssertionError("Pixel Launcher repeatedly failed during emulator startup");
+        boolean closed=false;
+        for(android.view.accessibility.AccessibilityNodeInfo node:root.findAccessibilityNodeInfosByText("Close app")) {
+            if(!String.valueOf(node.getText()).equalsIgnoreCase("Close app")) continue;
+            android.view.accessibility.AccessibilityNodeInfo action=node;
+            for(int i=0;i<4 && action!=null && !action.isClickable();i++) action=action.getParent();
+            if(action!=null && action.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)) { closed=true; break; }
+        }
+        if(!closed) throw new AssertionError("Identified Pixel Launcher ANR has no usable Close app action");
+        shell("am force-stop com.google.android.apps.nexuslauncher"); recoveredLauncher=true;
+        Bundle note=new Bundle(); note.putString("stream","SETUP recovered the unused Pixel Launcher ANR once\n"); sendStatus(0,note);
+    }
     private void awaitReady(boolean watch) throws Exception {
         // Match the established Wear probe: boot_completed precedes the Wear OS
         // TrayInitializationOverlay closing, sometimes by more than a minute.
-        long until=SystemClock.uptimeMillis()+(watch?90000:15000);
+        long until=SystemClock.uptimeMillis()+(watch?90000:45000);
         long stableSince=SystemClock.uptimeMillis(); String previous="";
+        long nextLauncherCheck=0;
         while(SystemClock.uptimeMillis()<until) {
             String[] current={""};
             ui(() -> {
                 if(activity!=null && !activity.isFinishing() && activity.hasWindowFocus() && activity.getWindow().getDecorView().isLaidOut())
                     current[0]=System.identityHashCode(activity)+":"+activity.getResources().getConfiguration();
             });
+            if(!watch && current[0].isEmpty() && SystemClock.uptimeMillis()>=nextLauncherCheck) {
+                recoverKnownLauncherAnr(); nextLauncherCheck=SystemClock.uptimeMillis()+1000;
+            }
             if(current[0].isEmpty() || !current[0].equals(previous)) { previous=current[0]; stableSince=SystemClock.uptimeMillis(); }
             else if(SystemClock.uptimeMillis()-stableSince>=2000) break;
             SystemClock.sleep(100);
@@ -105,6 +129,101 @@ public class FocusProbe extends Instrumentation {
         AlarmManager alarms=c.getSystemService(AlarmManager.class);
         while(!alarms.canScheduleExactAlarms() && SystemClock.uptimeMillis()<permissionLimit) SystemClock.sleep(100);
         require(alarms.canScheduleExactAlarms(),"exact alarm permission fixture is ready");
+    }
+    private Object handoff(String method,Class<?>[] types,Object... args) throws Exception {
+        Class<?> type=c.getClassLoader().loadClass("dev.orbit.clock.core.FocusHandoff");
+        return type.getMethod(method,types).invoke(type.getField("INSTANCE").get(null),args);
+    }
+    private JSONObject acceptSync(JSONObject record) throws Exception {
+        JSONObject packet=new JSONObject().put("nonce",java.util.UUID.randomUUID().toString()).put("record",record.toString());
+        Class<?> type=c.getClassLoader().loadClass("dev.orbit.clock.core.FocusSync");
+        byte[] reply=(byte[])type.getMethod("accept",Context.class,byte[].class).invoke(type.getField("INSTANCE").get(null),c,packet.toString().getBytes("UTF-8"));
+        if(reply==null) throw new AssertionError("Valid sync packet rejected");
+        JSONObject decoded=new JSONObject(new String(reply,"UTF-8"));
+        require(packet.getString("nonce").equals(decoded.getString("nonce")),"sync receipt is correlated with its exact request");
+        return decoded;
+    }
+    private void syncChecks(boolean watch) throws Exception {
+        String peer=watch?"phone":"watch";
+        int advertised=c.getResources().getIdentifier("android_wear_capabilities","array",c.getPackageName());
+        require(advertised!=0 && java.util.Arrays.asList(c.getResources().getStringArray(advertised)).contains("orbit_focus_sync_v1"),"both device variants advertise the shared Focus sync capability");
+        JSONObject remote=state().put("id",java.util.UUID.randomUUID().toString()).put("phase","Focus").put("status","Paused")
+            .put("remaining",45000).put("deadline",0).put("completed",0).put("revision",state().getLong("revision")+100)
+            .put("writer",java.util.UUID.randomUUID().toString());
+        remote.put("owner",remote.getString("writer"));
+        require(acceptSync(remote).getBoolean("matched") && state().getString("id").equals(remote.getString("id")),peer+" snapshot immediately updates the local session");
+        JSONObject running=new JSONObject(remote.toString()).put("status","Running").put("deadline",System.currentTimeMillis()+60000).put("remaining",60000).put("revision",remote.getLong("revision")+1);
+        acceptSync(running);
+        long limit=SystemClock.uptimeMillis()+3000; boolean[] rendered={false};
+        while(!rendered[0] && SystemClock.uptimeMillis()<limit) {
+            ui(() -> rendered[0]=find(activity.getWindow().getDecorView(),"Focus · Running")!=null && (((activity.getWindow().getAttributes().flags&WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)!=0)==watch));
+            if(!rendered[0]) SystemClock.sleep(100);
+        }
+        require(rendered[0],watch?"incoming phone timer renders and keeps the watch display awake":"incoming watch timer renders without keeping the phone awake");
+        capture("sync-from-peer");
+        JSONObject stale=acceptSync(remote);
+        require(!stale.getBoolean("matched") && new JSONObject(stale.getString("record")).getLong("revision")==running.getLong("revision"),"stale peer snapshot returns newer local state instead of resetting the timer");
+        JSONObject paused=new JSONObject(running.toString()).put("status","Paused").put("deadline",0).put("remaining",40000).put("revision",running.getLong("revision")+1);
+        acceptSync(paused); long pauseLimit=SystemClock.uptimeMillis()+3000; boolean[] released={false};
+        while(!released[0] && SystemClock.uptimeMillis()<pauseLimit) {
+            ui(() -> released[0]=(activity.getWindow().getAttributes().flags&WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)==0);
+            if(!released[0]) SystemClock.sleep(100);
+        }
+        require(released[0],"pause releases the display hold");
+        require(acceptSync(paused).getBoolean("matched") && state().getLong("revision")==paused.getLong("revision"),"replayed matching snapshot is idempotent");
+        require(!acceptSync(new JSONObject(paused.toString()).put("remaining",12345)).getBoolean("matched"),"same revision with different timer data cannot falsely confirm synchronization");
+        act("end");
+    }
+    private void handoffChecks(boolean watch) throws Exception {
+        if(!watch) {
+            act("start"); JSONObject before=state();
+            handoff("open",new Class[]{Context.class,c.getClassLoader().loadClass("dev.orbit.clock.core.FocusSession")},c,call("read",new Class[]{Context.class},c));
+            require(state().getLong("revision")==before.getLong("revision") && state().getLong("deadline")==before.getLong("deadline"),"Open on watch retry never restarts the phone timer");
+            handoff("receive",new Class[]{Context.class,String.class,String.class,byte[].class},c,"unrelated-node","/orbit/focus/handoff/visible",new JSONObject().put("nonce",java.util.UUID.randomUUID().toString()).toString().getBytes("UTF-8"));
+            SystemClock.sleep(250);
+            require(!"opened".equals(handoff("statusCode",new Class[]{Context.class},c)),"unmatched visibility acknowledgment cannot claim watch opened");
+            act("end"); return;
+        }
+        int capability=c.getResources().getIdentifier("android_wear_capabilities","array",c.getPackageName());
+        require(capability!=0 && java.util.Arrays.asList(c.getResources().getStringArray(capability)).contains("orbit_focus_handoff_v1"),"watch advertises the versioned Focus handoff capability");
+        JSONObject remote=state().put("id",java.util.UUID.randomUUID().toString()).put("phase","Focus").put("status","Running")
+            .put("remaining",60000).put("deadline",System.currentTimeMillis()+60000).put("completed",0)
+            .put("revision",state().getLong("revision")+1000).put("writer",java.util.UUID.randomUUID().toString());
+        remote.put("owner",remote.getString("writer"));
+        ui(() -> activity.moveTaskToBack(true)); SystemClock.sleep(800);
+        call("merge",new Class[]{Context.class,String.class},c,remote.toString());
+        SystemClock.sleep(300);
+        boolean[] hidden={false}; ui(() -> hidden[0]=!activity.hasWindowFocus());
+        require(hidden[0],"ordinary delayed state sync does not steal the watch screen");
+        String nonce=java.util.UUID.randomUUID().toString();
+        JSONObject packet=new JSONObject().put("nonce",nonce).put("sentAt",System.currentTimeMillis()).put("record",remote.toString());
+        JSONObject reply=new JSONObject(new String((byte[])handoff("prepare",new Class[]{Context.class,String.class,byte[].class},c,"probe-phone",packet.toString().getBytes("UTF-8")),"UTF-8"));
+        require(reply.getBoolean("accepted") && state().getString("id").equals(remote.getString("id")),"live handoff acknowledges the exact saved phone session before launch");
+        android.net.Uri uri=(android.net.Uri)handoff("launchUri",new Class[]{String.class},nonce);
+        shell("am start -W -a android.intent.action.VIEW -c android.intent.category.BROWSABLE -d "+uri);
+        long visibleLimit=SystemClock.uptimeMillis()+10000; boolean[] shown={false};
+        while(!shown[0] && SystemClock.uptimeMillis()<visibleLimit) {
+            ui(() -> shown[0]=activity.hasWindowFocus() && nonce.equals(activity.getIntent().getStringExtra("focus_handoff_nonce")));
+            if(!shown[0]) SystemClock.sleep(100);
+        }
+        require(shown[0],"prepared remote URI opens the native Focus screen from watch home");
+        capture("handoff");
+        require(state().getLong("deadline")==remote.getLong("deadline") && state().getString("owner").equals(remote.getString("owner")),"watch launch preserves the phone deadline and completion owner");
+        require(handoff("consumeLaunch",new Class[]{Context.class,android.net.Uri.class},c,uri)==null,"remote launch URI is one use");
+        require(handoff("consumeLaunch",new Class[]{Context.class,android.net.Uri.class},c,android.net.Uri.parse("dev.orbit.clock.focus://handoff/open?nonce=unprepared"))==null,"unprepared external URI cannot authorize a watch launch");
+        JSONObject stale=new JSONObject(remote.toString()).put("revision",remote.getLong("revision")-1);
+        JSONObject oldPacket=new JSONObject().put("nonce",java.util.UUID.randomUUID().toString()).put("sentAt",System.currentTimeMillis()).put("record",stale.toString());
+        JSONObject oldReply=new JSONObject(new String((byte[])handoff("prepare",new Class[]{Context.class,String.class,byte[].class},c,"probe-phone",oldPacket.toString().getBytes("UTF-8")),"UTF-8"));
+        require(!oldReply.getBoolean("accepted"),"stale handoff cannot replace a newer watch record");
+        JSONObject expired=new JSONObject(packet.toString()).put("nonce",java.util.UUID.randomUUID().toString()).put("sentAt",System.currentTimeMillis()-120000);
+        JSONObject expiredReply=new JSONObject(new String((byte[])handoff("prepare",new Class[]{Context.class,String.class,byte[].class},c,"probe-phone",expired.toString().getBytes("UTF-8")),"UTF-8"));
+        require(!expiredReply.getBoolean("accepted"),"late handoff cannot unexpectedly reopen the watch");
+        String cancelNonce=java.util.UUID.randomUUID().toString();
+        JSONObject cancelPacket=new JSONObject(packet.toString()).put("nonce",cancelNonce).put("sentAt",System.currentTimeMillis());
+        handoff("prepare",new Class[]{Context.class,String.class,byte[].class},c,"probe-phone",cancelPacket.toString().getBytes("UTF-8"));
+        act("pause");
+        require(handoff("consumeLaunch",new Class[]{Context.class,android.net.Uri.class},c,handoff("launchUri",new Class[]{String.class},cancelNonce))==null,"a pause invalidates an outstanding launch ticket");
+        act("end");
     }
     @Override public void onStart() {
         Bundle result=new Bundle();
@@ -206,6 +325,8 @@ public class FocusProbe extends Instrumentation {
             require(state().getLong("revision")==incoming.getLong("revision"),"replayed remote state idempotent");
             act("end"); require("Ready".equals(state().getString("status")),"end resets cycle");
             require(state().getInt("focus")==1,"end keeps durations");
+            syncChecks(watch);
+            handoffChecks(watch);
             result.putString("stream","PASS " + checks + " Focus runtime checks"); finish(Activity.RESULT_OK,result);
         } catch(Throwable failure) {
             try { capture("failure"); } catch(Throwable ignored) { }

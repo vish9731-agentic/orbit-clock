@@ -73,6 +73,7 @@ open class ClockActivity : AppCompatActivity() {
     private val prefs by lazy { getSharedPreferences("tools", MODE_PRIVATE) }
     private val changes = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
+            if (i.action == FocusStore.CHANGED && tab != "Timer") return
             if (!resumePlanCurrent()) clearResumePrompt()
             if (foreground && tab in listOf("Alarms", "Bedtime", "Timer")) {
                 handler.removeCallbacks(refresh)
@@ -88,11 +89,16 @@ open class ClockActivity : AppCompatActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
-        tab = state?.getString("tab") ?: "Alarms"
+        tab = state?.getString("tab") ?: intent.getStringExtra("orbit_tab")?.takeIf { it in sections } ?: "Alarms"
         resumePlan = state?.getString("alarmResume")?.let { AlarmResume.decode(it) }
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(changes, IntentFilter(Store.CHANGED), RECEIVER_NOT_EXPORTED)
-        else registerReceiver(changes, IntentFilter(Store.CHANGED))
+        val changesFilter = IntentFilter(Store.CHANGED).apply { addAction(FocusStore.CHANGED) }
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(changes, changesFilter, RECEIVER_NOT_EXPORTED)
+        else registerReceiver(changes, changesFilter)
         Sync.refresh(this)
+    }
+    override fun onNewIntent(value: Intent) {
+        super.onNewIntent(value); setIntent(value)
+        value.getStringExtra("orbit_tab")?.takeIf { it in sections }?.let { tab = it; if (foreground) render() }
     }
     override fun onResume() {
         super.onResume(); foreground = true; Scheduler.restore(this)
@@ -639,7 +645,16 @@ open class ClockActivity : AppCompatActivity() {
         }); update(); dialog.show(); OrbitMotion.bindTree(layout); OrbitMotion.enter(layout)
     }
     private fun timers() {
-        content.addView(button("Focus mode", icon = R.drawable.ic_timer) { startActivity(Intent(this, FocusActivity::class.java)) })
+        val focusEntry = button("Focus mode", icon = R.drawable.ic_timer) { startActivity(Intent(this, FocusActivity::class.java)) }
+        content.addView(focusEntry)
+        fun focusSummary() {
+            val s = FocusStore.read(this)
+            val left = (s.left(FocusStore.now(this, s)) + 999) / 1000
+            val label = if (s.id.isEmpty() || s.status == "Ready") "Focus mode"
+                else "${s.phase} · ${String.format(Locale.getDefault(), "%02d:%02d", left / 60, left % 60)} · ${s.status}"
+            if (focusEntry.text.toString() != label) focusEntry.text = label
+        }
+        focusSummary()
         val setup = card(color = colors.container); setup.addView(text("Set a timer", if (watch) 22f else 26f)); space(setup, 20)
         val minutes = input(setup, "Minutes", "5", numeric = true).apply { textSize = 42f; gravity = Gravity.CENTER; contentDescription = "Timer minutes" }
         val presets = row()
@@ -675,7 +690,7 @@ open class ClockActivity : AppCompatActivity() {
             val countdown = text("", if (watch) 28f else 42f, colors.onPrimaryContainer).apply { typeface = Typeface.create("sans-serif-light", Typeface.NORMAL) }
             c.addView(countdown); space(c, 16); c.addView(button("Cancel timer", tonal = true) { pendingFeedback = "Timer canceled"; Store(this).save(alarm.copy(enabled = false, deleted = true)) }); alarm to countdown
         }
-        ticker = { labels.forEach { (alarm, view) ->
+        ticker = { focusSummary(); labels.forEach { (alarm, view) ->
             val seconds = ((alarm.snoozeUntil - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
             val value = String.format(Locale.getDefault(), "%02d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
             if (view.text.toString() != value) view.text = value
