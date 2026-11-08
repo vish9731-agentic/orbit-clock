@@ -58,6 +58,8 @@ open class ClockActivity : AppCompatActivity() {
     private var syncInProgress = false
     private var syncToken = 0
     private var pendingFeedback: String? = null
+    private var resumePlan: AlarmResume.Plan? = null
+    private var resumeSheet: BottomSheetDialog? = null
     private var syncTimeout: Runnable? = null
     private val sections = listOf("Alarms", "Clock", "Timer", "Stopwatch", "Bedtime")
     private val icons = listOf(R.drawable.ic_alarm, R.drawable.ic_clock, R.drawable.ic_timer, R.drawable.ic_stopwatch, R.drawable.ic_bedtime)
@@ -71,6 +73,7 @@ open class ClockActivity : AppCompatActivity() {
     private val prefs by lazy { getSharedPreferences("tools", MODE_PRIVATE) }
     private val changes = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
+            if (!resumePlanCurrent()) clearResumePrompt()
             if (foreground && tab in listOf("Alarms", "Bedtime", "Timer")) {
                 handler.removeCallbacks(refresh)
                 handler.postDelayed(refresh, if (OrbitMotion.enabled()) 180 else 0)
@@ -86,6 +89,7 @@ open class ClockActivity : AppCompatActivity() {
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
         tab = state?.getString("tab") ?: "Alarms"
+        resumePlan = state?.getString("alarmResume")?.let { AlarmResume.decode(it) }
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(changes, IntentFilter(Store.CHANGED), RECEIVER_NOT_EXPORTED)
         else registerReceiver(changes, IntentFilter(Store.CHANGED))
         Sync.refresh(this)
@@ -93,11 +97,23 @@ open class ClockActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume(); foreground = true; Scheduler.restore(this)
         render()
+        resumePlan?.let { plan ->
+            if (resumePlanCurrent()) showResumePrompt(plan) else clearResumePrompt()
+        }
         handler.removeCallbacks(tick); handler.post(tick)
     }
     override fun onPause() { foreground = false; handler.removeCallbacks(tick); handler.removeCallbacks(refresh); super.onPause() }
-    override fun onSaveInstanceState(out: Bundle) { out.putString("tab", tab); super.onSaveInstanceState(out) }
-    override fun onDestroy() { syncTimeout?.let { handler.removeCallbacks(it) }; unregisterReceiver(changes); if (::bodyFrame.isInitialized) TransitionManager.endTransitions(bodyFrame); super.onDestroy() }
+    override fun onSaveInstanceState(out: Bundle) {
+        out.putString("tab", tab)
+        resumePlan?.takeIf { resumePlanCurrent() }?.let { out.putString("alarmResume", AlarmResume.encode(it)) }
+        super.onSaveInstanceState(out)
+    }
+    override fun onDestroy() {
+        clearResumePrompt()
+        syncTimeout?.let { handler.removeCallbacks(it) }; unregisterReceiver(changes)
+        if (::bodyFrame.isInitialized) TransitionManager.endTransitions(bodyFrame)
+        super.onDestroy()
+    }
     private fun dp(n: Int) = (resources.displayMetrics.density * n).toInt()
     private fun column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
     private fun row() = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -336,13 +352,27 @@ open class ClockActivity : AppCompatActivity() {
             }
             line.addView(clock, LinearLayout.LayoutParams(0, dp(if (watch) 52 else 72), 1f))
             line.addView(MaterialSwitch(this).apply {
+                tag = "alarm_toggle:${alarm.id}"
                 isChecked = alarm.enabled; contentDescription = "${alarm.label} enabled"
-                setOnCheckedChangeListener { view, enabled -> OrbitMotion.tick(view); Store(this@ClockActivity).save(alarm.copy(enabled = enabled, snoozeUntil = 0, skipThrough = 0)) }
+                setOnCheckedChangeListener { view, enabled ->
+                    OrbitMotion.tick(view)
+                    if (enabled) {
+                        clearResumePrompt()
+                        Store(this@ClockActivity).enable(alarm.id)
+                    } else openAlarmResume(alarm.id, alarm.revision, alarm.writer)
+                }
             })
             inner.addView(line)
             if (period(alarm.hour).isNotEmpty()) inner.addView(text(period(alarm.hour), 12f, colors.muted))
             space(inner, 6); inner.addView(text(alarm.label, 17f)); space(inner, 6)
             inner.addView(text(if (alarm.days.isEmpty()) "Once" else alarm.days.sorted().joinToString(" · ") { DayOfWeek.of(it).getDisplayName(java.time.format.TextStyle.SHORT, Locale.getDefault()) }, 13f, colors.muted))
+            if (alarm.enabled && alarm.skipThrough > System.currentTimeMillis()) alarm.next()?.let { at ->
+                space(inner, 8)
+                inner.addView(text("Resumes ${resumeDateTime(at)}", 13f, colors.primary).apply {
+                    tag = "alarm_resume_status:${alarm.id}"
+                    accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+                })
+            }
             (inner.parent as View).apply { isClickable = true; contentDescription = "Edit ${alarm.label}"; setOnClickListener { OrbitMotion.tick(this); editAlarm(alarm) } }
         }
         if (watch) content.addView(button("Sync devices", tonal = true) { requestSync() })
@@ -380,12 +410,100 @@ open class ClockActivity : AppCompatActivity() {
     }
     /** Used by the phone's explicit widget links after the activity has resumed. */
     protected fun openWidgetAlarm(id: String?) {
+        clearResumePrompt()
         tab = "Alarms"
         render()
         val alarm = if (id == null) Alarm() else Store(this).get(id)
         if (alarm != null && !alarm.deleted && !alarm.timer) editAlarm(alarm)
     }
-    protected fun openWidgetBedtime() { tab = "Bedtime"; render() }
+    protected fun openWidgetBedtime() { clearResumePrompt(); tab = "Bedtime"; render() }
+    /** Widget and list toggles share the same disable-first, revision-checked choices. */
+    protected fun openAlarmResume(id: String, expectedRevision: Long? = null, expectedWriter: String? = null) {
+        clearResumePrompt()
+        tab = "Alarms"
+        if ((expectedRevision == null) != (expectedWriter == null)) {
+            pendingFeedback = "Alarm changed. Try again."
+            render()
+            return
+        }
+        val plan = Store(this).disableWithSuggestions(id, expectedRevision = expectedRevision, expectedWriter = expectedWriter)
+        if (plan == null) {
+            pendingFeedback = "Alarm changed. Try again."
+            render()
+            return
+        }
+        render()
+        showResumePrompt(plan)
+    }
+    private fun resumeDateTime(at: Instant): String {
+        val date = at.atZone(ZoneId.systemDefault())
+        val skeleton = if (date.year == LocalDate.now().year) "EEE d MMM" else "EEE d MMM y"
+        val pattern = DateFormat.getBestDateTimePattern(Locale.getDefault(), skeleton)
+        val day = date.format(DateTimeFormatter.ofPattern(pattern, Locale.getDefault()))
+        return "$day · ${DateFormat.getTimeFormat(this).format(java.util.Date.from(at))}"
+    }
+    private fun resumePlanCurrent(): Boolean {
+        val plan = resumePlan ?: return true
+        return Store(this).get(plan.disabled.id) == plan.disabled && plan.options.any { it.at.isAfter(Instant.now()) }
+    }
+    private fun clearResumePrompt() {
+        resumePlan = null
+        val old = resumeSheet
+        resumeSheet = null
+        old?.setOnDismissListener(null)
+        old?.dismiss()
+    }
+    private fun showResumePrompt(plan: AlarmResume.Plan) {
+        if (isFinishing || isDestroyed || resumeSheet?.isShowing == true) return
+        val options = plan.options.filter { it.at.isAfter(Instant.now()) }
+        if (options.isEmpty() || Store(this).get(plan.disabled.id) != plan.disabled) {
+            clearResumePrompt()
+            return
+        }
+        resumePlan = plan
+        val sheet = BottomSheetDialog(this)
+        resumeSheet = sheet
+        val body = column().apply {
+            tag = "alarm_resume_sheet"
+            setPadding(dp(if (watch) 20 else 24), dp(24), dp(if (watch) 20 else 24), dp(28))
+        }
+        body.addView(text("Turn back on?", if (watch) 22f else 26f))
+        space(body, 10)
+        body.addView(text("Skipping ${resumeDateTime(plan.skipped)}", 14f, colors.muted))
+        space(body, 20)
+        options.forEachIndexed { index, option ->
+            val date = resumeDateTime(option.at)
+            val label = when (option.kind) {
+                "after_weekend" -> "After the weekend\n$date"
+                "next_weekday" -> "Next weekday\n$date"
+                "next_weekend" -> "Next weekend\n$date"
+                else -> date
+            }
+            body.addView(button(label, tonal = index != 0) {
+                val updated = Store(this).resumeSuggestion(plan, option)
+                clearResumePrompt()
+                pendingFeedback = if (updated == null) "Alarm changed. Try again." else "Alarm set for $date"
+                render()
+            }.apply {
+                tag = "alarm_resume_option_$index"
+                contentDescription = "Turn alarm back on from $date"
+                isSingleLine = false; maxLines = 4
+                minimumHeight = dp(56)
+                setPadding(dp(18), dp(12), dp(18), dp(12))
+            }, LinearLayout.LayoutParams(-1, -2))
+            space(body, 10)
+        }
+        body.addView(button("Keep off", tonal = true) { clearResumePrompt() }.apply {
+            tag = "alarm_resume_keep_off"
+        }, LinearLayout.LayoutParams(-1, dp(52)))
+        sheet.setOnDismissListener {
+            if (resumeSheet === sheet) { resumeSheet = null; resumePlan = null }
+        }
+        sheet.setContentView(ScrollView(this).apply { addView(body) })
+        sheet.show()
+        sheet.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+        OrbitMotion.bindTree(body); OrbitMotion.enter(body)
+    }
     private fun editAlarm(original: Alarm) {
         var hour = original.hour; var minute = original.minute
         val exists = Store(this).get(original.id) != null
