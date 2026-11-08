@@ -56,12 +56,7 @@ object FocusHandoff {
                     if (node == null) {
                         noCapableWatch(p)
                     } else {
-                        p.node = node.id
-                        val data = JSONObject().put("nonce", p.nonce).put("sentAt", System.currentTimeMillis())
-                            .put("record", FocusStore.encode(s)).toString().toByteArray(Charsets.UTF_8)
-                        Wearable.getMessageClient(app).sendMessage(node.id, PREPARE, data).addOnFailureListener {
-                            if (current(p)) finish(p, "unavailable", "Couldn’t reach Orbit on the watch. Open both apps and retry.")
-                        }
+                        preparePeer(p, node)
                     }
                 }.addOnFailureListener { if (current(p)) noCapableWatch(p) }
         }
@@ -69,10 +64,21 @@ object FocusHandoff {
     private fun noCapableWatch(p: Pending) {
         Wearable.getNodeClient(p.c).connectedNodes.addOnSuccessListener { nodes ->
             if (current(p)) {
-                if (nodes.isEmpty()) finish(p, "disconnected", "No watch connected. Connect your watch, then retry.")
-                else finish(p, "update-watch", "Update Orbit on your watch and open it once, then retry.")
+                val node = nodes.sortedWith(compareByDescending<Node> { it.isNearby }.thenBy { it.id }).firstOrNull()
+                if (node == null) finish(p, "disconnected", "No watch connected. Connect your watch, then retry.")
+                else preparePeer(p, node) // Resource capability propagation can lag a fresh APK install.
+
             }
         }.addOnFailureListener { if (current(p)) finish(p, "unavailable", "Watch connection unavailable. Your phone timer continues.") }
+    }
+    private fun preparePeer(p: Pending, node: Node) {
+        if (!current(p)) return
+        p.node = node.id
+        val bytes = JSONObject().put("nonce", p.nonce).put("sentAt", System.currentTimeMillis())
+            .put("record", FocusStore.encode(p.session)).toString().toByteArray(Charsets.UTF_8)
+        Wearable.getMessageClient(p.c).sendMessage(node.id, PREPARE, bytes).addOnFailureListener {
+            if (current(p)) finish(p, "unavailable", "Couldn’t reach Orbit on the watch. Update and open both apps, then retry.")
+        }
     }
     private fun current(p: Pending) = pending === p && matches(p.session, FocusStore.read(p.c))
     private fun finish(p: Pending, code: String, text: String) {

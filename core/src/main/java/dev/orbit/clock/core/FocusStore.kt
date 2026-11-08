@@ -60,6 +60,7 @@ object FocusStore {
         if (sync) push(c, s)
     }
     fun push(c: Context, s: FocusSession = read(c)) {
+        FocusSync.publish(c, s)
         if (s.revision == 0L) return
         Wearable.getDataClient(c).putDataItem(PutDataMapRequest.create(PATH).apply { dataMap.putString("record", encode(s)) }.asPutDataRequest().setUrgent())
     }

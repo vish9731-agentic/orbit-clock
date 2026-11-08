@@ -27,6 +27,9 @@ class FocusActivity : AppCompatActivity() {
     private lateinit var end: MaterialButton
     private lateinit var settings: MaterialButton
     private var watchStatus: TextView? = null
+    private lateinit var syncStatus: TextView
+    private lateinit var retrySync: MaterialButton
+    private var foreground = false
     private var openWatch: MaterialButton? = null
     private var rotaryTotal = 0f
     private var lastTurn = 0L
@@ -37,7 +40,7 @@ class FocusActivity : AppCompatActivity() {
     override fun onCreate(state: Bundle?) {
         if (watch) setTheme(R.style.Theme_OrbitClock_Ringing) else DynamicColors.applyToActivityIfAvailable(this)
         super.onCreate(state); colors = OrbitPalette(this)
-        val filter = IntentFilter(FocusStore.CHANGED).apply { addAction(FocusHandoff.CHANGED) }
+        val filter = IntentFilter(FocusStore.CHANGED).apply { addAction(FocusHandoff.CHANGED); addAction(FocusSync.CHANGED) }
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(changes, filter, RECEIVER_NOT_EXPORTED)
         else registerReceiver(changes, filter)
         val body = LinearLayout(this).apply {
@@ -61,8 +64,11 @@ class FocusActivity : AppCompatActivity() {
             body.addView(watchStatus)
         }
         primary = button("Start focus") { control() }
-        if (!watch) openWatch = button("Open on watch") { FocusHandoff.open(this); update() }
+        if (!watch) openWatch = button("Open on watch") { FocusStore.push(this); FocusHandoff.open(this); update() }
         if (watch) body.addView(sessions)
+        syncStatus = text(if (watch) 12f else 13f).apply { accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
+        body.addView(syncStatus)
+        retrySync = button("Sync again") { Sync.refresh(this); update() }
         end = button("End session") {
             MaterialAlertDialogBuilder(this).setTitle("End this focus session?").setMessage("Reset the current cycle and session count?")
                 .setNegativeButton("Keep session", null).setPositiveButton("End") { _, _ -> FocusStore.act(this, "end") }.show()
@@ -78,7 +84,7 @@ class FocusActivity : AppCompatActivity() {
         Sync.refresh(this)
     }
     override fun onResume() {
-        super.onResume(); setTurnScreenOn(watch && FocusHandoff.isOpening(this, intent.getStringExtra(FocusHandoff.EXTRA_NONCE)))
+        super.onResume(); foreground = true; setTurnScreenOn(watch && FocusHandoff.isOpening(this, intent.getStringExtra(FocusHandoff.EXTRA_NONCE)))
         FocusStore.schedule(this); handler.removeCallbacks(tick); handler.post(tick)
         window.decorView.post { FocusHandoff.visible(this) }
     }
@@ -87,7 +93,11 @@ class FocusActivity : AppCompatActivity() {
         setTurnScreenOn(watch && FocusHandoff.isOpening(this, value.getStringExtra(FocusHandoff.EXTRA_NONCE)))
         update(); window.decorView.post { FocusHandoff.visible(this) }
     }
-    override fun onPause() { setTurnScreenOn(false); handler.removeCallbacks(tick); resetRotary(); super.onPause() }
+    override fun onPause() {
+        foreground = false
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        setTurnScreenOn(false); handler.removeCallbacks(tick); resetRotary(); super.onPause()
+    }
     override fun onDestroy() { unregisterReceiver(changes); handler.removeCallbacks(clearCue); super.onDestroy() }
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
@@ -98,6 +108,9 @@ class FocusActivity : AppCompatActivity() {
         val saved = FocusStore.read(this)
         val now = FocusStore.now(this, saved)
         val left = saved.left(now)
+        if (watch && foreground && saved.status == "Running" && left > 0)
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (saved.status == "Running" && left == 0L && saved.owner == FocusStore.device(this)) { FocusStore.finish(this, saved.revision); return }
         val s = saved.complete(now)
         phase.text = "${s.phase} · ${s.status}"
@@ -108,6 +121,9 @@ class FocusActivity : AppCompatActivity() {
         primary.text = when(s.status) { "Running" -> "Pause"; "Paused" -> "Resume"; "Complete" -> if (s.phase == "Focus") "Start break" else "Start focus"; else -> "Start focus" }
         settings.visibility = if (s.status == "Ready") View.VISIBLE else View.GONE
         end.visibility = if (s.status == "Ready") View.GONE else View.VISIBLE
+        syncStatus.text = FocusSync.statusText(this)
+        syncStatus.visibility = if (syncStatus.text.isNotEmpty()) View.VISIBLE else View.GONE
+        retrySync.visibility = if (FocusSync.statusCode(this) in listOf("disconnected", "unconfirmed", "unavailable")) View.VISIBLE else View.GONE
         watchStatus?.let {
             it.text = FocusHandoff.statusText(this)
             it.visibility = if (s.id.isNotEmpty() && it.text.isNotEmpty()) View.VISIBLE else View.GONE

@@ -87,7 +87,7 @@ public class FocusProbe extends Instrumentation {
     private void awaitReady(boolean watch) throws Exception {
         // Match the established Wear probe: boot_completed precedes the Wear OS
         // TrayInitializationOverlay closing, sometimes by more than a minute.
-        long until=SystemClock.uptimeMillis()+(watch?90000:15000);
+        long until=SystemClock.uptimeMillis()+(watch?90000:45000);
         long stableSince=SystemClock.uptimeMillis(); String previous="";
         while(SystemClock.uptimeMillis()<until) {
             String[] current={""};
@@ -109,6 +109,42 @@ public class FocusProbe extends Instrumentation {
     private Object handoff(String method,Class<?>[] types,Object... args) throws Exception {
         Class<?> type=c.getClassLoader().loadClass("dev.orbit.clock.core.FocusHandoff");
         return type.getMethod(method,types).invoke(type.getField("INSTANCE").get(null),args);
+    }
+    private JSONObject acceptSync(JSONObject record) throws Exception {
+        JSONObject packet=new JSONObject().put("nonce",java.util.UUID.randomUUID().toString()).put("record",record.toString());
+        Class<?> type=c.getClassLoader().loadClass("dev.orbit.clock.core.FocusSync");
+        byte[] reply=(byte[])type.getMethod("accept",Context.class,byte[].class).invoke(type.getField("INSTANCE").get(null),c,packet.toString().getBytes("UTF-8"));
+        if(reply==null) throw new AssertionError("Valid sync packet rejected");
+        JSONObject decoded=new JSONObject(new String(reply,"UTF-8"));
+        require(packet.getString("nonce").equals(decoded.getString("nonce")),"sync receipt is correlated with its exact request");
+        return decoded;
+    }
+    private void syncChecks(boolean watch) throws Exception {
+        String peer=watch?"phone":"watch";
+        JSONObject remote=state().put("id",java.util.UUID.randomUUID().toString()).put("phase","Focus").put("status","Paused")
+            .put("remaining",45000).put("deadline",0).put("completed",0).put("revision",state().getLong("revision")+100)
+            .put("writer",java.util.UUID.randomUUID().toString());
+        remote.put("owner",remote.getString("writer"));
+        require(acceptSync(remote).getBoolean("matched") && state().getString("id").equals(remote.getString("id")),peer+" snapshot immediately updates the local session");
+        JSONObject running=new JSONObject(remote.toString()).put("status","Running").put("deadline",System.currentTimeMillis()+60000).put("remaining",60000).put("revision",remote.getLong("revision")+1);
+        acceptSync(running);
+        long limit=SystemClock.uptimeMillis()+3000; boolean[] rendered={false};
+        while(!rendered[0] && SystemClock.uptimeMillis()<limit) {
+            ui(() -> rendered[0]=find(activity.getWindow().getDecorView(),"Focus · Running")!=null && (((activity.getWindow().getAttributes().flags&WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)!=0)==watch));
+            if(!rendered[0]) SystemClock.sleep(100);
+        }
+        require(rendered[0],watch?"incoming phone timer renders and keeps the watch display awake":"incoming watch timer renders without keeping the phone awake");
+        JSONObject stale=acceptSync(remote);
+        require(!stale.getBoolean("matched") && new JSONObject(stale.getString("record")).getLong("revision")==running.getLong("revision"),"stale peer snapshot returns newer local state instead of resetting the timer");
+        JSONObject paused=new JSONObject(running.toString()).put("status","Paused").put("deadline",0).put("remaining",40000).put("revision",running.getLong("revision")+1);
+        acceptSync(paused); long pauseLimit=SystemClock.uptimeMillis()+3000; boolean[] released={false};
+        while(!released[0] && SystemClock.uptimeMillis()<pauseLimit) {
+            ui(() -> released[0]=(activity.getWindow().getAttributes().flags&WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)==0);
+            if(!released[0]) SystemClock.sleep(100);
+        }
+        require(released[0],"pause releases the display hold");
+        require(acceptSync(paused).getBoolean("matched") && state().getLong("revision")==paused.getLong("revision"),"replayed matching snapshot is idempotent");
+        act("end");
     }
     private void handoffChecks(boolean watch) throws Exception {
         if(!watch) {
@@ -260,6 +296,7 @@ public class FocusProbe extends Instrumentation {
             require(state().getLong("revision")==incoming.getLong("revision"),"replayed remote state idempotent");
             act("end"); require("Ready".equals(state().getString("status")),"end resets cycle");
             require(state().getInt("focus")==1,"end keeps durations");
+            syncChecks(watch);
             handoffChecks(watch);
             result.putString("stream","PASS " + checks + " Focus runtime checks"); finish(Activity.RESULT_OK,result);
         } catch(Throwable failure) {
