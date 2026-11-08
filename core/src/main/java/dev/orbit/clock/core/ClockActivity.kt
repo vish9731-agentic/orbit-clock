@@ -88,11 +88,15 @@ open class ClockActivity : AppCompatActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
-        tab = state?.getString("tab") ?: "Alarms"
+        tab = state?.getString("tab") ?: intent.getStringExtra("orbit_tab")?.takeIf { it in sections } ?: "Alarms"
         resumePlan = state?.getString("alarmResume")?.let { AlarmResume.decode(it) }
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(changes, IntentFilter(Store.CHANGED), RECEIVER_NOT_EXPORTED)
         else registerReceiver(changes, IntentFilter(Store.CHANGED))
         Sync.refresh(this)
+    }
+    override fun onNewIntent(value: Intent) {
+        super.onNewIntent(value); setIntent(value)
+        value.getStringExtra("orbit_tab")?.takeIf { it in sections }?.let { tab = it; if (foreground) render() }
     }
     override fun onResume() {
         super.onResume(); foreground = true; Scheduler.restore(this)

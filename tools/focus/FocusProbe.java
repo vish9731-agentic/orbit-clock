@@ -106,6 +106,60 @@ public class FocusProbe extends Instrumentation {
         while(!alarms.canScheduleExactAlarms() && SystemClock.uptimeMillis()<permissionLimit) SystemClock.sleep(100);
         require(alarms.canScheduleExactAlarms(),"exact alarm permission fixture is ready");
     }
+    private Object handoff(String method,Class<?>[] types,Object... args) throws Exception {
+        Class<?> type=c.getClassLoader().loadClass("dev.orbit.clock.core.FocusHandoff");
+        return type.getMethod(method,types).invoke(type.getField("INSTANCE").get(null),args);
+    }
+    private void handoffChecks(boolean watch) throws Exception {
+        if(!watch) {
+            act("start"); JSONObject before=state();
+            handoff("open",new Class[]{Context.class,c.getClassLoader().loadClass("dev.orbit.clock.core.FocusSession")},c,call("read",new Class[]{Context.class},c));
+            require(state().getLong("revision")==before.getLong("revision") && state().getLong("deadline")==before.getLong("deadline"),"Open on watch retry never restarts the phone timer");
+            handoff("receive",new Class[]{Context.class,String.class,String.class,byte[].class},c,"unrelated-node","/orbit/focus/handoff/visible",new JSONObject().put("nonce",java.util.UUID.randomUUID().toString()).toString().getBytes("UTF-8"));
+            SystemClock.sleep(250);
+            require(!"opened".equals(handoff("statusCode",new Class[]{Context.class},c)),"unmatched visibility acknowledgment cannot claim watch opened");
+            act("end"); return;
+        }
+        int capability=c.getResources().getIdentifier("android_wear_capabilities","array",c.getPackageName());
+        require(capability!=0 && java.util.Arrays.asList(c.getResources().getStringArray(capability)).contains("orbit_focus_handoff_v1"),"watch advertises the versioned Focus handoff capability");
+        JSONObject remote=state().put("id",java.util.UUID.randomUUID().toString()).put("phase","Focus").put("status","Running")
+            .put("remaining",60000).put("deadline",System.currentTimeMillis()+60000).put("completed",0)
+            .put("revision",state().getLong("revision")+1000).put("writer",java.util.UUID.randomUUID().toString());
+        remote.put("owner",remote.getString("writer"));
+        ui(() -> activity.moveTaskToBack(true)); SystemClock.sleep(800);
+        call("merge",new Class[]{Context.class,String.class},c,remote.toString());
+        SystemClock.sleep(300);
+        boolean[] hidden={false}; ui(() -> hidden[0]=!activity.hasWindowFocus());
+        require(hidden[0],"ordinary delayed state sync does not steal the watch screen");
+        String nonce=java.util.UUID.randomUUID().toString();
+        JSONObject packet=new JSONObject().put("nonce",nonce).put("sentAt",System.currentTimeMillis()).put("record",remote.toString());
+        JSONObject reply=new JSONObject(new String((byte[])handoff("prepare",new Class[]{Context.class,String.class,byte[].class},c,"probe-phone",packet.toString().getBytes("UTF-8")),"UTF-8"));
+        require(reply.getBoolean("accepted") && state().getString("id").equals(remote.getString("id")),"live handoff acknowledges the exact saved phone session before launch");
+        android.net.Uri uri=(android.net.Uri)handoff("launchUri",new Class[]{String.class},nonce);
+        shell("am start -W -a android.intent.action.VIEW -c android.intent.category.BROWSABLE -d "+uri);
+        long visibleLimit=SystemClock.uptimeMillis()+10000; boolean[] shown={false};
+        while(!shown[0] && SystemClock.uptimeMillis()<visibleLimit) {
+            ui(() -> shown[0]=activity.hasWindowFocus() && nonce.equals(activity.getIntent().getStringExtra("focus_handoff_nonce")));
+            if(!shown[0]) SystemClock.sleep(100);
+        }
+        require(shown[0],"prepared remote URI opens the native Focus screen from watch home");
+        require(state().getLong("deadline")==remote.getLong("deadline") && state().getString("owner").equals(remote.getString("owner")),"watch launch preserves the phone deadline and completion owner");
+        require(handoff("consumeLaunch",new Class[]{Context.class,android.net.Uri.class},c,uri)==null,"remote launch URI is one use");
+        require(handoff("consumeLaunch",new Class[]{Context.class,android.net.Uri.class},c,android.net.Uri.parse("dev.orbit.clock.focus://handoff/open?nonce=unprepared"))==null,"unprepared external URI cannot authorize a watch launch");
+        JSONObject stale=new JSONObject(remote.toString()).put("revision",remote.getLong("revision")-1);
+        JSONObject oldPacket=new JSONObject().put("nonce",java.util.UUID.randomUUID().toString()).put("sentAt",System.currentTimeMillis()).put("record",stale.toString());
+        JSONObject oldReply=new JSONObject(new String((byte[])handoff("prepare",new Class[]{Context.class,String.class,byte[].class},c,"probe-phone",oldPacket.toString().getBytes("UTF-8")),"UTF-8"));
+        require(!oldReply.getBoolean("accepted"),"stale handoff cannot replace a newer watch record");
+        JSONObject expired=new JSONObject(packet.toString()).put("nonce",java.util.UUID.randomUUID().toString()).put("sentAt",System.currentTimeMillis()-120000);
+        JSONObject expiredReply=new JSONObject(new String((byte[])handoff("prepare",new Class[]{Context.class,String.class,byte[].class},c,"probe-phone",expired.toString().getBytes("UTF-8")),"UTF-8"));
+        require(!expiredReply.getBoolean("accepted"),"late handoff cannot unexpectedly reopen the watch");
+        String cancelNonce=java.util.UUID.randomUUID().toString();
+        JSONObject cancelPacket=new JSONObject(packet.toString()).put("nonce",cancelNonce).put("sentAt",System.currentTimeMillis());
+        handoff("prepare",new Class[]{Context.class,String.class,byte[].class},c,"probe-phone",cancelPacket.toString().getBytes("UTF-8"));
+        act("pause");
+        require(handoff("consumeLaunch",new Class[]{Context.class,android.net.Uri.class},c,handoff("launchUri",new Class[]{String.class},cancelNonce))==null,"a pause invalidates an outstanding launch ticket");
+        act("end");
+    }
     @Override public void onStart() {
         Bundle result=new Bundle();
         try {
@@ -206,6 +260,7 @@ public class FocusProbe extends Instrumentation {
             require(state().getLong("revision")==incoming.getLong("revision"),"replayed remote state idempotent");
             act("end"); require("Ready".equals(state().getString("status")),"end resets cycle");
             require(state().getInt("focus")==1,"end keeps durations");
+            handoffChecks(watch);
             result.putString("stream","PASS " + checks + " Focus runtime checks"); finish(Activity.RESULT_OK,result);
         } catch(Throwable failure) {
             try { capture("failure"); } catch(Throwable ignored) { }

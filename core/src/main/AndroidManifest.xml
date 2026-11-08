@@ -8,7 +8,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <application>
-        <activity android:name="dev.orbit.clock.core.FocusActivity" android:exported="false"/>
+        <activity android:name="dev.orbit.clock.core.FocusActivity" android:exported="false" android:launchMode="singleTop"/>
         <receiver android:name="dev.orbit.clock.core.FocusReceiver" android:exported="false"/>
         <activity android:name="dev.orbit.clock.core.WatchExitActivity" android:exported="false" android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="" android:theme="@style/Theme.OrbitClock.WatchExit" />
         <activity android:name="dev.orbit.clock.core.RingActivity" android:exported="false" android:showWhenLocked="true" android:turnScreenOn="true" android:excludeFromRecents="true"/>
@@ -27,6 +27,7 @@
         <service android:name="dev.orbit.clock.core.SyncService" android:exported="true">
             <intent-filter>
                 <action android:name="com.google.android.gms.wearable.DATA_CHANGED"/>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED"/>
                 <data android:scheme="wear" android:host="*" android:pathPrefix="/orbit/"/>
             </intent-filter>
         </service>

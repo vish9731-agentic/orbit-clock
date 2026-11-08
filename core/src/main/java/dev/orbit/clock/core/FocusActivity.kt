@@ -26,6 +26,8 @@ class FocusActivity : AppCompatActivity() {
     private lateinit var primary: MaterialButton
     private lateinit var end: MaterialButton
     private lateinit var settings: MaterialButton
+    private var watchStatus: TextView? = null
+    private var openWatch: MaterialButton? = null
     private var rotaryTotal = 0f
     private var lastTurn = 0L
     private var latched = false
@@ -35,8 +37,9 @@ class FocusActivity : AppCompatActivity() {
     override fun onCreate(state: Bundle?) {
         if (watch) setTheme(R.style.Theme_OrbitClock_Ringing) else DynamicColors.applyToActivityIfAvailable(this)
         super.onCreate(state); colors = OrbitPalette(this)
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(changes, IntentFilter(FocusStore.CHANGED), RECEIVER_NOT_EXPORTED)
-        else registerReceiver(changes, IntentFilter(FocusStore.CHANGED))
+        val filter = IntentFilter(FocusStore.CHANGED).apply { addAction(FocusHandoff.CHANGED) }
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(changes, filter, RECEIVER_NOT_EXPORTED)
+        else registerReceiver(changes, filter)
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
             setPadding(dp(if (watch) 25 else 24), dp(if (watch) 14 else 32), dp(if (watch) 25 else 24), dp(28))
@@ -53,21 +56,43 @@ class FocusActivity : AppCompatActivity() {
             text = label; isAllCaps = false; minHeight = dp(48); setOnClickListener { performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); action() }
             body.addView(this, LinearLayout.LayoutParams(-1, -2))
         }
+        if (!watch) {
+            watchStatus = text(13f).apply { accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
+            body.addView(watchStatus)
+        }
         primary = button("Start focus") { control() }
+        if (!watch) openWatch = button("Open on watch") { FocusHandoff.open(this); update() }
         if (watch) body.addView(sessions)
         end = button("End session") {
             MaterialAlertDialogBuilder(this).setTitle("End this focus session?").setMessage("Reset the current cycle and session count?")
                 .setNegativeButton("Keep session", null).setPositiveButton("End") { _, _ -> FocusStore.act(this, "end") }.show()
         }
         settings = button("Durations") { durations() }
-        button("Back to timers") { finish() }
+        button("Back to timers") {
+            packageManager.getLaunchIntentForPackage(packageName)?.let {
+                startActivity(it.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("orbit_tab", "Timer"))
+            }
+            finish()
+        }
         if (watch) body.addView(text(12f).apply { text = "Clockwise: start / resume\nAnticlockwise: pause" })
         Sync.refresh(this)
     }
-    override fun onResume() { super.onResume(); FocusStore.schedule(this); handler.post(tick) }
-    override fun onPause() { handler.removeCallbacks(tick); resetRotary(); super.onPause() }
+    override fun onResume() {
+        super.onResume(); setTurnScreenOn(watch && FocusHandoff.isOpening(this, intent.getStringExtra(FocusHandoff.EXTRA_NONCE)))
+        FocusStore.schedule(this); handler.removeCallbacks(tick); handler.post(tick)
+        window.decorView.post { FocusHandoff.visible(this) }
+    }
+    override fun onNewIntent(value: Intent) {
+        super.onNewIntent(value); setIntent(value)
+        setTurnScreenOn(watch && FocusHandoff.isOpening(this, value.getStringExtra(FocusHandoff.EXTRA_NONCE)))
+        update(); window.decorView.post { FocusHandoff.visible(this) }
+    }
+    override fun onPause() { setTurnScreenOn(false); handler.removeCallbacks(tick); resetRotary(); super.onPause() }
     override fun onDestroy() { unregisterReceiver(changes); handler.removeCallbacks(clearCue); super.onDestroy() }
-    override fun onWindowFocusChanged(hasFocus: Boolean) { super.onWindowFocusChanged(hasFocus); if (!hasFocus) resetRotary() }
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) resetRotary() else if (::face.isInitialized) window.decorView.post { FocusHandoff.visible(this) }
+    }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     private fun update() {
         val saved = FocusStore.read(this)
@@ -83,6 +108,14 @@ class FocusActivity : AppCompatActivity() {
         primary.text = when(s.status) { "Running" -> "Pause"; "Paused" -> "Resume"; "Complete" -> if (s.phase == "Focus") "Start break" else "Start focus"; else -> "Start focus" }
         settings.visibility = if (s.status == "Ready") View.VISIBLE else View.GONE
         end.visibility = if (s.status == "Ready") View.GONE else View.VISIBLE
+        watchStatus?.let {
+            it.text = FocusHandoff.statusText(this)
+            it.visibility = if (s.id.isNotEmpty() && it.text.isNotEmpty()) View.VISIBLE else View.GONE
+        }
+        openWatch?.apply {
+            visibility = if (s.id.isNotEmpty() && s.status != "Ready") View.VISIBLE else View.GONE
+            isEnabled = !FocusHandoff.isPending()
+        }
     }
     private fun control(action: String? = null) {
         val saved = FocusStore.read(this)

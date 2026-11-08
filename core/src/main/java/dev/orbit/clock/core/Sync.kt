@@ -30,6 +30,9 @@ object Sync {
     }
 }
 class SyncService : WearableListenerService() {
+    override fun onMessageReceived(event: MessageEvent) {
+        FocusHandoff.receive(this, event.sourceNodeId, event.path, event.data)
+    }
     override fun onDataChanged(events: DataEventBuffer) {
         events.forEach { if (it.type == DataEvent.TYPE_CHANGED) Sync.accept(this, it.dataItem) }
     }

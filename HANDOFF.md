@@ -1,5 +1,14 @@
 # Orbit Clock handoff
 
+## Consolidated build and phone-to-watch Focus handoff — verification in progress
+
+The user requested comparing 0.1.113 with the newer version and delivering one APK pair containing all repository changes from the other sessions. See [build consolidation](docs/BUILD_CONSOLIDATION.md). Main-branch alarm skip/resume work through845cf2d is included alongside the previously merged widget/watch/Pomodoro changes. A fresh main fetch is required before final delivery to catch concurrent session commits.
+
+Phone Focus Start/Resume now requests a reachable capable watch, prepares the exact session over the signed Wear message channel, then uses AndroidX RemoteActivityHelper to open a watch-only URI. A short-lived one-use ticket protects the launch; visible UI acknowledgment controls phone success status. Retry preserves the timer. State-only sync never reopens old screens. See docs/FOCUS.md for lock/offline/API limits. New APKs must be installed on both devices. Unit/build/lint and native receiver/URI scenarios are being checked; real paired-device transport is not yet verified.
+
+The standard publisher now creates version-specific debug-0.1.<build> releases in addition to debug-latest to avoid cross-chat version ambiguity. No new consolidated publication is claimed until its main build and assets are verified.
+
+
 ## Pomodoro Focus mode — verified preview delivery
 
 Source `ea52d0e` passed [cloud build 119](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41564872610): both APKs, all 12 unit tests, 82 core policy checks, 39 widget timing checks and both lints. [Focused runtime verification](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41564872807) passed all **17 phone / 23 watch checks** with real one-minute background alarms, notification Pause, explicit phase transitions, recreation persistence, state convergence, rotary thresholds/latch and End reset. Native phone/watch renders were inspected. Both APKs are version `0.1.119` / code `120` and retain the existing development certificate.

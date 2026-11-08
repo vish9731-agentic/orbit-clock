@@ -73,3 +73,8 @@ jobs:
           gh api --method PATCH "repos/$GH_REPO/git/refs/tags/debug-latest" -f sha="${{ github.sha }}" -F force=true >/dev/null
           gh release upload debug-latest downloads/*.apk --clobber
           gh release edit debug-latest --notes "Debug build ${{ github.run_number }} from commit ${{ github.sha }}. Install the matching phone and watch APKs."
+
+          version_tag="debug-0.1.${{ github.run_number }}"
+          if ! gh release view "$version_tag" >/dev/null 2>&1; then
+            gh release create "$version_tag" --target "${{ github.sha }}" --title "Orbit Clock 0.1.${{ github.run_number }}" --prerelease --notes "Version 0.1.${{ github.run_number }} (code $(( ${{ github.run_number }} + 1 ))) from commit ${{ github.sha }}. Matching phone and watch APKs from the successful main-branch build. Open Timer → Focus mode. Install each APK on its matching device over the existing app." downloads/*.apk
+          fi
