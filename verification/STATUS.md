@@ -1,5 +1,15 @@
 # Verification status
 
+## Pomodoro Focus mode — preview verified
+
+Source `ea52d0e`: [Actions build 119](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41564872610) passed both APKs, all 12 unit tests, 82 core checks, 39 widget checks and both lints. [Runtime run 41564872807](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41564872807) passed **17 Android15 phone / 23 Wear OS API33 checks**. These include actual one-minute background AlarmManager completion, notification controls, pause/resume, phase transitions, recreation, stale/replayed state handling, bezel direction/threshold/latch and confirmed-End cancellation/reset. Native renders were reviewed internally.
+
+The matching APK pair is version `0.1.119`, version code `120`. Both signatures match development certificate `d3c6b53474417ca21c9e094ffa4a1eefd021af614f6267a2c882b993397e4f4a`. Phone SHA-256: `29ced339aa2e64470450dcd9322f34c8ec3a89b38fa6be838c6339e48b2817cc`. Watch SHA-256: `19857e3b2e087d94a1b54805431deca7f531813b630c806f6a84e96e98cb7388`.
+
+[PR #4](https://github.com/vish9731-agentic/orbit-clock/pull/4) awaits explicit approval for default-branch integration. [Preview publication 41566241231](https://github.com/vish9731-agentic/orbit-clock/actions/runs/41566241231) succeeded and attached exactly these verified artifacts to [pomodoro-preview-0.1.119](https://github.com/vish9731-agentic/orbit-clock/releases/tag/pomodoro-preview-0.1.119). Both assets are uploaded; server-side SHA-256 digests match the signature-verified originals. This is not a debug-latest update or a main-branch merge. Widget integration remains deferred.
+
+The separate existing ringing workflow 41564872605 failed when both emulators disappeared (ADB exit255 / port5554 refused); broad ringing validation is not claimed. Physical watch direction/feel, real paired-device synchronization and hardware reliability remain acceptance checks. See [Focus behavior and limits](../docs/FOCUS.md).
+
 ## Apple-referenced pill stretch and expanding semicircular shimmer — verified debug 98
 
 The approved correction replaces straight light bands with two hollow, curved fronts expanding from the resting thumb’s semicircular endcaps. Cached radial gradients are clipped outward and to the rail. The phone receives two finite passes after 450ms over 1.8s, canceled by touch, lost focus, detach or reduced motion. No other-screen shimmer or hint prose is added.

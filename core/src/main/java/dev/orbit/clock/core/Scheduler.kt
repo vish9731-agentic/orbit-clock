@@ -40,6 +40,7 @@ object Scheduler {
         catch (_: SecurityException) { state(c).edit().remove("${a.id}.scheduled").commit() }
     }
     fun restore(c: Context) {
+        FocusStore.schedule(c)
         Store(c).all().forEach { schedule(c, it) }
         c.sendBroadcast(Intent(Store.CHANGED).setPackage(c.packageName))
     }

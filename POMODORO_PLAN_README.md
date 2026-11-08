@@ -1,6 +1,6 @@
 # Pomodoro / Focus Mode — saved planning notes
 
-Status: planning only; implementation deferred. Saved 2026-11-02.
+Status update 2026-11-02: user subsequently instructed "Proceed and build it." Phone/watch implementation is in PR #4 with successful cloud builds, unit/policy/lint checks and 17 phone / 23 watch runtime checks. The separate Pomodoro preview 0.1.119 is published; merging into main awaits explicit approval; widget integration remains deferred pending confirmation. See docs/FOCUS.md and HANDOFF.md for current implementation and verification. The original planning notes below are historical, not a restriction on the subsequent build authorization.
 
 ## User intent and next step
 

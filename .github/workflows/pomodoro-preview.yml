@@ -1,0 +1,51 @@
+name: Publish verified Pomodoro preview APKs
+on:
+  push:
+    branches: [feature/pomodoro-focus]
+    paths: ['.github/workflows/pomodoro-preview.yml']
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify the source build and completed Focus scenarios
+        run: |
+          gh api repos/$GH_REPO/actions/runs/41564872610 > build-run.json
+          gh api repos/$GH_REPO/actions/runs/41564872807 > focus-run.json
+          python3 - <<'PY'
+          import json
+          for path in ('build-run.json', 'focus-run.json'):
+              run = json.load(open(path))
+              assert run['conclusion'] == 'success', (path, run['conclusion'])
+              assert run['head_sha'] == 'ea52d0eb6d7f50a3c8b428f0fa6598cbfddce573', path
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: orbit-clock-debug-apks
+          run-id: 41564872610
+          github-token: ${{ github.token }}
+          path: apks
+      - name: Verify the APK bytes and publish separate test downloads
+        run: |
+          mkdir -p downloads
+          cp apks/phone/build/outputs/apk/debug/phone-debug.apk downloads/orbit-clock-phone-debug.apk
+          cp apks/wear/build/outputs/apk/debug/wear-debug.apk downloads/orbit-clock-watch-debug.apk
+          cat > downloads/SHA256SUMS <<'SUMS'
+          29ced339aa2e64470450dcd9322f34c8ec3a89b38fa6be838c6339e48b2817cc  downloads/orbit-clock-phone-debug.apk
+          19857e3b2e087d94a1b54805431deca7f531813b630c806f6a84e96e98cb7388  downloads/orbit-clock-watch-debug.apk
+          SUMS
+          sha256sum --check downloads/SHA256SUMS
+          if gh release view pomodoro-preview-0.1.119 >/dev/null 2>&1; then
+            gh release upload pomodoro-preview-0.1.119 downloads/*.apk --clobber
+            gh release edit pomodoro-preview-0.1.119 --draft=false --prerelease --notes-file docs/releases/pomodoro-preview-0.1.119.md
+          else
+            gh release create pomodoro-preview-0.1.119 --target ea52d0eb6d7f50a3c8b428f0fa6598cbfddce573 --title 'Pomodoro preview 0.1.119' --prerelease --notes-file docs/releases/pomodoro-preview-0.1.119.md downloads/*.apk
+          fi

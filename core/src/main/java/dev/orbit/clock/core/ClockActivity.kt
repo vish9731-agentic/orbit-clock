@@ -526,6 +526,7 @@ open class ClockActivity : AppCompatActivity() {
         }); update(); dialog.show(); OrbitMotion.bindTree(layout); OrbitMotion.enter(layout)
     }
     private fun timers() {
+        content.addView(button("Focus mode", icon = R.drawable.ic_timer) { startActivity(Intent(this, FocusActivity::class.java)) })
         val setup = card(color = colors.container); setup.addView(text("Set a timer", if (watch) 22f else 26f)); space(setup, 20)
         val minutes = input(setup, "Minutes", "5", numeric = true).apply { textSize = 42f; gravity = Gravity.CENTER; contentDescription = "Timer minutes" }
         val presets = row()
