@@ -130,7 +130,7 @@ public class ResumeProbe extends Instrumentation {
   plan=disable(id,Instant.now(),ZoneId.systemDefault());require(((Instant)get(plan,"skipped")).toEpochMilli()==occurrence,"Active occurrence was not the one skipped");
   require(!row(id).getBoolean("enabled") && state().getLong(id+".active",0)==0,"Turning off did not clear active alarm");
   option=options(plan).get(0);require(resume(plan,option,Instant.now(),ZoneId.systemDefault())!=null,"Active alarm did not resume later");
-  scheduled(id,at(option).toEpochMilli());clean(id);report("PASS snoozed wall-time recovery and actual silent receiver/ringing cancellation");
+  scheduled(id,at(option).toEpochMilli());clean(id);SystemClock.sleep(6500);report("PASS snoozed wall-time recovery and actual silent receiver/ringing cancellation");
  }
  View find(View root,String tag) {
   if(tag.equals(root.getTag()))return root;
@@ -237,6 +237,6 @@ public class ResumeProbe extends Instrumentation {
   calendarCases();leaseAndSyncCases();snoozeAndActive();uiCases();bedtimeSkip();
   if(scale.equals("100"))persistForRestart();
   main(()->{if(activity!=null)activity.finish();return null;});
-  result.putString("stream","ALARM_RESUME_RESULT_PASS: calendar suggestions, installed deadlines, safe leases, active/snoozed cases, native prompt/recreation/widget interactions at "+scale+"% text\n");finish(Activity.RESULT_OK,result);
+  result.putString("stream","ALARM_RESUME_RESULT_PASS: calendar suggestions, installed deadlines, safe leases, active/snoozed cases, native prompt/recreation/bedtime interactions at "+scale+"% text\n");finish(Activity.RESULT_OK,result);
  }catch(Throwable error){try{screenshot("failure");}catch(Throwable ignored){}result.putString("stream","ALARM_RESUME_FAILURE: "+android.util.Log.getStackTraceString(error));finish(Activity.RESULT_CANCELED,result);}}
 }

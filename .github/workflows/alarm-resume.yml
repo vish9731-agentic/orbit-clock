@@ -7,6 +7,7 @@ on:
       - 'core/src/main/java/dev/orbit/clock/core/AlarmResume*'
       - 'core/src/main/java/dev/orbit/clock/core/AlarmTiming.java'
       - 'core/src/main/java/dev/orbit/clock/core/Store.kt'
+      - 'core/src/main/java/dev/orbit/clock/core/RingingService.kt'
       - 'core/src/main/java/dev/orbit/clock/core/ClockActivity.kt'
       - 'phone/src/main/java/dev/orbit/clock/phone/AlarmWidget.kt'
       - 'phone/src/main/java/dev/orbit/clock/phone/MainActivity.kt'

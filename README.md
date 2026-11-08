@@ -17,6 +17,7 @@ Private repository: [vish9731-agentic/orbit-clock](https://github.com/vish9731-a
 ## What is implemented
 
 - Alarm creation/editing, labels, weekday repeats, enable/disable, sound/vibration and configurable snooze.
+- Smart temporary off: skip the next occurrence and choose an explicit resume date while keeping repeat days; weekday/weekend-aware choices and safe Keep off/cancel. See [smart feature ideas](docs/SMART_FEATURES.md).
 - Independent local alarm scheduling on phone and watch; persisted records and reboot/time/timezone restoration.
 - Wear Data Layer synchronization of alarms and connected snooze/dismiss changes, including deletion records.
 - Ringing screen with touch controls, sound, vibration and notifications. Rotary input accumulates to snooze or dismiss; direction and thresholds require testing on the actual watch.
