@@ -17,7 +17,10 @@ public final class AlarmTiming {
         if (!enabled || deleted) return null;
         if (snoozeUntil > now.toEpochMilli() && snoozeUntil > skipThrough)
             return Instant.ofEpochMilli(snoozeUntil);
-        LocalDate date = now.atZone(zone).toLocalDate();
+        // Temporary pauses may skip the next weekly occurrence, more than eight days
+        // from now. Search after the persisted cutoff instead of from today.
+        Instant searchFrom = skipThrough > now.toEpochMilli() ? Instant.ofEpochMilli(skipThrough) : now;
+        LocalDate date = searchFrom.atZone(zone).toLocalDate();
         for (int offset = 0; offset <= 8; offset++) {
             LocalDate day = date.plusDays(offset);
             if (!days.isEmpty() && !days.contains(day.getDayOfWeek().getValue())) continue;
