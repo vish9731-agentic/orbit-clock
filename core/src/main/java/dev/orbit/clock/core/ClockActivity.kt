@@ -351,11 +351,6 @@ open class ClockActivity : AppCompatActivity() {
                 contentDescription = "Edit ${alarm.label} at ${time(alarm.hour, alarm.minute)} ${period(alarm.hour)}"
                 setOnClickListener { OrbitMotion.tick(this); editAlarm(alarm) }
             }
-            if (!watch) {
-                clock.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, R.drawable.ic_edit, 0)
-                clock.compoundDrawablePadding = dp(10)
-                clock.compoundDrawablesRelative[2]?.setTint(colors.muted)
-            }
             line.addView(clock, LinearLayout.LayoutParams(0, dp(if (watch) 52 else 72), 1f))
             line.addView(MaterialSwitch(this).apply {
                 tag = "alarm_toggle:${alarm.id}"

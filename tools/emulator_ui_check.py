@@ -11,7 +11,7 @@ from PIL import Image, ImageChops, ImageStat
 import imageio_ffmpeg
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--scope', choices=['full', 'ringing-motion', 'motion', 'guidance', 'visual-cue', 'notifications', 'media-focus'], default='full')
+parser.add_argument('--scope', choices=['full', 'alarm-list', 'ringing-motion', 'motion', 'guidance', 'visual-cue', 'notifications', 'media-focus'], default='full')
 ARGS = parser.parse_args()
 
 OUT = Path('emulator-results')
@@ -504,7 +504,25 @@ try:
     adb('shell', 'settings', 'put', 'secure', 'show_ime_with_hard_keyboard', '1')
     adb('logcat', '-c')
     adb('shell', 'am', 'start', '-W', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
-    if ARGS.scope == 'full':
+    if ARGS.scope in ['full', 'alarm-list']:
+        startup_deadline = time.monotonic() + 30
+        closed_launcher = False
+        while time.monotonic() < startup_deadline:
+            startup_root = tree()
+            startup_nodes = list(startup_root.iter('node'))
+            launcher_anr = any(n.attrib.get('text', '').replace('’', "'").casefold() == "pixel launcher isn't responding" for n in startup_nodes)
+            if launcher_anr:
+                assert not closed_launcher, 'Pixel Launcher repeatedly failed during emulator setup'
+                close = next((n for n in startup_nodes if n.attrib.get('text', '').casefold() == 'close app'), None)
+                assert close is not None, 'Known launcher dialog has no Close app action'
+                tap_xy(xy(close)); closed_launcher = True
+                adb('shell', 'am', 'force-stop', 'com.google.android.apps.nexuslauncher')
+                adb('shell', 'am', 'start', '-W', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
+                print('UI SETUP: closed the unused Pixel Launcher ANR once', flush=True)
+            elif any(n.attrib.get('text') == 'No alarms yet' for n in startup_nodes):
+                break
+            else:
+                time.sleep(.3)
         find('No alarms yet'); passed('Material alarm empty state')
         screenshot('alarms-empty-light')
         click(desc='Add alarm'); find('New alarm')
@@ -515,16 +533,29 @@ try:
         screenshot('alarm-editor-light')
         tap_xy(xy(scroll_find('Save alarm'))); time.sleep(.5)
         find('Morning routine'); passed('Create labeled repeating alarm')
-        switch = find(desc='Morning routine enabled')
-        assert switch.attrib.get('checked') == 'true'
-        tap_xy(xy(switch)); find('Turn back on?'); click('Keep off')
-        assert find(desc='Morning routine enabled').attrib.get('checked') == 'false'
-        click(desc='Morning routine enabled'); passed('Alarm switch updates enabled state')
+        if ARGS.scope == 'full':
+            switch = find(desc='Morning routine enabled')
+            assert switch.attrib.get('checked') == 'true'
+            tap_xy(xy(switch)); find('Turn back on?'); click('Keep off')
+            assert find(desc='Morning routine enabled').attrib.get('checked') == 'false'
+            click(desc='Morning routine enabled'); passed('Alarm switch updates enabled state')
         adb('shell', 'am', 'force-stop', PKG)
         adb('shell', 'am', 'start', '-W', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
         find('Morning routine'); assert find(desc='Morning routine enabled').attrib.get('checked') == 'true'
         passed('Alarm survives process restart')
         screenshot('alarms-light')
+        click('Morning routine'); find('Edit alarm')
+        tap_xy(xy(scroll_find('Cancel'))); find('Morning routine')
+        passed('Alarm card opens its editor directly without a separate Edit control')
+        if ARGS.scope == 'alarm-list':
+            screenshot('alarms-tap-to-edit')
+            assert adb('shell', 'pidof', PKG).strip()
+            crashes = adb('logcat', '-d', '-b', 'crash')
+            (OUT / 'crashes.txt').write_text(crashes)
+            assert not crashes.strip(), crashes
+            (OUT / 'ui-checks.txt').write_text('\n'.join(checks) + '\n')
+            print(f'UI RESULT: {len(checks)} alarm-list checks passed', flush=True)
+            raise SystemExit(0)
         click('Clock'); find('London'); passed('World clocks navigation')
         click(desc='Add city'); fill('Paris'); click('Europe · Paris')
         scroll_find('Paris'); passed('Search and add a world clock')
