@@ -47,7 +47,7 @@ class RingingService : Service() {
                 // Fulfil the foreground-service contract even for a cancelled start.
                 val cancelled = Notification.Builder(this, "ringing")
                     .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-                    .setContentTitle("Alarm stopped").setSilent(true).setOnlyAlertOnce(true)
+                    .setContentTitle("Alarm stopped").setOnlyAlertOnce(true)
                     .setCategory(Notification.CATEGORY_SERVICE)
                 if (Build.VERSION.SDK_INT >= 31)
                     cancelled.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_DEFERRED)
