@@ -142,8 +142,16 @@ public class ResumeProbe extends Instrumentation {
  }
  View dialogView(String tag) throws Exception {Dialog dialog=sheet();return dialog==null||!dialog.isShowing()?null:find(dialog.getWindow().getDecorView(),tag);}
  void click(View view) throws Exception {
-  require(view!=null,"Missing click target");int[] bounds=main(()->{view.requestRectangleOnScreen(new Rect(0,0,view.getWidth(),view.getHeight()),true);int[] xy=new int[2];view.getLocationOnScreen(xy);return new int[]{xy[0],xy[1],view.getWidth(),view.getHeight()};});
-  SystemClock.sleep(120);long time=SystemClock.uptimeMillis();float x=bounds[0]+bounds[2]/2f,y=bounds[1]+bounds[3]/2f;
+  require(view!=null,"Missing click target");
+  main(()->{view.requestRectangleOnScreen(new Rect(0,0,view.getWidth(),view.getHeight()),true);return null;});
+  final int[][] last=new int[1][];final int[] stable={0};
+  waitFor(()->main(()->{
+   if(!view.isAttachedToWindow() || !view.hasWindowFocus() || !view.isShown() || view.getWidth()==0 || view.getHeight()==0){stable[0]=0;return false;}
+   int[] xy=new int[2];view.getLocationOnScreen(xy);int[] now={xy[0],xy[1],view.getWidth(),view.getHeight()};
+   boolean same=last[0]!=null;for(int i=0;i<4 && same;i++)if(Math.abs(now[i]-last[0][i])>1)same=false;
+   stable[0]=same?stable[0]+1:0;last[0]=now;return stable[0]>=3;
+  }),8000,"Touch target did not settle with window focus");
+  int[] bounds=last[0];long time=SystemClock.uptimeMillis();float x=bounds[0]+bounds[2]/2f,y=bounds[1]+bounds[3]/2f;
   MotionEvent down=MotionEvent.obtain(time,time,MotionEvent.ACTION_DOWN,x,y,0),up=MotionEvent.obtain(time,time+70,MotionEvent.ACTION_UP,x,y,0);
   down.setSource(InputDevice.SOURCE_TOUCHSCREEN);up.setSource(InputDevice.SOURCE_TOUCHSCREEN);sendPointerSync(down);sendPointerSync(up);down.recycle();up.recycle();waitForIdleSync();
  }
