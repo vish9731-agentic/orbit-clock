@@ -1,8 +1,10 @@
 # Orbit Clock handoff
 
-## Alarm-list edit affordance cleanup — verification pending
+## Alarm-list edit affordance cleanup — verified debug 0.1.130
 
-User requested removing the redundant Edit affordance because tapping an alarm already opens editing. The phone alarm time no longer attaches the pencil compound drawable or its padding/tint. Existing time/card taps, accessible edit descriptions, the enable switch and editor remain. Watch cards already had no phone-only pencil. Existing phone UI verification opens and cancels the saved alarm's editor from its card. Build/runtime verification pending. Preserve concurrent smart-resume, Focus and widget changes.
+User requested removing the redundant Edit affordance because tapping an alarm already opens editing. The phone alarm time no longer attaches the pencil compound drawable or its padding/tint. Existing time/card taps, accessible edit descriptions, the enable switch and editor remain. Watch cards already had no phone-only pencil. Existing phone UI verification opens and cancels the saved alarm's editor from its card. Verified debug **0.1.130**, published source `6e0bf4458a08ae64a9ce190b7a619d47dda7fe78`. [Build, unit/policy tests, both APKs and phone/watch lint](https://github.com/vish9731-agentic/orbit-clock/actions/runs/42486616387) passed. [Focused Android15 alarm-list verification](https://github.com/vish9731-agentic/orbit-clock/actions/runs/42486616508) passed all five checks: empty state, time picker, labeled repeating-alarm creation, process-restart persistence, and native card tap opening Edit alarm then Cancel returning to the list. The actual alarm-list render was inspected: no pencil icon beside the time. No app crashes were captured. Existing enable switch/editor, smart-resume, Focus and widget changes are preserved.
+
+The UI workflow has an alarm-list scope for this focused check. It stops the unused Pixel Launcher after installation and may close one explicitly identified Pixel Launcher ANR during startup; app or unknown ANRs are never dismissed. The initial run42486123383 failed behind that launcher dialog before app interactions and is superseded by the passing focused run.
 
 ## Smart next-occurrence skip — verified debug 129, included in debug 130
 
