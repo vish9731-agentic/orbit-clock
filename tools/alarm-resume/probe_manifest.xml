@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="dev.orbit.clock.resumeprobe">
+    <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="35" />
+    <application android:label="Orbit alarm resume verification" android:hasCode="true" />
+    <instrumentation android:name="dev.orbit.clock.resumeprobe.ResumeProbe"
+        android:targetPackage="dev.orbit.clock" android:functionalTest="true" />
+</manifest>
