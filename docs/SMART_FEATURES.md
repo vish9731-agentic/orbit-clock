@@ -14,6 +14,6 @@ Implemented: turn a recurring alarm off for its next occurrence, then choose an 
 | Forgotten-off reminder | At a chosen evening time, offer to restore a weekday alarm you left off; never silently enable it. |
 | Calendar-aware suggestions | With permission, suggest an earlier alarm for a specific early appointment, showing the proposed time before applying it. |
 | Snooze pattern suggestions | After repeated snoozing, offer a better default duration or wake time; change nothing without selection. |
-| Linked alarm handling | If several morning alarms form a group, offer to skip all for that day. |
+| Travel mode | On a time-zone change, offer local-time or home-time behavior and preview the next ring before applying it. |
 
 Suggestions must name the exact affected date/time, preserve saved repeats, and always offer Keep off/cancel. A weekday pattern suggests a routine; it does not establish employment, health or holiday plans. Do not infer a reason or alter schedules automatically.
