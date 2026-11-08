@@ -14,3 +14,5 @@ PRs #1 (watch precise alarm access), #2 (bezel aura), #3 (watch spring slider) a
 Build numbers are GitHub Actions run numbers, not counts of distinct features. Failed and PR builds consume numbers too. `debug-latest` is a moving link; an older chat may label that link 0.1.113 even after the assets have advanced. Consolidated main-branch publications also create `debug-0.1.<build>` releases with matching phone/watch APKs and a source commit, so a shared version-specific link is stable.
 
 The final delivered version, source and validation outcomes are recorded in HANDOFF.md and verification/STATUS.md after checks finish. Physical paired-device handoff still requires acceptance on the actual phone/watch; standalone emulators cannot prove Bluetooth delivery.
+
+Delivered: **0.1.135** / version code136, merge source `55d4bec255f5ef3dd48533ba71b48042641557df`, [matching APK release](https://github.com/vish9731-agentic/orbit-clock/releases/tag/debug-0.1.135). Main build and publication passed in Actions42488649926. The source passed 32 phone /46 watch Focus scenarios and smart-resume verification before merge. Hardware pairing remains unverified.

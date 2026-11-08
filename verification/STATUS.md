@@ -2,7 +2,7 @@
 
 Source `d7502f8`: Actions builds `42487981131` / `42487977954` passed both APKs, unit/policy tests and both lints. Focus native runs `42487976563` / `42487981104` passed **32 phone / 46 watch** checks each. Checks include inbound peer snapshots and acknowledgment, live displayed timers, full-record mismatch detection, stale/replay convergence, watch keep-screen-on and pause release, exact prepared session opening from Home, and one-use/stale/replayed handoff protection. Actual phone/watch sync and watch handoff PNGs were inspected. Smart alarm resume run `42487981495` passed. These standalone device scenarios exercise the incoming transport boundary; they do not prove physical paired Wear Data Layer delivery or remote broadcast handoff on Galaxy Watch4 Classic.
 
-Broader unrelated watch checks initially failed: bezel emulators lost adb with exit255; permission baseline did not expose the historical denied-permission prompt. Reruns pending; neither is recorded as passing. No signing identity changes. Consolidated publication pending.
+Broader unrelated watch checks and one rerun failed: bezel emulators lost adb with exit255; permission baseline did not expose the historical denied-permission prompt. Neither is recorded as passing. No signing identity changes. PR #5 merged as `55d4bec`. Main build/publish `42488649926` passed: release `debug-0.1.135`, both APKs version0.1.135/code136, preserved development certificate, artifact SHA256s matching GitHub release asset digests. See HANDOFF for complete source/digest record.
 
 # Verification status
 
