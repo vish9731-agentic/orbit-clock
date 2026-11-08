@@ -505,6 +505,24 @@ try:
     adb('logcat', '-c')
     adb('shell', 'am', 'start', '-W', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
     if ARGS.scope in ['full', 'alarm-list']:
+        startup_deadline = time.monotonic() + 30
+        closed_launcher = False
+        while time.monotonic() < startup_deadline:
+            startup_root = tree()
+            startup_nodes = list(startup_root.iter('node'))
+            launcher_anr = any(n.attrib.get('text', '').replace('’', "'").casefold() == "pixel launcher isn't responding" for n in startup_nodes)
+            if launcher_anr:
+                assert not closed_launcher, 'Pixel Launcher repeatedly failed during emulator setup'
+                close = next((n for n in startup_nodes if n.attrib.get('text', '').casefold() == 'close app'), None)
+                assert close is not None, 'Known launcher dialog has no Close app action'
+                tap_xy(xy(close)); closed_launcher = True
+                adb('shell', 'am', 'force-stop', 'com.google.android.apps.nexuslauncher')
+                adb('shell', 'am', 'start', '-W', '-n', PKG + '/dev.orbit.clock.phone.MainActivity')
+                print('UI SETUP: closed the unused Pixel Launcher ANR once', flush=True)
+            elif any(n.attrib.get('text') == 'No alarms yet' for n in startup_nodes):
+                break
+            else:
+                time.sleep(.3)
         find('No alarms yet'); passed('Material alarm empty state')
         screenshot('alarms-empty-light')
         click(desc='Add alarm'); find('New alarm')
