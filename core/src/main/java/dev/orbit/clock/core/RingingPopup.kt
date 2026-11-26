@@ -46,7 +46,7 @@ class RingingPopup(private val service: Context) {
         val bars = metrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
         val availableHeight = (bounds.height() - bars.top - bars.bottom - dp(16)).coerceAtLeast(1)
         val compact = availableHeight < dp(320)
-        val target = if (compact) 64 else 72
+        val target = 48
         // Duration changes update this window in place, preserving touch/accessibility focus.
         val key = listOf(alarm.id, at, alarm.label, alarm.snoozeMinutes, bounds.width(), bounds.height(),
             bars, service.resources.configuration.fontScale).joinToString("|")
@@ -62,7 +62,7 @@ class RingingPopup(private val service: Context) {
         }
         val root = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(20), dp(if (compact) 12 else 16), dp(20), dp(if (compact) 12 else 14))
+            setPadding(dp(14), dp(10), dp(14), dp(10))
             background = GradientDrawable().apply {
                 setColor(colors.containerHigh); cornerRadius = dp(28).toFloat()
                 setStroke(dp(1), MaterialColors.layer(colors.surface, colors.onSurface, .08f))
@@ -73,22 +73,32 @@ class RingingPopup(private val service: Context) {
         }
         fun button(value: String, description: String, prominent: Boolean, action: () -> Unit) = MaterialButton(context).apply {
             text = value; contentDescription = description; isAllCaps = false
-            textSize = if (prominent) 32f else 14f
+            textSize = if (prominent) 24f else 14f
             typeface = Typeface.create(Typeface.create("sans-serif", Typeface.NORMAL), if (prominent) 400 else 500, false)
             minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0
             setPadding(dp(8), 0, dp(8), 0)
             cornerRadius = dp(if (prominent) target / 2 else 24); insetTop = 0; insetBottom = 0
-            backgroundTintList = ColorStateList.valueOf(if (prominent) colors.primary else colors.primaryContainer)
-            setTextColor(if (prominent) colors.onPrimary else colors.onPrimaryContainer)
+            backgroundTintList = ColorStateList.valueOf(if (prominent) colors.primary else colors.secondaryContainer)
+            setTextColor(if (prominent) colors.onPrimary else colors.onSecondaryContainer)
+            if (prominent) setAutoSizeTextTypeUniformWithConfiguration(18, 24, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
             setOnClickListener { OrbitMotion.tick(this); action() }
             OrbitMotion.bind(this)
         }
 
         // Time leads; the smaller duration readout stays between generous controls.
-        clock = label("", if (compact) 40f else 45f, colors.onSurface).apply {
+        val header = row()
+        clock = label("", if (compact) 32f else 36f, colors.onSurface).apply {
             tag = "popup_clock"; maxLines = 1; fontFeatureSettings = "tnum"; letterSpacing = -.015f
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
         }
-        root.addView(clock, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(if (compact) 8 else 12) })
+        header.addView(clock, LinearLayout.LayoutParams(0, -2, 1f))
+        val name = alarm.label.trim().ifBlank { "Alarm" }
+        header.addView(label(name, 11f, colors.muted).apply {
+            tag = "popup_label"; maxLines = 1; maxWidth = dp(64); ellipsize = TextUtils.TruncateAt.END
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            contentDescription = "Alarm label: " + name
+        }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
+        root.addView(header, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
         val durationRow = row()
         decrease = button("−", "Decrease snooze by 5 minutes", true) {
             RingControls.select(service, alarm.id, at,
@@ -103,7 +113,7 @@ class RingingPopup(private val service: Context) {
             tag = "popup_duration"; isFocusable = true
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
-            durationValue = label("", 18f, colors.primary, 500).apply {
+            durationValue = label("", 16f, colors.primary, 500).apply {
                 fontFeatureSettings = "tnum"; maxLines = 1
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }
@@ -117,7 +127,7 @@ class RingingPopup(private val service: Context) {
             marginStart = dp(8); marginEnd = dp(8)
         })
         durationRow.addView(increase, LinearLayout.LayoutParams(dp(target), dp(target)))
-        root.addView(durationRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(if (compact) 8 else 12) })
+        root.addView(durationRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
 
         val actions = row().apply { tag = "popup_actions" }
         snooze = button("Snooze", "", false) {
@@ -128,11 +138,6 @@ class RingingPopup(private val service: Context) {
             Scheduler.act(service, alarm.id, at, false)
         }, LinearLayout.LayoutParams(0, dp(48), 1f))
         root.addView(actions, LinearLayout.LayoutParams(-1, -2))
-        val name = alarm.label.trim().ifBlank { "Alarm" }
-        root.addView(label(name, 12f, colors.muted).apply {
-            tag = "popup_label"; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
-            contentDescription = "Alarm label: " + name
-        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
         updateDuration(minutes)
         updateClock()
 
