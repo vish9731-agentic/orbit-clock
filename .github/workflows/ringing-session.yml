@@ -17,6 +17,16 @@ permissions:
 jobs:
   native:
     if: ${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[ui:ringing-session]') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 35
+            scope: popup
+          - api: 35
+            scope: screen
+          - api: 34
+            scope: all
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -49,7 +59,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           emulator-build: '12234392' # Emulator35.1.20, supports the Android15 test image
-          api-level: 35
+          api-level: ${{ matrix.api }}
           target: google_apis
           arch: x86_64
           profile: pixel_6
@@ -75,7 +85,7 @@ jobs:
             adb shell appops set dev.orbit.clock SCHEDULE_EXACT_ALARM allow
             adb shell appops set dev.orbit.clock USE_FULL_SCREEN_INTENT ignore
             adb shell settings put system font_scale 1.0
-            bash tools/ringing-session/run-on-device.sh
+            bash tools/ringing-session/run-on-device.sh '${{ matrix.scope }}'
       - name: Runner diagnostics
         if: always()
         run: |
@@ -84,6 +94,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ringing-session-feedback
+          name: ringing-session-feedback-api${{ matrix.api }}-${{ matrix.scope }}
           retention-days: 3
           path: session-feedback/
