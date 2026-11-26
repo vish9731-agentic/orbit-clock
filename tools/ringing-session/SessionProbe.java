@@ -21,6 +21,8 @@ import java.util.concurrent.*;
 public class SessionProbe extends Instrumentation {
  Context c; Class<?> storeClass,alarmClass,controlsClass; Object storeCompanion,controls;
  Activity ringing; String scale,scope;
+ Map<String,String> lastPlayerSnapshot=Collections.emptyMap();
+ final StringBuilder mediaTrace=new StringBuilder();
  interface Check{boolean ok()throws Exception;}
  <T>T main(Callable<T> action)throws Exception{
   FutureTask<T> f=new FutureTask<>(action);
@@ -57,7 +59,7 @@ public class SessionProbe extends Instrumentation {
   XmlPullParser parser=Xml.newPullParser();parser.setInput(new StringReader(xml));int type;
   while((type=parser.next())!=XmlPullParser.END_DOCUMENT)if(type==XmlPullParser.START_TAG){String name=parser.getAttributeValue(null,"name");if(name!=null){String value=parser.getAttributeValue(null,"value");if(value==null)value=parser.nextText();result.put(name,value);}}
   if(!result.containsKey("playing") || !result.containsKey("events"))throw new IOException("Incomplete player snapshot");
-  return result;
+  lastPlayerSnapshot=result;return result;
  }
  Map<String,String> player()throws Exception{Exception last=null;for(int i=0;i<12;i++)try{return readPlayer();}catch(org.xmlpull.v1.XmlPullParserException|IOException error){last=error;SystemClock.sleep(80);}throw last;}
  boolean playing()throws Exception{return "true".equals(player().get("playing"));}
@@ -67,12 +69,30 @@ public class SessionProbe extends Instrumentation {
   shell("am start -W -f 0x10008000 -n dev.orbit.focusprobe/.ProbeActivity --es mode "+mode);
   waitFor(()->playing() && mode.equals(player().get("mode")),15000,"Media fixture did not start "+mode);
   waitFor(()->c.getSystemService(AudioManager.class).isMusicActive(),10000,"Native media stream not active");
+  traceMedia("player-ready:"+mode);
  }
- void paused()throws Exception{waitFor(()->!playing() && player().get("events").contains("media_pause;"),10000,"Alarm did not pause media");}
+ void paused()throws Exception{waitFor(()->!playing() && player().get("events").contains("media_pause;"),10000,"Alarm did not pause media");traceMedia("alarm-paused-player");}
  void resumed(int before)throws Exception{
+  traceMedia("expecting-resume");
   waitFor(()->playing(),10000,"Previously playing media did not resume");
   require(plays()>before,"No explicit Play delivered for the interrupted player");int position=Integer.parseInt(player().get("position"));
   waitFor(()->playing() && Integer.parseInt(player().get("position"))!=position,5000,"Resumed media did not advance");
+  traceMedia("playback-resumed");
+ }
+ // Cheap observations use the last existing player read, without extra shell I/O
+ // between pause and a button tap that could accidentally hide a timing race.
+ void traceMedia(String stage){
+  mediaTrace.append(SystemClock.uptimeMillis()).append(' ').append(stage).append(' ');
+  try{AudioManager manager=c.getSystemService(AudioManager.class);mediaTrace.append("isMusicActive=").append(manager.isMusicActive()).append(" playback=").append(manager.getActivePlaybackConfigurations());}catch(Throwable error){mediaTrace.append(error);}
+  mediaTrace.append(" cachedPlayer=").append(lastPlayerSnapshot).append('\n');
+ }
+ void dumpFailureDiagnostics(){
+  traceMedia("failure");StringBuilder out=new StringBuilder(mediaTrace);
+  try{out.append("\nPLAYER_NOW\n").append(player());}catch(Throwable error){out.append("\nPLAYER_READ_ERROR ").append(error);}
+  try{out.append("\nORBIT_RECORDS\n").append(c.getSharedPreferences("alarms",0).getAll()).append("\nOCCURRENCES\n").append(state().getAll());}catch(Throwable error){out.append("\nORBIT_STATE_ERROR ").append(error);}
+  for(String command:new String[]{"dumpsys media_session","dumpsys audio","dumpsys activity services dev.orbit.clock"})try{out.append("\nCOMMAND ").append(command).append('\n').append(shell(command));}catch(Throwable error){out.append("\nDUMP_ERROR ").append(error);}
+  try{File dir=new File(c.getFilesDir(),"session-feedback");dir.mkdirs();try(FileOutputStream file=new FileOutputStream(new File(dir,"failure-diagnostics-"+scale+".txt"))){file.write(out.toString().getBytes("UTF-8"));}}catch(Throwable ignored){}
+  Bundle status=new Bundle();status.putString("stream","MEDIA_TRACE\n"+mediaTrace);sendStatus(0,status);
  }
  void action(String id,String action)throws Exception{
   long at=occurrence(id);Object saved=storeClass.getMethod("get",String.class).invoke(store(),id);
@@ -161,7 +181,7 @@ public class SessionProbe extends Instrumentation {
   require(row(id).getInt("snoozeMinutes")==10,"Popup adjusted saved default");clean(id);pass("persistent popup plus/Snooze resumes music with occurrence-only duration");
   startPlayer("music");id=fixture("Permission revoked",7000);delivered(id);paused();popupVisible();shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW deny");popupGone();
   require(active(id) && !playing(),"Permission revocation silenced or resolved alarm");action(id,"stop");resumed(0);clean(id);pass("permission revocation safely falls back to notification; Stop resumes media");
-  shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW allow");startPlayer("music");id=fixture("Popup Stop",7000);delivered(id);paused();popupVisible();clickPopup("Stop");
+  shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW allow");startPlayer("music");id=fixture("Popup Stop",7000);delivered(id);paused();popupVisible();traceMedia("before-popup-stop");clickPopup("Stop");
   final String stopId=id;waitFor(()->!row(stopId).getBoolean("enabled"),7000,"Popup Stop did not stop");resumed(0);popupGone();clean(id);pass("persistent popup Stop commits and resumes previous music");
  }
  void screenCase()throws Exception{
@@ -202,5 +222,5 @@ public class SessionProbe extends Instrumentation {
   if(scope.equals("all") || scope.equals("screen"))screenCase();
   shell("am force-stop dev.orbit.focusprobe");
   result.putString("stream","RINGING_SESSION_RESULT_PASS scope="+scope+" api="+Build.VERSION.SDK_INT+" at "+scale+"% text\n");finish(Activity.RESULT_OK,result);
- }catch(Throwable error){try{capture("failure");}catch(Throwable ignored){}result.putString("stream","RINGING_SESSION_FAILURE scope="+scope+" api="+Build.VERSION.SDK_INT+": "+android.util.Log.getStackTraceString(error));finish(Activity.RESULT_CANCELED,result);}}
+ }catch(Throwable error){dumpFailureDiagnostics();try{capture("failure");}catch(Throwable ignored){}result.putString("stream","RINGING_SESSION_FAILURE scope="+scope+" api="+Build.VERSION.SDK_INT+": "+android.util.Log.getStackTraceString(error));finish(Activity.RESULT_CANCELED,result);}}
 }
