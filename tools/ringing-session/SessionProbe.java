@@ -20,9 +20,18 @@ import java.util.concurrent.*;
 /** Same-key instrumentation and a separate real media app. Never ships in Orbit. */
 public class SessionProbe extends Instrumentation {
  Context c; Class<?> storeClass,alarmClass,controlsClass; Object storeCompanion,controls;
- Activity ringing; String scale;
+ Activity ringing; String scale,scope;
  interface Check{boolean ok()throws Exception;}
- <T>T main(Callable<T> action)throws Exception{FutureTask<T> f=new FutureTask<>(action);runOnMainSync(f);return f.get();}
+ <T>T main(Callable<T> action)throws Exception{
+  FutureTask<T> f=new FutureTask<>(action);
+  require(new Handler(Looper.getMainLooper()).post(f),"Main queue rejected test action");
+  return f.get(15,TimeUnit.SECONDS);
+ }
+ void idle()throws Exception{
+  CountDownLatch ready=new CountDownLatch(1);
+  require(new Handler(Looper.getMainLooper()).post(()->Looper.myQueue().addIdleHandler(()->{ready.countDown();return false;})),"Main queue rejected idle observer");
+  require(ready.await(10,TimeUnit.SECONDS),"Main queue did not become idle within10s");
+ }
  void require(boolean b,String message){if(!b)throw new AssertionError(message);}
  void waitFor(Check condition,long limit,String message)throws Exception{long end=SystemClock.uptimeMillis()+limit;while(SystemClock.uptimeMillis()<end){if(condition.ok())return;SystemClock.sleep(100);}throw new AssertionError(message);}
  String shell(String command)throws Exception{try(ParcelFileDescriptor fd=getUiAutomation().executeShellCommand(command);InputStream input=new ParcelFileDescriptor.AutoCloseInputStream(fd)){ByteArrayOutputStream bytes=new ByteArrayOutputStream();byte[] buffer=new byte[8192];int n;while((n=input.read(buffer))!=-1)bytes.write(buffer,0,n);return bytes.toString("UTF-8");}}
@@ -100,8 +109,8 @@ public class SessionProbe extends Instrumentation {
   pass("both adjustment glyphs are visible in actual hardware-display pixels at "+scale+"% text");
  }
 
- void tap(float x,float y){long now=SystemClock.uptimeMillis();for(int action:new int[]{MotionEvent.ACTION_DOWN,MotionEvent.ACTION_UP}){MotionEvent e=MotionEvent.obtain(now,SystemClock.uptimeMillis(),action,x,y,0);e.setSource(InputDevice.SOURCE_TOUCHSCREEN);getUiAutomation().injectInputEvent(e,true);e.recycle();}waitForIdleSync();}
- void swipe(float x,float y,float endX,float endY){long down=SystemClock.uptimeMillis();for(int i=0;i<=12;i++){int action=i==0?MotionEvent.ACTION_DOWN:i==12?MotionEvent.ACTION_UP:MotionEvent.ACTION_MOVE;float f=i/12f;MotionEvent e=MotionEvent.obtain(down,SystemClock.uptimeMillis(),action,x+(endX-x)*f,y+(endY-y)*f,0);e.setSource(InputDevice.SOURCE_TOUCHSCREEN);getUiAutomation().injectInputEvent(e,true);e.recycle();SystemClock.sleep(25);}waitForIdleSync();}
+ void tap(float x,float y)throws Exception{long now=SystemClock.uptimeMillis();for(int action:new int[]{MotionEvent.ACTION_DOWN,MotionEvent.ACTION_UP}){MotionEvent e=MotionEvent.obtain(now,SystemClock.uptimeMillis(),action,x,y,0);e.setSource(InputDevice.SOURCE_TOUCHSCREEN);getUiAutomation().injectInputEvent(e,true);e.recycle();}idle();}
+ void swipe(float x,float y,float endX,float endY)throws Exception{long down=SystemClock.uptimeMillis();for(int i=0;i<=12;i++){int action=i==0?MotionEvent.ACTION_DOWN:i==12?MotionEvent.ACTION_UP:MotionEvent.ACTION_MOVE;float f=i/12f;MotionEvent e=MotionEvent.obtain(down,SystemClock.uptimeMillis(),action,x+(endX-x)*f,y+(endY-y)*f,0);e.setSource(InputDevice.SOURCE_TOUCHSCREEN);getUiAutomation().injectInputEvent(e,true);e.recycle();SystemClock.sleep(25);}idle();}
  void capture(String name)throws Exception{Bitmap b=getUiAutomation().takeScreenshot();require(b!=null,"No display capture");File dir=new File(c.getFilesDir(),"session-feedback");dir.mkdirs();try(FileOutputStream out=new FileOutputStream(new File(dir,name+"-"+scale+".png"))){b.compress(Bitmap.CompressFormat.PNG,100,out);}b.recycle();}
  void mediaCases()throws Exception{
   shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW deny");startPlayer("music");
@@ -118,12 +127,24 @@ public class SessionProbe extends Instrumentation {
   waitFor(()->!c.getSystemService(AudioManager.class).isMusicActive(),5000,"Paused stream still active");before=plays();a=fixture("Already paused",7000);delivered(a);action(a,"stop");SystemClock.sleep(1200);
   require(!playing() && plays()==before,"Alarm started previously paused media");clean(a);pass("already-paused media is never started");
  }
- void popupAndScreen()throws Exception{
+ void popupCases()throws Exception{
   shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW allow");startPlayer("music");String id=fixture("Persistent alarm test",7000);delivered(id);paused();popupVisible();SystemClock.sleep(200);capture("persistent-popup");assertAdjustmentGlyphs();
   Rect bounds=new Rect();popup().getBoundsInScreen(bounds);float density=c.getResources().getDisplayMetrics().density;
   swipe(bounds.left+24*density,bounds.top+20*density,bounds.right-24*density,bounds.top+20*density);popupVisible();require(active(id) && !playing(),"Swipe dismissed popup or resumed playback");
   shell("input keyevent BACK");popupVisible();require(active(id),"Back outside alarm dismissed popup");
   pass("granted persistent popup survives horizontal swipe and Back without resolving the alarm");
+  // Popup selection is shared with notification and full-screen controls.
+  clickPopup("Increase snooze by 5 minutes");waitFor(()->find(popup(),"Snooze duration: 15 minutes")!=null,6000,"Popup duration did not update");
+  clickPopup("Snooze");final String snoozeId=id;waitFor(()->!active(snoozeId),7000,"Persistent popup Snooze did not act");resumed(0);popupGone();
+  require(row(id).getInt("snoozeMinutes")==10,"Popup adjusted saved default");clean(id);pass("persistent popup plus/Snooze resumes music with occurrence-only duration");
+  startPlayer("music");id=fixture("Permission revoked",7000);delivered(id);paused();popupVisible();shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW deny");popupGone();
+  require(active(id) && !playing(),"Permission revocation silenced or resolved alarm");action(id,"stop");resumed(0);clean(id);pass("permission revocation safely falls back to notification; Stop resumes media");
+  shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW allow");startPlayer("music");id=fixture("Popup Stop",7000);delivered(id);paused();popupVisible();clickPopup("Stop");
+  final String stopId=id;waitFor(()->!row(stopId).getBoolean("enabled"),7000,"Popup Stop did not stop");resumed(0);popupGone();clean(id);pass("persistent popup Stop commits and resumes previous music");
+ }
+ void screenCase()throws Exception{
+  shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW allow");startPlayer("music");
+  String id=fixture("Full screen Back and Home test",7000);delivered(id);paused();popupVisible();
   ActivityMonitor ringingMonitor=addMonitor("dev.orbit.clock.core.RingActivity",null,false);
   try {
    PendingIntent launch=null;
@@ -137,27 +158,27 @@ public class SessionProbe extends Instrumentation {
    require(ringing!=null,"Ringing notification did not launch RingActivity within15s");
    launchStep.putString("stream","STEP RingActivity matched by bounded monitor\n");sendStatus(0,launchStep);
   } finally { removeMonitor(ringingMonitor); }
-  waitForIdleSync();waitFor(()->main(()->ringing.hasWindowFocus()),7000,"Ringing screen not focused");popupGone();
+  idle();waitFor(()->main(()->ringing.hasWindowFocus()),7000,"Ringing screen not focused");popupGone();
   sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);SystemClock.sleep(400);require(main(()->!ringing.isFinishing() && ringing.hasWindowFocus()) && active(id),"Back dismissed active ringing screen");
   capture("full-screen-back-blocked");pass("full ringing screen blocks Back while the occurrence is active");
   shell("input keyevent HOME");popupVisible();require(active(id) && !playing(),"Home resolved alarm or resumed media");
-  // Popup selection is shared with notification and full-screen controls.
   clickPopup("Increase snooze by 5 minutes");waitFor(()->find(popup(),"Snooze duration: 15 minutes")!=null,6000,"Popup duration did not update");
-  clickPopup("Snooze");final String snoozeId=id;waitFor(()->!active(snoozeId),7000,"Persistent popup Snooze did not act");resumed(0);popupGone();
-  require(row(id).getInt("snoozeMinutes")==10,"Popup adjusted saved default");clean(id);pass("Home retains persistent controls; real popup plus/Snooze resumes music with occurrence-only duration");
-  startPlayer("music");id=fixture("Permission revoked",7000);delivered(id);paused();popupVisible();shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW deny");popupGone();
-  require(active(id) && !playing(),"Permission revocation silenced or resolved alarm");action(id,"stop");resumed(0);clean(id);pass("permission revocation safely falls back to notification; Stop resumes media");
-  shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW allow");startPlayer("music");id=fixture("Popup Stop",7000);delivered(id);paused();popupVisible();clickPopup("Stop");
-  final String stopId=id;waitFor(()->!row(stopId).getBoolean("enabled"),7000,"Popup Stop did not stop");resumed(0);popupGone();clean(id);pass("persistent popup Stop commits and resumes previous music");
+  clickPopup("Snooze");waitFor(()->!active(id),7000,"Home popup Snooze did not act");resumed(0);popupGone();
+  require(row(id).getInt("snoozeMinutes")==10,"Popup adjusted saved default");clean(id);
+  pass("independent full-screen fixture: actual notification launch, Back blocking, Home handoff and occurrence-only popup Snooze resume");
  }
- @Override public void onCreate(Bundle arguments){super.onCreate(arguments);scale=arguments.getString("scale","100");start();}
+ @Override public void onCreate(Bundle arguments){super.onCreate(arguments);scale=arguments.getString("scale","100");scope=arguments.getString("scope","all");start();}
  @Override public void onStart(){Bundle result=new Bundle();try{
   c=getTargetContext();ClassLoader loader=c.getClassLoader();storeClass=Class.forName("dev.orbit.clock.core.Store",true,loader);alarmClass=Class.forName("dev.orbit.clock.core.Alarm",true,loader);
   controlsClass=Class.forName("dev.orbit.clock.core.RingControls",true,loader);
   storeCompanion=storeClass.getField("Companion").get(null);controls=controlsClass.getField("INSTANCE").get(null);
   AccessibilityServiceInfo info=getUiAutomation().getServiceInfo();info.flags|=AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;getUiAutomation().setServiceInfo(info);
   require(Math.abs(c.getResources().getConfiguration().fontScale-Float.parseFloat(scale)/100f)<.04f,"Wrong actual text scale");
-  mediaCases();popupAndScreen();shell("am force-stop dev.orbit.focusprobe");
-  result.putString("stream","RINGING_SESSION_RESULT_PASS at "+scale+"% text\n");finish(Activity.RESULT_OK,result);
- }catch(Throwable error){try{capture("failure");}catch(Throwable ignored){}result.putString("stream","RINGING_SESSION_FAILURE: "+android.util.Log.getStackTraceString(error));finish(Activity.RESULT_CANCELED,result);}}
+  require(scope.equals("all") || scope.equals("popup") || scope.equals("screen"),"Unknown test scope "+scope);
+  Bundle scopeStep=new Bundle();scopeStep.putString("stream","STEP scope="+scope+" api="+Build.VERSION.SDK_INT+" text="+scale+"%\n");sendStatus(0,scopeStep);
+  if(scope.equals("all") || scope.equals("popup")){mediaCases();popupCases();}
+  if(scope.equals("all") || scope.equals("screen"))screenCase();
+  shell("am force-stop dev.orbit.focusprobe");
+  result.putString("stream","RINGING_SESSION_RESULT_PASS scope="+scope+" api="+Build.VERSION.SDK_INT+" at "+scale+"% text\n");finish(Activity.RESULT_OK,result);
+ }catch(Throwable error){try{capture("failure");}catch(Throwable ignored){}result.putString("stream","RINGING_SESSION_FAILURE scope="+scope+" api="+Build.VERSION.SDK_INT+": "+android.util.Log.getStackTraceString(error));finish(Activity.RESULT_CANCELED,result);}}
 }
