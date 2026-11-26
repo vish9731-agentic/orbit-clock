@@ -96,7 +96,7 @@ def run(ui):
         tap((int(l+(r-l)*(.24 if snooze else .76)),int((t+b)/2)))
         adb('shell','cmd','statusbar','collapse');time.sleep(1)
     def resumed(mode):
-        p=await_player(lambda p:p.get('mode')==mode and p.get('playing')=='true' and 'focus:1;' in p.get('events',''),mode+' did not regain focus')
+        p=await_player(lambda p:p.get('mode')==mode and p.get('playing')=='true' and ('focus:1;' in p.get('events','') or 'media_play;' in p.get('events','')),mode+' did not regain focus')
         (out/(mode+'-resumed.txt')).write_text(str(p))
 
     adb('shell','appops','set',pkg,'USE_FULL_SCREEN_INTENT','ignore')
@@ -129,13 +129,11 @@ def run(ui):
     snoozed=await_record(video['id'],lambda a:a['skipThrough']==video['snoozeUntil'] and a['snoozeUntil']>before,'Video alarm did not snooze');assert snoozed['snoozeMinutes']==video['snoozeMinutes']
     assert before+10*60000<=snoozed['snoozeUntil']<=int(adb('shell','date','+%s').strip())*1000+10*60000+1000
     assert_scheduled(video['id'],snoozed['snoozeUntil'])
-    if video_owned_focus:resumed('video')
-    else:
-        time.sleep(.65);p=player()
-        assert p['playing']=='false' and 'focus:1;' not in p['events'],p
+    resumed('video')
+    advancing('video')
     audio=adb('shell','dumpsys','audio')
     assert not any('-- pack: '+pkg+' --' in line and 'gain: GAIN_TRANSIENT_EXCLUSIVE' in line for line in audio.splitlines())
     (out/'video-after-snooze.txt').write_text(str(player()))
-    passed('Snoozing ends alarm audio, cleans up any focus request and preserves the alarm default without forcing video playback')
+    passed('Snoozing ends alarm audio, cleans up any focus request and preserves the alarm default and resumes the previously playing video')
     adb('shell','am','force-stop',PROBE)
     main()
