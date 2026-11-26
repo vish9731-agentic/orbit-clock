@@ -56,7 +56,7 @@ jobs:
           if test -e /sys/module/kvm/parameters/ignore_msrs; then
             echo 1 | sudo tee /sys/module/kvm/parameters/ignore_msrs
           fi
-      - name: Verify persistent controls and media at normal and large text
+      - name: Verify portrait and landscape UI at normal and large text
         uses: reactivecircus/android-emulator-runner@v2
         with:
           emulator-build: '12234392' # Emulator35.1.20, supports the Android15 test image
