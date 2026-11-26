@@ -124,9 +124,20 @@ public class SessionProbe extends Instrumentation {
   swipe(bounds.left+24*density,bounds.top+20*density,bounds.right-24*density,bounds.top+20*density);popupVisible();require(active(id) && !playing(),"Swipe dismissed popup or resumed playback");
   shell("input keyevent BACK");popupVisible();require(active(id),"Back outside alarm dismissed popup");
   pass("granted persistent popup survives horizontal swipe and Back without resolving the alarm");
-  Intent intent=new Intent().setClassName(c.getPackageName(),"dev.orbit.clock.core.RingActivity").putExtra("id",id).putExtra("at",occurrence(id)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-  Bundle launchStep=new Bundle();launchStep.putString("stream","STEP launching full ringing activity\n");sendStatus(0,launchStep);
-  ringing=startActivitySync(intent);launchStep.putString("stream","STEP full ringing activity launched\n");sendStatus(0,launchStep);waitForIdleSync();waitFor(()->main(()->ringing.hasWindowFocus()),7000,"Ringing screen not focused");popupGone();
+  ActivityMonitor ringingMonitor=addMonitor("dev.orbit.clock.core.RingActivity",null,false);
+  try {
+   PendingIntent launch=null;
+   for(android.service.notification.StatusBarNotification notification:c.getSystemService(NotificationManager.class).getActiveNotifications())
+    if(notification.getId()==1){launch=notification.getNotification().contentIntent;break;}
+   require(launch!=null && c.getPackageName().equals(launch.getCreatorPackage()),"Actual ringing notification content intent missing");
+   Bundle launchStep=new Bundle();launchStep.putString("stream","STEP sending actual ringing notification content intent\n");sendStatus(0,launchStep);
+   launch.send();
+   launchStep.putString("stream","STEP notification content intent sent; waiting for RingActivity\n");sendStatus(0,launchStep);
+   ringing=ringingMonitor.waitForActivityWithTimeout(15000);
+   require(ringing!=null,"Ringing notification did not launch RingActivity within15s");
+   launchStep.putString("stream","STEP RingActivity matched by bounded monitor\n");sendStatus(0,launchStep);
+  } finally { removeMonitor(ringingMonitor); }
+  waitForIdleSync();waitFor(()->main(()->ringing.hasWindowFocus()),7000,"Ringing screen not focused");popupGone();
   sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);SystemClock.sleep(400);require(main(()->!ringing.isFinishing() && ringing.hasWindowFocus()) && active(id),"Back dismissed active ringing screen");
   capture("full-screen-back-blocked");pass("full ringing screen blocks Back while the occurrence is active");
   shell("input keyevent HOME");popupVisible();require(active(id) && !playing(),"Home resolved alarm or resumed media");
