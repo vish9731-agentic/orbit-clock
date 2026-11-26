@@ -21,13 +21,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - api: 35
-            scope: popup
-            runner: tools/ringing-session/run-on-device.sh popup
-          - api: 35
-            scope: tiles
-            runner: tools/alarm-tile-info/run-on-device.sh
+        include: >-
+          ${{ fromJSON(
+            contains(github.event.head_commit.message, '[ui:tiles-only]')
+            && '[{"api":35,"scope":"tiles","runner":"tools/alarm-tile-info/run-on-device.sh"}]'
+            || '[{"api":35,"scope":"popup","runner":"tools/ringing-session/run-on-device.sh popup"},{"api":35,"scope":"tiles","runner":"tools/alarm-tile-info/run-on-device.sh"}]'
+          ) }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
