@@ -39,7 +39,7 @@ class RingingPopup(private val service: Context) {
         if (!eligible || alarm == null) { hide(); return }
         val minutes = RingControls.minutes(service, alarm, at)
         // Duration changes update this window in place, preserving touch/accessibility focus.
-        val key = listOf(alarm.id, at, alarm.label, service.resources.displayMetrics.widthPixels,
+        val key = listOf(alarm.id, at, alarm.label, alarm.snoozeMinutes, service.resources.displayMetrics.widthPixels,
             service.resources.displayMetrics.heightPixels, service.resources.configuration.fontScale).joinToString("|")
         if (panel != null && identity == key) { updateClock(); updateDuration(minutes); return }
         hide()
