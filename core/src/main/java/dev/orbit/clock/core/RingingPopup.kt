@@ -13,7 +13,9 @@ import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import android.view.WindowInsets
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.DynamicColors
@@ -38,14 +40,20 @@ class RingingPopup(private val service: Context) {
             Scheduler.isActive(service, alarm, at)
         if (!eligible || alarm == null) { hide(); return }
         val minutes = RingControls.minutes(service, alarm, at)
+        fun dp(value: Int) = (service.resources.displayMetrics.density * value).toInt()
+        val metrics = windows.currentWindowMetrics
+        val bounds = metrics.bounds
+        val bars = metrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+        val availableHeight = (bounds.height() - bars.top - bars.bottom - dp(16)).coerceAtLeast(1)
+        val compact = availableHeight < dp(320)
+        val target = if (compact) 64 else 72
         // Duration changes update this window in place, preserving touch/accessibility focus.
-        val key = listOf(alarm.id, at, alarm.label, alarm.snoozeMinutes, service.resources.displayMetrics.widthPixels,
-            service.resources.displayMetrics.heightPixels, service.resources.configuration.fontScale).joinToString("|")
+        val key = listOf(alarm.id, at, alarm.label, alarm.snoozeMinutes, bounds.width(), bounds.height(),
+            bars, service.resources.configuration.fontScale).joinToString("|")
         if (panel != null && identity == key) { updateClock(); updateDuration(minutes); return }
         hide()
         val context = DynamicColors.wrapContextIfAvailable(ContextThemeWrapper(service, R.style.Theme_OrbitClock_Ringing))
         val colors = OrbitPalette(context)
-        fun dp(value: Int) = (context.resources.displayMetrics.density * value).toInt()
         fun row() = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         fun label(value: String, size: Float, color: Int, weight: Int = 400) = TextView(context).apply {
             text = value; textSize = size; setTextColor(color); includeFontPadding = false
@@ -54,7 +62,7 @@ class RingingPopup(private val service: Context) {
         }
         val root = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(20), dp(16), dp(20), dp(14))
+            setPadding(dp(20), dp(if (compact) 12 else 16), dp(20), dp(if (compact) 12 else 14))
             background = GradientDrawable().apply {
                 setColor(colors.containerHigh); cornerRadius = dp(28).toFloat()
                 setStroke(dp(1), MaterialColors.layer(colors.surface, colors.onSurface, .08f))
@@ -69,14 +77,18 @@ class RingingPopup(private val service: Context) {
             typeface = Typeface.create(Typeface.create("sans-serif", Typeface.NORMAL), if (prominent) 400 else 500, false)
             minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0
             setPadding(dp(8), 0, dp(8), 0)
-            cornerRadius = dp(if (prominent) 36 else 24); insetTop = 0; insetBottom = 0
+            cornerRadius = dp(if (prominent) target / 2 else 24); insetTop = 0; insetBottom = 0
             backgroundTintList = ColorStateList.valueOf(if (prominent) colors.primary else colors.primaryContainer)
             setTextColor(if (prominent) colors.onPrimary else colors.onPrimaryContainer)
             setOnClickListener { OrbitMotion.tick(this); action() }
             OrbitMotion.bind(this)
         }
 
-        // Largest, brightest targets: adjust first, then explicitly choose Snooze.
+        // Time leads; the smaller duration readout stays between generous controls.
+        clock = label("", if (compact) 40f else 45f, colors.onSurface).apply {
+            tag = "popup_clock"; maxLines = 1; fontFeatureSettings = "tnum"; letterSpacing = -.015f
+        }
+        root.addView(clock, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(if (compact) 8 else 12) })
         val durationRow = row()
         decrease = button("−", "Decrease snooze by 5 minutes", true) {
             RingControls.select(service, alarm.id, at,
@@ -91,7 +103,7 @@ class RingingPopup(private val service: Context) {
             tag = "popup_duration"; isFocusable = true
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
-            durationValue = label("", 32f, colors.primary, 500).apply {
+            durationValue = label("", 18f, colors.primary, 500).apply {
                 fontFeatureSettings = "tnum"; maxLines = 1
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }
@@ -100,18 +112,12 @@ class RingingPopup(private val service: Context) {
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(2) })
         }
-        durationRow.addView(decrease, LinearLayout.LayoutParams(dp(72), dp(72)))
+        durationRow.addView(decrease, LinearLayout.LayoutParams(dp(target), dp(target)))
         durationRow.addView(durationGroup, LinearLayout.LayoutParams(0, -2, 1f).apply {
             marginStart = dp(8); marginEnd = dp(8)
         })
-        durationRow.addView(increase, LinearLayout.LayoutParams(dp(72), dp(72)))
-        root.addView(durationRow, LinearLayout.LayoutParams(-1, -2))
-
-        // Secondary emphasis: generous, regular-weight time with quiet tabular numerals.
-        clock = label("", 32f, colors.onSurface).apply {
-            tag = "popup_clock"; maxLines = 1; fontFeatureSettings = "tnum"; letterSpacing = -.015f
-        }
-        root.addView(clock, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12); bottomMargin = dp(12) })
+        durationRow.addView(increase, LinearLayout.LayoutParams(dp(target), dp(target)))
+        root.addView(durationRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(if (compact) 8 else 12) })
 
         val actions = row().apply { tag = "popup_actions" }
         snooze = button("Snooze", "", false) {
@@ -130,17 +136,23 @@ class RingingPopup(private val service: Context) {
         updateDuration(minutes)
         updateClock()
 
-        val bounds = service.resources.displayMetrics
-        val width = (bounds.widthPixels - dp(24)).coerceAtMost(dp(400))
-        val params = WindowManager.LayoutParams(width, WindowManager.LayoutParams.WRAP_CONTENT,
+        val width = (bounds.width() - bars.left - bars.right - dp(24)).coerceAtMost(dp(400)).coerceAtLeast(1)
+        root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        val viewport = ScrollView(context).apply {
+            isFillViewport = false; isVerticalScrollBarEnabled = false
+            addView(root, ScrollView.LayoutParams(-1, -2))
+        }
+        // Short landscape windows/large text can scroll instead of losing the actions.
+        val params = WindowManager.LayoutParams(width, root.measuredHeight.coerceAtMost(availableHeight),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT).apply {
                 gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL; y = dp(8)
                 setTitle("Orbit alarm controls")
             }
-        runCatching { windows.addView(root, params) }.onSuccess {
-            panel = root; identity = key
+        runCatching { windows.addView(viewport, params) }.onSuccess {
+            panel = viewport; identity = key
         }.onFailure {
             clearContent()
             android.util.Log.w("OrbitRingingPopup", "Persistent controls unavailable", it)
