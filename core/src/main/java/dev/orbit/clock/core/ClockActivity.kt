@@ -73,6 +73,10 @@ open class ClockActivity : AppCompatActivity() {
     private val prefs by lazy { getSharedPreferences("tools", MODE_PRIVATE) }
     private val changes = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
+            if (i.action != Store.CHANGED && i.action != FocusStore.CHANGED) {
+                if (foreground) ticker?.invoke()
+                return
+            }
             if (i.action == FocusStore.CHANGED && tab != "Timer") return
             if (!resumePlanCurrent()) clearResumePrompt()
             if (foreground && tab in listOf("Alarms", "Bedtime", "Timer")) {
@@ -91,7 +95,12 @@ open class ClockActivity : AppCompatActivity() {
         window.navigationBarColor = Color.TRANSPARENT
         tab = state?.getString("tab") ?: intent.getStringExtra("orbit_tab")?.takeIf { it in sections } ?: "Alarms"
         resumePlan = state?.getString("alarmResume")?.let { AlarmResume.decode(it) }
-        val changesFilter = IntentFilter(Store.CHANGED).apply { addAction(FocusStore.CHANGED) }
+        val changesFilter = IntentFilter(Store.CHANGED).apply {
+            addAction(FocusStore.CHANGED)
+            addAction(Intent.ACTION_TIME_CHANGED)
+            addAction(Intent.ACTION_TIMEZONE_CHANGED)
+            addAction(Intent.ACTION_DATE_CHANGED)
+        }
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(changes, changesFilter, RECEIVER_NOT_EXPORTED)
         else registerReceiver(changes, changesFilter)
         Sync.refresh(this)
@@ -307,9 +316,56 @@ open class ClockActivity : AppCompatActivity() {
     }
     private fun time(hour: Int, minute: Int): String = LocalTime.of(hour, minute).format(DateTimeFormatter.ofPattern(if (DateFormat.is24HourFormat(this)) "HH:mm" else "h:mm", Locale.getDefault()))
     private fun period(hour: Int): String = if (DateFormat.is24HourFormat(this)) "" else LocalTime.of(hour, 0).format(DateTimeFormatter.ofPattern("a", Locale.getDefault()))
+    private fun activeAlarmOccurrence(alarm: Alarm): Long {
+        val at = getSharedPreferences("scheduled_occurrences", MODE_PRIVATE).getLong("${alarm.id}.active", 0)
+        return at.takeIf { Scheduler.isActive(this, alarm, it) } ?: 0L
+    }
+    private fun nextAlarmOccurrence(alarm: Alarm, now: Instant, zone: ZoneId): Instant? {
+        val active = activeAlarmOccurrence(alarm)
+        if (active > 0 && alarm.days.isEmpty()) return null
+        return alarm.next(if (active > 0) maxOf(now, Instant.ofEpochMilli(active)) else now, zone)
+    }
+    private fun alarmRemaining(now: Instant, at: Instant): String {
+        val minutes = ((Duration.between(now, at).toMillis().coerceAtLeast(1) + 59_999) / 60_000).coerceAtLeast(1)
+        val days = minutes / 1440; val hours = minutes % 1440 / 60; val rest = minutes % 60
+        return buildList {
+            if (days > 0) add("$days ${if (days == 1L) "day" else "days"}")
+            if (hours > 0) add("$hours hr")
+            if (days == 0L && rest > 0) add("$rest min")
+        }.joinToString(" ")
+    }
+    /** Uses the same next-occurrence policy as scheduling, including snooze and skipped dates. */
+    private fun alarmNextText(alarm: Alarm, now: Instant, zone: ZoneId): String {
+        if (!alarm.enabled || alarm.deleted) return "Off"
+        if (activeAlarmOccurrence(alarm) > 0) return "Ringing now"
+        val at = alarm.next(now, zone) ?: return "No upcoming ring"
+        val date = at.atZone(zone)
+        val today = now.atZone(zone).toLocalDate()
+        val day = when (date.toLocalDate()) {
+            today -> "today"
+            today.plusDays(1) -> "tomorrow"
+            else -> {
+                val skeleton = if (date.year == today.year) "EEE d MMM" else "EEE d MMM y"
+                date.format(DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(Locale.getDefault(), skeleton), Locale.getDefault()))
+            }
+        }
+        val timePattern = DateFormat.getBestDateTimePattern(Locale.getDefault(), if (DateFormat.is24HourFormat(this)) "Hm" else "hma")
+        val whenText = "$day at ${date.format(DateTimeFormatter.ofPattern(timePattern, Locale.getDefault()))}"
+        val prefix = when {
+            alarm.snoozeUntil > now.toEpochMilli() && alarm.snoozeUntil > alarm.skipThrough -> "Snoozed until "
+            alarm.skipThrough > now.toEpochMilli() -> "Resumes "
+            else -> ""
+        }
+        val value = if (prefix.isEmpty()) whenText.replaceFirstChar { it.titlecase(Locale.getDefault()) } else "$prefix$whenText"
+        return "$value · in ${alarmRemaining(now, at)}"
+    }
     private fun alarms() {
         val all = Store(this).all().filterNot { it.deleted || it.timer }.sortedWith(compareBy({ it.hour }, { it.minute }))
-        val next = all.mapNotNull { it.next() }.minOrNull()
+        val now = Instant.now(); val zone = ZoneId.systemDefault()
+        val next = all.mapNotNull { nextAlarmOccurrence(it, now, zone) }.minOrNull()
+        var nextSummary: TextView? = null
+        var nextDateTime: TextView? = null
+        var emptySummary: TextView? = null
         if (!Scheduler.allowed(this) || notificationsMissing() || fullScreenMissing() || (!watch && !RingingPopup.permitted(this))) {
             card(color = colors.container, padding = 20).apply {
                 addView(text("Finish alarm setup", 16f, colors.onSurface)); space(this, 6)
@@ -320,18 +376,11 @@ open class ClockActivity : AppCompatActivity() {
         if (next != null) {
             card(color = colors.primaryContainer, padding = 20).apply {
                 addView(text("NEXT ALARM", 11f, colors.onPrimaryContainer).apply { letterSpacing = .12f }); space(this, 8)
-                val duration = Duration.between(Instant.now(), next).toMinutes().coerceAtLeast(1)
-                val remaining = buildList {
-                    val days = duration / 1440; val hours = duration % 1440 / 60; val minutes = duration % 60
-                    if (days > 0) add("$days ${if (days == 1L) "day" else "days"}")
-                    if (hours > 0) add("$hours hr")
-                    if (minutes > 0) add("$minutes min")
-                }.joinToString(" ")
-                addView(text("In $remaining", if (watch) 24f else 30f, colors.onPrimaryContainer)); space(this, 6)
-                addView(text(next.atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("EEEE, d MMM · HH:mm", Locale.getDefault())), 13f, colors.onPrimaryContainer))
+                nextSummary = text("", if (watch) 24f else 30f, colors.onPrimaryContainer).also { addView(it) }; space(this, 6)
+                nextDateTime = text("", 13f, colors.onPrimaryContainer).also { addView(it) }
             }
         } else if (all.isNotEmpty()) {
-            content.addView(text("All alarms off", 14f, colors.muted)); space(content)
+            emptySummary = text("", 14f, colors.muted).also { content.addView(it) }; space(content)
         }
         if (all.isEmpty()) {
             card(color = colors.container).apply {
@@ -341,6 +390,7 @@ open class ClockActivity : AppCompatActivity() {
                 space(this, 12)
             }
         }
+        val nextLabels = mutableListOf<Triple<Alarm, TextView, View>>()
         all.forEach { alarm ->
             val inner = card(color = if (alarm.enabled) colors.containerHigh else colors.container)
             (inner.parent as View).tag = "item:alarm:${alarm.id}"
@@ -367,15 +417,45 @@ open class ClockActivity : AppCompatActivity() {
             if (period(alarm.hour).isNotEmpty()) inner.addView(text(period(alarm.hour), 12f, colors.muted))
             space(inner, 6); inner.addView(text(alarm.label, 17f)); space(inner, 6)
             inner.addView(text(if (alarm.days.isEmpty()) "Once" else alarm.days.sorted().joinToString(" · ") { DayOfWeek.of(it).getDisplayName(java.time.format.TextStyle.SHORT, Locale.getDefault()) }, 13f, colors.muted))
-            if (alarm.enabled && alarm.skipThrough > System.currentTimeMillis()) alarm.next()?.let { at ->
-                space(inner, 8)
-                inner.addView(text("Resumes ${resumeDateTime(at)}", 13f, colors.primary).apply {
-                    tag = "alarm_resume_status:${alarm.id}"
-                    accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
-                })
+            space(inner, if (watch) 8 else 10)
+            val nextText = text("", if (watch) 12f else 13f, if (alarm.enabled) colors.primary else colors.muted).apply {
+                tag = if (alarm.enabled && alarm.skipThrough > now.toEpochMilli()) "alarm_resume_status:${alarm.id}" else "alarm_next_text:${alarm.id}"
+                typeface = Typeface.create(typeface, 500, false)
             }
+            inner.addView(FrameLayout(this).apply {
+                tag = "alarm_next_status:${alarm.id}"
+                addView(nextText, FrameLayout.LayoutParams(-1, -2))
+            }, LinearLayout.LayoutParams(-1, -2))
+            nextLabels.add(Triple(alarm, nextText, inner.parent as View))
             (inner.parent as View).apply { isClickable = true; contentDescription = "Edit ${alarm.label}"; setOnClickListener { OrbitMotion.tick(this); editAlarm(alarm) } }
         }
+        var lastClockKey = ""
+        ticker = {
+            val instant = Instant.now(); val currentZone = ZoneId.systemDefault()
+            val key = "${instant.epochSecond / 60}|$currentZone|${DateFormat.is24HourFormat(this)}|${Locale.getDefault()}"
+            if (key != lastClockKey) {
+                lastClockKey = key
+                nextLabels.forEach { (alarm, view, tile) ->
+                    val value = alarmNextText(alarm, instant, currentZone)
+                    view.text = value
+                    view.contentDescription = if (alarm.enabled) "Next ring for ${alarm.label}: $value" else "${alarm.label}: Off"
+                    tile.contentDescription = "Edit ${alarm.label}. $value"
+                }
+                val upcoming = all.mapNotNull { nextAlarmOccurrence(it, instant, currentZone) }.minOrNull()
+                if (upcoming != null) {
+                    nextSummary?.text = "In ${alarmRemaining(instant, upcoming)}"
+                    val datePattern = DateFormat.getBestDateTimePattern(Locale.getDefault(), "EEEE d MMM")
+                    val clockPattern = DateFormat.getBestDateTimePattern(Locale.getDefault(), if (DateFormat.is24HourFormat(this)) "Hm" else "hma")
+                    nextDateTime?.text = upcoming.atZone(currentZone).format(DateTimeFormatter.ofPattern("$datePattern · $clockPattern", Locale.getDefault()))
+                }
+                emptySummary?.text = when {
+                    all.any { activeAlarmOccurrence(it) > 0 } -> "Alarm ringing"
+                    all.any { it.enabled } -> "No upcoming alarms"
+                    else -> "All alarms off"
+                }
+            }
+        }
+        ticker?.invoke()
         if (watch) content.addView(button("Sync devices", tonal = true) { requestSync() })
     }
     private fun notificationsMissing() = Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
