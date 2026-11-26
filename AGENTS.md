@@ -19,3 +19,7 @@ The user will request changes from their phone. Implement the change, then use a
 Use screenshots, logs and test artifacts as internal feedback when useful. Do not routinely send the user downloadable screenshots, test reports or artifact links; summarize what was verified and any remaining limitation. Provide those materials when requested. Existing APK delivery remains available.
 
 Use a Wear OS emulator for watch-specific runtime behavior where feasible. A phone emulator cannot establish watch sync, physical bezel behavior or real-device alarm reliability. State any untested requirement explicitly rather than claiming all requested behavior works.
+
+## Material 3 design references
+
+For native UI work, read [the project design mapping and official Markdown references](docs/references/material3/README.md). They include Google's color, typography and button guidance with source blob IDs and license. Match the current library version; newer Expressive examples in the reference snapshot do not authorize an untested dependency upgrade. Keep time first/largest and duration smaller in the persistent popup, per the latest user preference.
