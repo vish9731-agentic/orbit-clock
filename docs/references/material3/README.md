@@ -12,14 +12,14 @@ Downloaded 2026-11-26 from Google's official [Material Components for Android](h
 
 ## Applied to the alarm popup
 
-- Highest emphasis: two 72dp filled controls with contrasting on-primary glyphs; they only adjust the occurrence's snooze duration.
-- The duration remains between the controls, with tabular numerals and a small unit.
-- Current time follows at 32sp regular weight.
-- Snooze/Stop are lower-emphasis tonal actions, with 48dp touch targets and 14sp labels.
-- Alarm label is last, at 12sp in the on-surface-variant role; its full value remains available to accessibility.
-- Rounded dark surface, restrained elevation, paired Material color roles and wallpaper-derived dynamic color when Android supports it.
-- Keep the popup mounted while adjusting; animate the changing number rather than removing the window.
-- Preserve separate adjustment and confirmation actions, 5–60 minute bounds, media restoration and persistent-window behavior.
-- References describe newer Expressive APIs too. This app keeps its current Material 1.12 dependency and uses supported components/attributes.
+- Current time leads at 45sp regular weight (40sp in short windows).
+- The smaller snooze-duration number is 18sp, with a quiet unit beneath.
+- +/- have contrasting filled targets: 72dp normally and 64dp in short windows. They only adjust the occurrence's duration; Snooze remains a separate tap.
+- Snooze/Stop use lower-emphasis tonal actions with 48dp touch targets and 14sp labels.
+- The alarm label is last, at 12sp in the on-surface-variant role; its full value remains available to accessibility.
+- Rounded dark surfaces, restrained elevation, paired Material color roles and wallpaper-derived dynamic color when Android supports it.
+- The window stays mounted during duration changes. Rotation uses current window bounds and system/cutout insets; a height-clamped scrolling viewport keeps controls reachable in short windows or with large text.
+- Preserve 5–60 minute bounds, media restoration and persistent-window behavior.
+- The official documents include newer Expressive APIs too. This app keeps Material 1.12 and uses compatible components/attributes.
 
-These layout choices apply the user's requested hierarchy; they are Orbit-specific decisions, not a claim that Google specifies this exact alarm layout.
+These choices apply the user's requested clock-first hierarchy. They are Orbit-specific decisions, not a claim that Google specifies this exact alarm layout. Native portrait/landscape and enlarged-text checks are recorded in verification/STATUS.md.
