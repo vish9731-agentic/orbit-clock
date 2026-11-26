@@ -153,7 +153,29 @@ public class SessionProbe extends Instrumentation {
   }
   require(first>=0&&last>=first,"No duration numeral ink in "+area);return last-first+1;
  }
+ void foregroundPausedMusicFixture(String id)throws Exception{
+  int before=plays();String previousEvents=player().get("events");
+  // Back above intentionally finishes the music activity. Bring that rotatable
+  // activity back without killing/restarting its existing paused MusicService.
+  shell("am start -W -f 0x10000000 -n dev.orbit.focusprobe/.ProbeActivity --es mode music");
+  waitFor(()->{for(AccessibilityWindowInfo window:getUiAutomation().getWindows()){AccessibilityNodeInfo root=window.getRoot();if(window.isFocused()&&root!=null&&"dev.orbit.focusprobe".equals(String.valueOf(root.getPackageName())))return true;}return false;},10000,"Rotatable music fixture is not the focused app beneath the popup");
+  popupVisible();require(active(id)&&!playing()&&plays()==before&&player().get("events").startsWith(previousEvents),"Bringing music activity forward restarted playback or replaced its paused session");
+  traceMedia("rotatable-fixture-foreground-with-existing-paused-session");
+ }
+ void rotationFailureDiagnostics(boolean landscape){
+  StringBuilder out=new StringBuilder("Requested "+(landscape?"landscape":"portrait")+"\n");
+  try{Display display=c.getSystemService(WindowManager.class).getDefaultDisplay();Point size=new Point();display.getRealSize(size);Rect panel=new Rect();AccessibilityNodeInfo popup=popup();if(popup!=null)popup.getBoundsInScreen(panel);
+   out.append("displayRotation=").append(display.getRotation()).append(" realSize=").append(size).append(" resourceOrientation=").append(c.getResources().getConfiguration().orientation).append(" popupBounds=").append(panel).append('\n');
+   for(AccessibilityWindowInfo window:getUiAutomation().getWindows()){AccessibilityNodeInfo root=window.getRoot();out.append("window focused=").append(window.isFocused()).append(" package=").append(root==null?null:root.getPackageName()).append('\n');}
+  }catch(Throwable error){out.append("METRICS_ERROR ").append(error);}
+  for(String command:new String[]{"dumpsys window displays","dumpsys activity activities"})try{out.append("\nCOMMAND ").append(command).append('\n').append(shell(command));}catch(Throwable error){out.append("\nDUMP_ERROR ").append(error);}
+  try{File dir=new File(c.getFilesDir(),"session-feedback");dir.mkdirs();try(FileOutputStream file=new FileOutputStream(new File(dir,"rotation-failure-"+(landscape?"landscape":"portrait")+"-"+scale+".txt"))){file.write(out.toString().getBytes("UTF-8"));}}catch(Throwable ignored){}
+  // Capture before the outer cleanup restores portrait, retaining the failed state.
+  try{capture("rotation-timeout-"+(landscape?"landscape":"portrait"));}catch(Throwable ignored){}
+  Bundle status=new Bundle();status.putString("stream","ROTATION_DIAGNOSTICS\n"+out);sendStatus(0,status);
+ }
  void rotatePopup(String id,int rotation,boolean landscape,int minutes)throws Exception{
+  try{
   require(getUiAutomation().setRotation(rotation),"UiAutomation could not rotate the native display");
   final Rect[] last={null};final int[] stable={0};
   waitFor(()->{
@@ -165,6 +187,7 @@ public class SessionProbe extends Instrumentation {
    stable[0]=last[0]!=null&&last[0].equals(current)?stable[0]+1:0;last[0]=current;return stable[0]>=3;
   },15000,"Popup did not settle fully on the "+(landscape?"landscape":"portrait")+" native display");
   require(active(id)&&!playing(),"Rotation resolved the alarm or resumed media");verifyPopupHierarchy(minutes);assertAdjustmentGlyphs();capture(landscape?"persistent-popup-landscape":"persistent-popup-return-portrait");
+  }catch(Throwable error){rotationFailureDiagnostics(landscape);if(error instanceof Exception)throw(Exception)error;if(error instanceof Error)throw(Error)error;throw new RuntimeException(error);}
  }
  void assertAdjustmentGlyphs()throws Exception{
   Bitmap display=getUiAutomation().takeScreenshot();require(display!=null,"No hardware display for glyph check");
@@ -205,6 +228,7 @@ public class SessionProbe extends Instrumentation {
   swipe(bounds.left+24*density,bounds.top+20*density,bounds.right-24*density,bounds.top+20*density);popupVisible();require(active(id) && !playing(),"Swipe dismissed popup or resumed playback");
   shell("input keyevent BACK");popupVisible();require(active(id),"Back outside alarm dismissed popup");
   pass("granted persistent popup survives horizontal swipe and Back without resolving the alarm");
+  foregroundPausedMusicFixture(id);
   // Popup selection is shared with notification and full-screen controls.
   clickPopup("Increase snooze by 5 minutes");waitFor(()->find(popup(),"Snooze duration: 15 minutes")!=null,6000,"Popup duration did not update");
   require(active(id)&&!playing(),"Plus must adjust only, without snoozing or resuming media");
