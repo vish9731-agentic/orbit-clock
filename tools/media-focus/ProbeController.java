@@ -16,6 +16,7 @@ final class ProbeController {
  private final Handler handler=new Handler(Looper.getMainLooper());
  private String events="";
  private boolean closed=false;
+ private boolean userPaused=false;
  private Boolean lastPlaying=null;
  private final Runnable sample=new Runnable(){public void run(){if(!closed){write();handler.postDelayed(this,250);}}};
  ProbeController(Context c,Player p,String mode) {
@@ -25,8 +26,8 @@ final class ProbeController {
   session.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS|MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
   session.setMetadata(new MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE,mode+" focus test").build());
   session.setCallback(new MediaSession.Callback(){
-   @Override public void onPause(){player.pause();event("media_pause");}
-   @Override public void onPlay(){player.start();event("media_play");}
+   @Override public void onPause(){userPaused=true;player.pause();event("media_pause");}
+   @Override public void onPlay(){userPaused=false;player.start();event("media_play");}
   },handler);
   session.setActive(true);
   AudioAttributes attributes=new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
@@ -34,7 +35,7 @@ final class ProbeController {
   request=new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).setAudioAttributes(attributes)
    .setWillPauseWhenDucked(false).setOnAudioFocusChangeListener(change->{
     if(closed)return;
-    if(change==AudioManager.AUDIOFOCUS_GAIN) player.start();
+    if(change==AudioManager.AUDIOFOCUS_GAIN) { if(!userPaused)player.start(); }
     else if(change==AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)player.duck();
     else player.pause();
     event("focus:"+change);
