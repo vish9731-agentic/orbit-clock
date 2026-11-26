@@ -125,7 +125,8 @@ public class SessionProbe extends Instrumentation {
   shell("input keyevent BACK");popupVisible();require(active(id),"Back outside alarm dismissed popup");
   pass("granted persistent popup survives horizontal swipe and Back without resolving the alarm");
   Intent intent=new Intent().setClassName(c.getPackageName(),"dev.orbit.clock.core.RingActivity").putExtra("id",id).putExtra("at",occurrence(id)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-  ringing=startActivitySync(intent);waitForIdleSync();waitFor(()->main(()->ringing.hasWindowFocus()),7000,"Ringing screen not focused");popupGone();
+  Bundle launchStep=new Bundle();launchStep.putString("stream","STEP launching full ringing activity\n");sendStatus(0,launchStep);
+  ringing=startActivitySync(intent);launchStep.putString("stream","STEP full ringing activity launched\n");sendStatus(0,launchStep);waitForIdleSync();waitFor(()->main(()->ringing.hasWindowFocus()),7000,"Ringing screen not focused");popupGone();
   sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);SystemClock.sleep(400);require(main(()->!ringing.isFinishing() && ringing.hasWindowFocus()) && active(id),"Back dismissed active ringing screen");
   capture("full-screen-back-blocked");pass("full ringing screen blocks Back while the occurrence is active");
   shell("input keyevent HOME");popupVisible();require(active(id) && !playing(),"Home resolved alarm or resumed media");
