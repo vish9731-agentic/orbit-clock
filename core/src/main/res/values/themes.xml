@@ -17,6 +17,7 @@
         <item name="android:windowActionModeOverlay">true</item>
     </style>
     <style name="Theme.OrbitClock.Ringing" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:windowSwipeToDismiss">false</item>
         <item name="colorPrimary">#D0BCFF</item>
         <item name="colorOnPrimary">#381E72</item>
         <item name="colorPrimaryContainer">#4F378B</item>
