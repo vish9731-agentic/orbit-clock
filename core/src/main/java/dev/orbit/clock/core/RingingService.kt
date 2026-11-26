@@ -204,7 +204,8 @@ class RingingService : Service() {
         resumeMediaAfterAlarm = false // Exactly once, after the last overlapping alarm.
         if (!shouldResume) return
         val manager = getSystemService(AudioManager::class.java)
-        if (manager.isMusicActive) return // The player may already have resumed on focus gain.
+        // Stream activity can lag a just-delivered Pause. Send one idempotent Play
+        // instead of treating that stale value as proof the player has resumed.
         runCatching {
             val down = SystemClock.uptimeMillis()
             for (action in intArrayOf(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.ACTION_UP)) {
