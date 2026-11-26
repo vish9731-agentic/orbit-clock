@@ -141,7 +141,7 @@ class RingingPopup(private val service: Context) {
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
         val viewport = ScrollView(context).apply {
             isFillViewport = false; isVerticalScrollBarEnabled = false
-            addView(root, ScrollView.LayoutParams(-1, -2))
+            addView(root, android.widget.FrameLayout.LayoutParams(-1, -2))
         }
         // Short landscape windows/large text can scroll instead of losing the actions.
         val params = WindowManager.LayoutParams(width, root.measuredHeight.coerceAtMost(availableHeight),
