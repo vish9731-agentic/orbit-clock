@@ -2,9 +2,9 @@
 
 Native Android phone and Wear OS clock apps with a Material You / Material 3 interface, shared alarms, and rotating-bezel controls for Galaxy Watch 4 Classic.
 
-Both debug APKs build successfully. Seven Kotlin/JUnit tests, 82 standalone production-policy checks and phone/watch lint pass. Targeted emulator checks exercise the ringing UI, occurrence snooze selection, volume buttons, real heads-up actions over another app and native motion. See [verification/STATUS.md](verification/STATUS.md) for exact revisions and outcomes. Physical-device testing remains. This is an initial prototype, not full Google Clock parity or a validated alarm replacement.
+Both debug APKs build successfully. Kotlin/JUnit tests, 82 standalone production-policy checks and phone/watch lint pass. Targeted emulator checks exercise the ringing UI, occurrence snooze selection, volume buttons, real heads-up actions over another app and native motion. See [verification/STATUS.md](verification/STATUS.md) for exact revisions and outcomes. Physical-device testing remains. This is an initial prototype, not full Google Clock parity or a validated alarm replacement.
 
-Private repository: [vish9731-agentic/orbit-clock](https://github.com/vish9731-agentic/orbit-clock).
+Repository: [vish9731-agentic/orbit-clock](https://github.com/vish9731-agentic/orbit-clock).
 
 ## Material You design
 
@@ -13,6 +13,14 @@ Private repository: [vish9731-agentic/orbit-clock](https://github.com/vish9731-a
 - Bottom-sheet alarm editor, Material time picker, outlined fields, weekday selection and Material switches.
 - Redesigned clock, timer, stopwatch, bedtime and dark ringing screens; compact watch time controls and weekday rows.
 - System-bar and keyboard insets handled explicitly; header/navigation checked at 130% font scale.
+
+## Next ring in every alarm tile
+
+Every alarm tile shows its own next local date/time and remaining duration. Snoozed alarms and temporary skips show the actual snooze/resume occurrence; disabled alarms show Off. The aggregate next-alarm banner remains. Status text refreshes with time, format, zone, Store and foreground changes.
+
+## Compact Material3 popup
+
+A large clock leads, followed by the small duration readout, evenly spaced 48dp +/- targets, quieter Snooze/Stop actions and a full-width wrapping label. Long labels remain readable, and the layout adapts to portrait, landscape and enlarged text. +/- adjust only; Snooze is separate. Official Google Markdown snapshots and their applied design mapping are saved in [Material3 references](docs/references/material3/README.md).
 
 ## Persistent ringing controls and media restoration
 
