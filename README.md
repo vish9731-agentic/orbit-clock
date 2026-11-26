@@ -14,6 +14,12 @@ Private repository: [vish9731-agentic/orbit-clock](https://github.com/vish9731-a
 - Redesigned clock, timer, stopwatch, bedtime and dark ringing screens; compact watch time controls and weekday rows.
 - System-bar and keyboard insets handled explicitly; header/navigation checked at 130% font scale.
 
+## Persistent ringing controls and media restoration
+
+Phone setup now offers **Review permissions → Keep alarm controls visible**. Grant Android’s **Display over other apps** access to use a persistent Snooze/Stop panel above other apps. Back does not close an active full ringing screen. Android controls native heads-up banner dismissal and system navigation; the permitted panel is the persistent replacement. The existing 30-second auto-snooze remains.
+
+After the last overlapping alarm ends, Orbit requests playback restoration for media observed playing before its Pause command. It uses standard Android media routing, with cooperating-app limitations. See [controls, permissions and verification scope](docs/RINGING_CONTROLS.md).
+
 ## What is implemented
 
 - Alarm creation/editing, labels, weekday repeats, enable/disable, sound/vibration and configurable snooze.
