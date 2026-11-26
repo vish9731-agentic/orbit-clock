@@ -35,6 +35,10 @@ run_session() {
   feedback_pid=$!
   adb shell am instrument -w -e scope "$scope" -e scale "$scale" dev.orbit.clock.sessionprobe/dev.orbit.clock.sessionprobe.SessionProbe > "session-feedback/evidence-$scale.txt" || result=$?
   cleanup_feedback
+  timeout 8 adb exec-out run-as dev.orbit.clock tar -C files -cf - session-feedback > "session-feedback/frames-$scale.final" 2>/dev/null || true
+  if python -c "import tarfile; assert tarfile.is_tarfile('session-feedback/frames-$scale.final')" 2>/dev/null; then
+    mv "session-feedback/frames-$scale.final" "session-feedback/frames-$scale.tar"
+  fi
   timeout 8 adb exec-out screencap -p > "session-feedback/display-$scale.png" || true
   timeout 8 adb logcat -d -b crash > "session-feedback/crashes-$scale.txt" || true
   cat "session-feedback/evidence-$scale.txt"
