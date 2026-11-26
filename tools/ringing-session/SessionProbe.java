@@ -122,25 +122,29 @@ public class SessionProbe extends Instrumentation {
  Rect bounds(AccessibilityNodeInfo node,String name){require(node!=null,"Missing popup element: "+name);Rect r=new Rect();node.getBoundsInScreen(r);require(!r.isEmpty()&&node.isVisibleToUser(),"Invisible popup element: "+name);return r;}
  void assertPopupHierarchy()throws Exception{
   verifyPopupHierarchy(10);
-  pass("popup places its largest visible clock above compact duration text, adjustment controls, actions and quiet label at "+scale+"% text");
+  pass("compact popup uses a largest left-aligned clock and quiet header label above48dp duration controls and actions at "+scale+"% text");
  }
  void verifyPopupHierarchy(int minutes)throws Exception{
   AccessibilityNodeInfo root=popup();Rect minus=bounds(find(root,"Decrease snooze by 5 minutes"),"minus"),plus=bounds(find(root,"Increase snooze by 5 minutes"),"plus");
   Rect duration=bounds(find(root,"Snooze duration: "+minutes+" minutes"),"duration"),time=bounds(findPrefix(root,"Alarm time:"),"clock");
   Rect snooze=bounds(find(root,"Snooze"),"Snooze"),stop=bounds(find(root,"Stop"),"Stop"),label=bounds(findPrefix(root,"Alarm label:"),"label");
   float density=c.getResources().getDisplayMetrics().density;
-  require(Math.min(minus.width(),minus.height())>=63*density&&Math.min(plus.width(),plus.height())>=63*density,"Duration controls need at least64dp touch targets");
-  require(minus.height()>snooze.height()&&plus.height()>stop.height(),"Adjustment controls are not the dominant touch targets");
+  require(Math.min(minus.width(),minus.height())>=47*density&&Math.min(plus.width(),plus.height())>=47*density,"Duration controls need at least48dp touch targets");
   require(Math.min(snooze.height(),stop.height())>=47*density,"Snooze/Stop touch targets below48dp");
   require(minus.centerY()==plus.centerY()&&duration.centerX()>minus.centerX()&&duration.centerX()<plus.centerX(),"Duration group is not centered between matching controls");
-  require(Math.min(minus.top,plus.top)>=time.bottom-2&&snooze.top>=Math.max(minus.bottom,plus.bottom)-2&&stop.top>=Math.max(minus.bottom,plus.bottom)-2&&label.top>=Math.max(snooze.bottom,stop.bottom)-2,"Popup hierarchy must be time, adjustment, actions, label");
+  int headerBottom=Math.max(time.bottom,label.bottom),controlsBottom=Math.max(duration.bottom,Math.max(minus.bottom,plus.bottom));
+  require(Math.min(minus.top,plus.top)>=headerBottom-2&&snooze.top>=controlsBottom-2&&stop.top>=controlsBottom-2,"Popup hierarchy must be compact clock/label header, adjustments, actions");
+  require(label.left>=time.right-2&&label.top>=time.top-2&&label.bottom<=time.bottom+2&&label.width()<=65*density,"Quiet alarm label must fit at the right of the clock header");
   require(time.height()>duration.height()&&time.height()>label.height(),"Clock must visually dominate the smaller duration and label");
   Bitmap display=getUiAutomation().takeScreenshot();require(display!=null,"No native display for popup fit/typography");
   try{
    Rect screen=new Rect(0,0,display.getWidth(),display.getHeight());
-   for(Rect element:new Rect[]{bounds(root,"panel"),time,minus,duration,plus,snooze,stop,label})require(screen.contains(element),"Popup element is cut off by actual display "+screen+": "+element);
+   Rect panel=bounds(root,"panel");float maxHeight=Float.parseFloat(scale)>110?235:205;
+   require(panel.height()<=maxHeight*density,"Popup is not compact: "+panel.height()/density+"dp exceeds "+maxHeight+"dp at "+scale+"% text");
+   for(Rect element:new Rect[]{panel,time,minus,duration,plus,snooze,stop,label})require(screen.contains(element),"Popup element is cut off by actual display "+screen+": "+element);
    Rect clockInk=inkBounds(display,time),plusInk=inkBounds(display,centralGlyphBounds(plus,display));int durationNumberHeight=firstInkBandHeight(display,duration);
    require(clockInk.height()>durationNumberHeight*1.4&&clockInk.height()>plusInk.height()*1.1,"Clock is not the largest rendered typography: clock="+clockInk.height()+" duration="+durationNumberHeight+" plus="+plusInk.height());
+   Rect labelInk=inkBounds(display,label);require(clockInk.left<=time.left+12*density&&clockInk.centerX()<label.centerX()&&labelInk.height()<clockInk.height()*.6,"Clock must remain left-aligned and visually dominate its quiet header label");
   }finally{display.recycle();}
  }
  Rect centralGlyphBounds(Rect control,Bitmap display){int radius=Math.max(5,(int)(16*c.getResources().getDisplayMetrics().density));return new Rect(Math.max(0,control.centerX()-radius),Math.max(0,control.centerY()-radius),Math.min(display.getWidth(),control.centerX()+radius),Math.min(display.getHeight(),control.centerY()+radius));}
