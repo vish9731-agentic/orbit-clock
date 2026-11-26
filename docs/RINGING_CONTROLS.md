@@ -1,6 +1,6 @@
 # Ringing controls and playback restoration
 
-When Orbit interrupts local media playback, Snooze/Stop ends the alarm audio and releases focus. After the last overlapping alarm ends, Orbit sends an idempotent Android Play command if playback was active before its Pause command and sends one idempotent Play even if Android's stream-activity status has not caught up with the Pause. Media that was paused, with no other audio playing, is not started. Unexpected service destruction does not explicitly send Play. Routing follows Android's current media-session routing; it cannot guarantee the original session if apps change. Apps must support native media controls. Actual YouTube, casting and physical-device Bluetooth behavior require device acceptance.
+When Orbit interrupts local media playback, Snooze/Stop ends the alarm audio and releases focus. After the last overlapping alarm ends, Orbit sends one idempotent Android Play command if playback was active before its Pause command. It does not rely on a stream-activity reading that can lag behind Pause. Media that was paused, with no other audio playing, is not started. Unexpected service destruction does not explicitly send Play. Routing follows Android's current media-session routing; it cannot guarantee the original session if apps change. Apps must support native media controls. Actual YouTube, casting and physical-device Bluetooth behavior require device acceptance.
 
 ## Keep controls above other apps
 
