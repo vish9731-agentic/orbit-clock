@@ -2,7 +2,13 @@
 set -euo pipefail
 mkdir -p session-feedback
 feedback_pid=
+logcat_pid=
 cleanup_feedback() {
+  if [[ -n "$logcat_pid" ]]; then
+    kill "$logcat_pid" 2>/dev/null || true
+    wait "$logcat_pid" 2>/dev/null || true
+    logcat_pid=
+  fi
   if [[ -n "$feedback_pid" ]]; then
     kill "$feedback_pid" 2>/dev/null || true
     wait "$feedback_pid" 2>/dev/null || true
@@ -12,6 +18,8 @@ cleanup_feedback() {
 trap cleanup_feedback EXIT
 run_session() {
   local scale="$1" result=0
+  adb logcat -v threadtime AndroidRuntime:V libc:V DEBUG:V ActivityTaskManager:I ActivityManager:I WindowManager:W '*:S' > "session-feedback/live-logcat-$scale.txt" 2>&1 &
+  logcat_pid=$!
   # Pull native captures while the guest is alive; a lost emulator must not erase
   # the feedback already produced. This retries reads only, never UI actions.
   (
