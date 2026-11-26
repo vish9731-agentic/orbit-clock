@@ -93,18 +93,37 @@ public class SessionProbe extends Instrumentation {
   },7000,"Popup action did not settle: "+label);
   Rect b=settled[0];tap(b.centerX(),b.centerY());
  }
+ double luminance(int color){
+  double value=0;double[] weights={.2126,.7152,.0722};int[] channels={Color.red(color),Color.green(color),Color.blue(color)};
+  for(int i=0;i<3;i++){double c=channels[i]/255.;value+=weights[i]*(c<=.04045?c/12.92:Math.pow((c+.055)/1.055,2.4));}return value;
+ }
+ double contrast(int a,int b){double x=luminance(a),y=luminance(b);return(Math.max(x,y)+.05)/(Math.min(x,y)+.05);}
+ AccessibilityNodeInfo findPrefix(AccessibilityNodeInfo node,String prefix){if(node==null)return null;CharSequence d=node.getContentDescription();if(d!=null&&d.toString().startsWith(prefix))return node;for(int i=0;i<node.getChildCount();i++){AccessibilityNodeInfo found=findPrefix(node.getChild(i),prefix);if(found!=null)return found;}return null;}
+ Rect bounds(AccessibilityNodeInfo node,String name){require(node!=null,"Missing popup element: "+name);Rect r=new Rect();node.getBoundsInScreen(r);require(!r.isEmpty()&&node.isVisibleToUser(),"Invisible popup element: "+name);return r;}
+ void assertPopupHierarchy()throws Exception{
+  AccessibilityNodeInfo root=popup();Rect minus=bounds(find(root,"Decrease snooze by 5 minutes"),"minus"),plus=bounds(find(root,"Increase snooze by 5 minutes"),"plus");
+  Rect duration=bounds(find(root,"Snooze duration: 10 minutes"),"duration"),time=bounds(findPrefix(root,"Alarm time:"),"clock");
+  Rect snooze=bounds(find(root,"Snooze"),"Snooze"),stop=bounds(find(root,"Stop"),"Stop"),label=bounds(findPrefix(root,"Alarm label:"),"label");
+  float density=c.getResources().getDisplayMetrics().density;
+  require(Math.min(minus.width(),minus.height())>=63*density&&Math.min(plus.width(),plus.height())>=63*density,"Duration controls need at least64dp touch targets");
+  require(minus.height()>snooze.height()&&plus.height()>stop.height(),"Adjustment controls are not the dominant touch targets");
+  require(Math.min(snooze.height(),stop.height())>=47*density,"Snooze/Stop touch targets below48dp");
+  require(minus.centerY()==plus.centerY()&&duration.centerX()>minus.centerX()&&duration.centerX()<plus.centerX(),"Duration group is not centered between matching controls");
+  require(time.top>=Math.max(minus.bottom,plus.bottom)-2&&snooze.top>=time.bottom-2&&stop.top>=time.bottom-2&&label.top>=Math.max(snooze.bottom,stop.bottom)-2,"Popup hierarchy must be adjustment, time, actions, label");
+  require(time.height()>label.height(),"Alarm label competes with the clock");
+  pass("popup hierarchy prioritizes large duration controls, then clock, actions and quiet label at "+scale+"% text");
+ }
  void assertAdjustmentGlyphs()throws Exception{
   Bitmap display=getUiAutomation().takeScreenshot();require(display!=null,"No hardware display for glyph check");
   try{for(String label:new String[]{"Decrease snooze by 5 minutes","Increase snooze by 5 minutes"}){
    AccessibilityNodeInfo button=find(popup(),label);require(button!=null,"Missing adjustment button "+label);Rect bounds=new Rect();button.getBoundsInScreen(bounds);
    int radius=Math.max(5,(int)(16*c.getResources().getDisplayMetrics().density));
    Rect inner=new Rect(Math.max(0,bounds.centerX()-radius),Math.max(0,bounds.centerY()-radius),Math.min(display.getWidth(),bounds.centerX()+radius),Math.min(display.getHeight(),bounds.centerY()+radius));
-   int ink=0,background=0;for(int y=inner.top;y<inner.bottom;y++)for(int x=inner.left;x<inner.right;x++){
-    int color=display.getPixel(x,y),red=Color.red(color),green=Color.green(color),blue=Color.blue(color);
-    if(red>100 && green>145 && blue>105)ink++;
-    else if(green>red+15 && green>blue+5)background++;
-   }
-   require(ink>=8 && background>=30,"Adjustment glyph missing/clipped in actual display: "+label+" ink="+ink+" background="+background);
+   Map<Integer,Integer> colors=new HashMap<>();for(int y=inner.top;y<inner.bottom;y++)for(int x=inner.left;x<inner.right;x++){int color=display.getPixel(x,y);colors.put(color,colors.getOrDefault(color,0)+1);}
+   int background=Collections.max(colors.entrySet(),Map.Entry.comparingByValue()).getKey();
+   int ink=0;Rect inkBounds=new Rect(inner.right,inner.bottom,inner.left,inner.top);
+   for(int y=inner.top;y<inner.bottom;y++)for(int x=inner.left;x<inner.right;x++)if(contrast(background,display.getPixel(x,y))>=3){ink++;inkBounds.left=Math.min(inkBounds.left,x);inkBounds.right=Math.max(inkBounds.right,x+1);inkBounds.top=Math.min(inkBounds.top,y);inkBounds.bottom=Math.max(inkBounds.bottom,y+1);}
+   require(ink>=12&&colors.get(background)>=40&&inkBounds.width()>=5&&inkBounds.height()>=2,"Adjustment glyph lacks visible3:1 contrast in actual display: "+label+" pixels="+ink+" bounds="+inkBounds);
   }}finally{display.recycle();}
   pass("both adjustment glyphs are visible in actual hardware-display pixels at "+scale+"% text");
  }
@@ -128,13 +147,16 @@ public class SessionProbe extends Instrumentation {
   require(!playing() && plays()==before,"Alarm started previously paused media");clean(a);pass("already-paused media is never started");
  }
  void popupCases()throws Exception{
-  shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW allow");startPlayer("music");String id=fixture("Persistent alarm test",7000);delivered(id);paused();popupVisible();SystemClock.sleep(200);capture("persistent-popup");assertAdjustmentGlyphs();
+  shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW allow");startPlayer("music");String id=fixture("Persistent alarm test",7000);delivered(id);paused();popupVisible();SystemClock.sleep(200);capture("persistent-popup");assertAdjustmentGlyphs();assertPopupHierarchy();
   Rect bounds=new Rect();popup().getBoundsInScreen(bounds);float density=c.getResources().getDisplayMetrics().density;
   swipe(bounds.left+24*density,bounds.top+20*density,bounds.right-24*density,bounds.top+20*density);popupVisible();require(active(id) && !playing(),"Swipe dismissed popup or resumed playback");
   shell("input keyevent BACK");popupVisible();require(active(id),"Back outside alarm dismissed popup");
   pass("granted persistent popup survives horizontal swipe and Back without resolving the alarm");
   // Popup selection is shared with notification and full-screen controls.
   clickPopup("Increase snooze by 5 minutes");waitFor(()->find(popup(),"Snooze duration: 15 minutes")!=null,6000,"Popup duration did not update");
+  require(active(id)&&!playing(),"Plus must adjust only, without snoozing or resuming media");
+  clickPopup("Decrease snooze by 5 minutes");waitFor(()->find(popup(),"Snooze duration: 10 minutes")!=null,6000,"Popup minus did not update");require(active(id)&&!playing(),"Minus must adjust only, without snoozing or resuming media");
+  clickPopup("Increase snooze by 5 minutes");waitFor(()->find(popup(),"Snooze duration: 15 minutes")!=null,6000,"Popup plus did not restore selection");
   clickPopup("Snooze");final String snoozeId=id;waitFor(()->!active(snoozeId),7000,"Persistent popup Snooze did not act");resumed(0);popupGone();
   require(row(id).getInt("snoozeMinutes")==10,"Popup adjusted saved default");clean(id);pass("persistent popup plus/Snooze resumes music with occurrence-only duration");
   startPlayer("music");id=fixture("Permission revoked",7000);delivered(id);paused();popupVisible();shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW deny");popupGone();
