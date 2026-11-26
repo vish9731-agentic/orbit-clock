@@ -157,8 +157,14 @@ class RingingService : Service() {
     private fun acquireAudioFocus() {
         if (alarmFocusRequest != null && !retryFocusOnNewAlarm) return // Shared across overlapping alarms.
         val manager = getSystemService(AudioManager::class.java)
-        // Remember actual playback before Orbit sends Pause; never start already-paused media.
-        resumeMediaAfterAlarm = resumeMediaAfterAlarm || manager.isMusicActive
+        // Current configurations exclude paused players. The legacy stream-active bit
+        // can remain true after Pause and must not restart already-paused media.
+        resumeMediaAfterAlarm = resumeMediaAfterAlarm || runCatching {
+            manager.activePlaybackConfigurations.any {
+                val usage = it.audioAttributes.usage
+                usage == AudioAttributes.USAGE_MEDIA || usage == AudioAttributes.USAGE_UNKNOWN
+            }
+        }.onFailure { android.util.Log.w("OrbitAudioFocus", "Playback observation unavailable", it) }.getOrDefault(false)
         if (alarmFocusRequest != null) releaseAudioFocus() // A new alarm may request after permanent loss.
         // PAUSE is idempotent; never send PLAY_PAUSE, which could start stopped media.
         runCatching {
