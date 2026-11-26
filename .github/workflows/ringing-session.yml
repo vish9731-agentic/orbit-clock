@@ -1,4 +1,4 @@
-name: Persistent ringing controls and media resume
+name: Alarm popup and next-ring verification
 on:
   workflow_dispatch:
   push:
@@ -10,6 +10,7 @@ on:
       - 'core/src/main/res/values/themes.xml'
       - 'phone/src/main/AndroidManifest.xml'
       - 'tools/ringing-session/**'
+      - 'tools/alarm-tile-info/**'
       - 'tools/media-focus/**'
       - '.github/workflows/ringing-session.yml'
 permissions:
@@ -23,10 +24,6 @@ jobs:
         include:
           - api: 35
             scope: popup
-          - api: 35
-            scope: screen
-          - api: 34
-            scope: all
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -46,6 +43,7 @@ jobs:
           ./gradlew --no-daemon -Pkotlin.compiler.execution.strategy=in-process :phone:assembleDebug
           bash tools/media-focus/build-probe.sh
           bash tools/ringing-session/build-probe.sh
+          bash tools/alarm-tile-info/build-probe.sh
       - name: Prepare emulator
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android/sdk/ndk
@@ -80,12 +78,14 @@ jobs:
             adb install phone/build/outputs/apk/debug/phone-debug.apk
             adb install media-probe-build/media-focus-probe.apk
             adb install build/ringing-session-probe/probe.apk
+            adb install build/alarm-tile-info-probe/probe.apk
             adb shell pm grant dev.orbit.clock android.permission.POST_NOTIFICATIONS
             adb shell pm grant dev.orbit.focusprobe android.permission.POST_NOTIFICATIONS
             adb shell appops set dev.orbit.clock SCHEDULE_EXACT_ALARM allow
             adb shell appops set dev.orbit.clock USE_FULL_SCREEN_INTENT ignore
             adb shell settings put system font_scale 1.0
             bash tools/ringing-session/run-on-device.sh '${{ matrix.scope }}'
+            bash tools/alarm-tile-info/run-on-device.sh
       - name: Runner diagnostics
         if: always()
         run: |
@@ -96,4 +96,6 @@ jobs:
         with:
           name: ringing-session-feedback-api${{ matrix.api }}-${{ matrix.scope }}
           retention-days: 3
-          path: session-feedback/
+          path: |
+            session-feedback/
+            tile-feedback/
