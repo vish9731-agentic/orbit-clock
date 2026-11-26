@@ -18,12 +18,48 @@ import java.util.concurrent.*;
 public final class TileProbe extends Instrumentation {
  Context c;Activity activity;Class<?> storeClass,alarmClass,clockClass;Object storeCompanion;Method formatter;
  String scale;final List<String> fixtures=new ArrayList<>();
+ volatile int storeChanges;volatile long lastStoreChange;
+ final List<String> observations=Collections.synchronizedList(new ArrayList<>());
+ boolean observing;
+ final BroadcastReceiver storeObserver=new BroadcastReceiver(){@Override public void onReceive(Context context,Intent intent){storeChanges++;lastStoreChange=SystemClock.uptimeMillis();observe("Store.CHANGED #"+storeChanges);}};
  interface Check{boolean ok()throws Exception;}
  void require(boolean value,String message){if(!value)throw new AssertionError(message);}
  <T>T main(Callable<T> action)throws Exception{FutureTask<T> task=new FutureTask<>(action);require(new Handler(Looper.getMainLooper()).post(task),"Main queue rejected fixture");return task.get(15,TimeUnit.SECONDS);}
  void waitFor(Check check,long timeout,String message)throws Exception{long end=SystemClock.uptimeMillis()+timeout;while(SystemClock.uptimeMillis()<end){if(check.ok())return;SystemClock.sleep(100);}throw new AssertionError(message);}
  String shell(String command)throws Exception{try(ParcelFileDescriptor fd=getUiAutomation().executeShellCommand(command);InputStream input=new ParcelFileDescriptor.AutoCloseInputStream(fd)){ByteArrayOutputStream bytes=new ByteArrayOutputStream();byte[] buffer=new byte[4096];for(int n;(n=input.read(buffer))!=-1;)bytes.write(buffer,0,n);return bytes.toString("UTF-8");}}
  void pass(String value){Bundle out=new Bundle();out.putString("stream","PASS "+value+"\n");sendStatus(0,out);}
+ void observe(String value){observations.add("wall="+System.currentTimeMillis()+" uptime="+SystemClock.uptimeMillis()+" "+value);}
+ boolean renderPending()throws Exception{return main(()->{Field handlerField=clockClass.getDeclaredField("handler"),refreshField=clockClass.getDeclaredField("refresh");handlerField.setAccessible(true);refreshField.setAccessible(true);return((Handler)handlerField.get(activity)).hasCallbacks((Runnable)refreshField.get(activity));});}
+ TextView settledStatus(String id)throws Exception{
+  final TextView[] last={null};final long[] stableSince={0};
+  waitFor(()->{TextView current=status(id);long uptime=SystemClock.uptimeMillis();
+   if(current==null||text(id).isEmpty()||renderPending()||uptime-lastStoreChange<800){last[0]=null;stableSince[0]=0;return false;}
+   if(current!=last[0]){last[0]=current;stableSince[0]=uptime;}
+   return uptime-stableSince[0]>=800;
+  },15000,"Alarm tile did not settle after queued Store renders");
+  return last[0];
+ }
+ TextView verifyMinuteUpdate(String id,JSONObject row)throws Exception{
+  long deadline=SystemClock.uptimeMillis()+90000;
+  while(SystemClock.uptimeMillis()<deadline){
+   TextView baseline=settledStatus(id);int generation=storeChanges;long minute=System.currentTimeMillis()/60000;String before=text(id);
+   observe("minute baseline view="+System.identityHashCode(baseline)+" minute="+minute+" store="+generation+" text="+before);
+   while(SystemClock.uptimeMillis()<deadline){
+    if(storeChanges!=generation){observe("legitimate Store update before minute assertion; wait for its render");break;}
+    String current=text(id);
+    if(System.currentTimeMillis()/60000>minute&&!current.isEmpty()&&!current.equals(before)){
+     TextView after=status(id);if(storeChanges!=generation||renderPending()){observe("Store render arrived during minute observations; settle a fresh baseline");break;}
+     observe("minute observation view="+System.identityHashCode(after)+" store="+storeChanges+" text="+current);
+     require(after==baseline,"Quiescent minute refresh rebuilt the tile instead of updating in place; observations="+observations);
+     require(current.equals(format(row,Instant.now(),ZoneId.systemDefault())),"Minute tick displays stale duration");
+     return baseline;
+    }
+    SystemClock.sleep(100);
+   }
+  }
+  throw new AssertionError("No Store-quiescent real minute update within90s; observations="+observations);
+ }
+ void stopObserving(){if(observing){c.unregisterReceiver(storeObserver);observing=false;}}
  Object store()throws Exception{return storeClass.getConstructor(Context.class).newInstance(c);}
  Object decode(JSONObject json)throws Exception{return storeCompanion.getClass().getMethod("decode",JSONObject.class).invoke(storeCompanion,json);}
  Object save(JSONObject json)throws Exception{return main(()->storeClass.getMethod("save",alarmClass).invoke(store(),decode(json)));}
@@ -88,8 +124,8 @@ public final class TileProbe extends Instrumentation {
   }
   require(main(()->containsText(activity.getWindow().getDecorView(),"NEXT ALARM")),"Aggregate green next-alarm banner was removed");
   showStatus(today.getString("id"));capture("alarm-tiles");pass("each real alarm tile owns accurate next-ring text, off/snooze/resume states, accessible descriptions and unclipped "+scale+"% layout; aggregate banner retained");
-  String id=today.getString("id");TextView same=status(id);String before=text(id);
-  if(scale.equals("100")){waitFor(()->!text(id).equals(before),70000,"Minute tick did not refresh per-tile countdown");require(status(id)==same,"Minute refresh rebuilt the tile instead of updating in place");require(text(id).equals(format(today,Instant.now(),ZoneId.systemDefault())),"Minute tick displays stale duration");pass("real minute boundary updates the existing tile countdown in place");}
+  String id=today.getString("id");TextView same=settledStatus(id);
+  if(scale.equals("100")){same=verifyMinuteUpdate(id,today);pass("real Store-quiescent minute boundary updates the existing tile countdown in place");}
   shell("settings put system time_12_24 12");waitFor(()->main(()->!DateFormat.is24HourFormat(activity)),5000,"12-hour preference did not apply");
   waitFor(()->text(id).equals(format(today,Instant.now(),ZoneId.systemDefault())),5000,"Time-format change left stale tile text");require(status(id)==same,"Time-format refresh rebuilt the tile");
   shell("settings put system time_12_24 24");waitFor(()->main(()->DateFormat.is24HourFormat(activity)),5000,"24-hour preference did not restore");waitFor(()->text(id).equals(format(today,Instant.now(),ZoneId.systemDefault())),5000,"24-hour text is stale");
@@ -104,8 +140,9 @@ public final class TileProbe extends Instrumentation {
  @Override public void onStart(){Bundle result=new Bundle();try{
   c=getTargetContext();ClassLoader loader=c.getClassLoader();storeClass=Class.forName("dev.orbit.clock.core.Store",true,loader);alarmClass=Class.forName("dev.orbit.clock.core.Alarm",true,loader);clockClass=Class.forName("dev.orbit.clock.core.ClockActivity",true,loader);storeCompanion=storeClass.getField("Companion").get(null);
   formatter=clockClass.getDeclaredMethod("alarmNextText",alarmClass,Instant.class,ZoneId.class);formatter.setAccessible(true);
+  lastStoreChange=SystemClock.uptimeMillis();IntentFilter storeFilter=new IntentFilter("dev.orbit.clock.CHANGED");if(Build.VERSION.SDK_INT>=33)c.registerReceiver(storeObserver,storeFilter,Context.RECEIVER_NOT_EXPORTED);else c.registerReceiver(storeObserver,storeFilter);observing=true;
   require(Math.abs(c.getResources().getConfiguration().fontScale-Float.parseFloat(scale)/100f)<.04f,"Wrong actual text scale");
   require(DateFormat.is24HourFormat(c),"Tile fixture requires24-hour system format");open();formatterCases();tileCases();
-  result.putString("stream","ALARM_TILE_INFO_RESULT_PASS at "+scale+"% text\n");finish(Activity.RESULT_OK,result);
- }catch(Throwable error){try{capture("failure");}catch(Throwable ignored){}result.putString("stream","ALARM_TILE_INFO_FAILURE: "+android.util.Log.getStackTraceString(error));finish(Activity.RESULT_CANCELED,result);}}
+  stopObserving();result.putString("stream","ALARM_TILE_INFO_RESULT_PASS at "+scale+"% text\nOBSERVATIONS "+observations+"\n");finish(Activity.RESULT_OK,result);
+ }catch(Throwable error){try{capture("failure");}catch(Throwable ignored){}try{stopObserving();}catch(Throwable ignored){}result.putString("stream","ALARM_TILE_INFO_FAILURE: "+android.util.Log.getStackTraceString(error)+"\nOBSERVATIONS "+observations);finish(Activity.RESULT_CANCELED,result);}}
 }
