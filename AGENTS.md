@@ -22,4 +22,4 @@ Use a Wear OS emulator for watch-specific runtime behavior where feasible. A pho
 
 ## Material 3 design references
 
-For native UI work, read [the project design mapping and official Markdown references](docs/references/material3/README.md). They include Google's color, typography and button guidance with source blob IDs and license. Match the current library version; newer Expressive examples in the reference snapshot do not authorize an untested dependency upgrade. Keep time first/largest and duration smaller in the persistent popup, per the latest user preference.
+For native UI work, read [the project design mapping and official Markdown references](docs/references/material3/README.md). They include Google's color, typography and button guidance with source blob IDs and license. Match the current library version; newer Expressive examples in the reference snapshot do not authorize an untested dependency upgrade. Keep time first/largest and duration smaller in the persistent popup, per the latest user preference. Preserve full wrapping alarm labels and symmetric spacing around the compact popup's 48dp +/- targets.
