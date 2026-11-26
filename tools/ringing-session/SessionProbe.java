@@ -64,11 +64,18 @@ public class SessionProbe extends Instrumentation {
  Map<String,String> player()throws Exception{Exception last=null;for(int i=0;i<12;i++)try{return readPlayer();}catch(org.xmlpull.v1.XmlPullParserException|IOException error){last=error;SystemClock.sleep(80);}throw last;}
  boolean playing()throws Exception{return "true".equals(player().get("playing"));}
  int plays()throws Exception{String e=player().get("events");return e==null?0:e.split("media_play;",-1).length-1;}
+ boolean nativeMediaActive(){
+  for(android.media.AudioPlaybackConfiguration configuration:c.getSystemService(AudioManager.class).getActivePlaybackConfigurations()){
+   int usage=configuration.getAudioAttributes().getUsage();
+   if(usage==android.media.AudioAttributes.USAGE_MEDIA||usage==android.media.AudioAttributes.USAGE_UNKNOWN)return true;
+  }
+  return false;
+ }
  void startPlayer(String mode)throws Exception{
   shell("am force-stop dev.orbit.focusprobe");
   shell("am start -W -f 0x10008000 -n dev.orbit.focusprobe/.ProbeActivity --es mode "+mode);
   waitFor(()->playing() && mode.equals(player().get("mode")),15000,"Media fixture did not start "+mode);
-  waitFor(()->c.getSystemService(AudioManager.class).isMusicActive(),10000,"Native media stream not active");
+  waitFor(()->nativeMediaActive(),10000,"No active native media playback configuration");
   traceMedia("player-ready:"+mode);
  }
  void paused()throws Exception{waitFor(()->!playing() && player().get("events").contains("media_pause;"),10000,"Alarm did not pause media");traceMedia("alarm-paused-player");}
@@ -122,9 +129,10 @@ public class SessionProbe extends Instrumentation {
  Rect bounds(AccessibilityNodeInfo node,String name){require(node!=null,"Missing popup element: "+name);Rect r=new Rect();node.getBoundsInScreen(r);require(!r.isEmpty()&&node.isVisibleToUser(),"Invisible popup element: "+name);return r;}
  void assertPopupHierarchy()throws Exception{
   verifyPopupHierarchy(10);
-  pass("compact popup uses a largest left-aligned clock and quiet header label above48dp duration controls and actions at "+scale+"% text");
+  pass("compact popup uses its largest left-aligned clock above evenly spaced48dp duration controls, actions and a readable footer label at "+scale+"% text");
  }
- void verifyPopupHierarchy(int minutes)throws Exception{
+ void verifyPopupHierarchy(int minutes)throws Exception{verifyPopupHierarchy(minutes,true);}
+ void verifyPopupHierarchy(int minutes,boolean shortLabel)throws Exception{
   AccessibilityNodeInfo root=popup();Rect minus=bounds(find(root,"Decrease snooze by 5 minutes"),"minus"),plus=bounds(find(root,"Increase snooze by 5 minutes"),"plus");
   Rect duration=bounds(find(root,"Snooze duration: "+minutes+" minutes"),"duration"),time=bounds(findPrefix(root,"Alarm time:"),"clock");
   Rect snooze=bounds(find(root,"Snooze"),"Snooze"),stop=bounds(find(root,"Stop"),"Stop"),label=bounds(findPrefix(root,"Alarm label:"),"label");
@@ -132,19 +140,21 @@ public class SessionProbe extends Instrumentation {
   require(Math.min(minus.width(),minus.height())>=47*density&&Math.min(plus.width(),plus.height())>=47*density,"Duration controls need at least48dp touch targets");
   require(Math.min(snooze.height(),stop.height())>=47*density,"Snooze/Stop touch targets below48dp");
   require(minus.centerY()==plus.centerY()&&duration.centerX()>minus.centerX()&&duration.centerX()<plus.centerX(),"Duration group is not centered between matching controls");
-  int headerBottom=Math.max(time.bottom,label.bottom),controlsBottom=Math.max(duration.bottom,Math.max(minus.bottom,plus.bottom));
-  require(Math.min(minus.top,plus.top)>=headerBottom-2&&snooze.top>=controlsBottom-2&&stop.top>=controlsBottom-2,"Popup hierarchy must be compact clock/label header, adjustments, actions");
-  require(label.left>=time.right-2&&label.top>=time.top-2&&label.bottom<=time.bottom+2&&label.width()<=65*density,"Quiet alarm label must fit at the right of the clock header");
-  require(time.height()>label.height(),"Clock must visually dominate the quiet header label");
+  int controlsBottom=Math.max(duration.bottom,Math.max(minus.bottom,plus.bottom));
+  require(Math.min(minus.top,plus.top)>=time.bottom-2&&snooze.top>=controlsBottom-2&&stop.top>=controlsBottom-2&&label.top>=Math.max(snooze.bottom,stop.bottom)-2,"Popup hierarchy must be time, adjustments, actions, full-width label");
   Bitmap display=getUiAutomation().takeScreenshot();require(display!=null,"No native display for popup fit/typography");
   try{
    Rect screen=new Rect(0,0,display.getWidth(),display.getHeight());
    Rect panel=bounds(root,"panel");float maxHeight=Float.parseFloat(scale)>110?235:205;
-   require(panel.height()<=maxHeight*density,"Popup is not compact: "+panel.height()/density+"dp exceeds "+maxHeight+"dp at "+scale+"% text");
+   if(shortLabel)require(panel.height()<=maxHeight*density,"Short-label popup is not compact: "+panel.height()/density+"dp exceeds "+maxHeight+"dp at "+scale+"% text");
    for(Rect element:new Rect[]{panel,time,minus,duration,plus,snooze,stop,label})require(screen.contains(element),"Popup element is cut off by actual display "+screen+": "+element);
-   Rect clockInk=inkBounds(display,time),plusInk=inkBounds(display,centralGlyphBounds(plus,display));int durationNumberHeight=firstInkBandHeight(display,duration);
+   Rect clockInk=inkBounds(display,time),plusInk=inkBounds(display,centralGlyphBounds(plus,display)),durationInk=inkBounds(display,duration);int durationNumberHeight=firstInkBandHeight(display,duration);
    require(clockInk.height()>durationNumberHeight*1.4&&clockInk.height()>plusInk.height()*1.1,"Clock is not the largest rendered typography: clock="+clockInk.height()+" duration="+durationNumberHeight+" plus="+plusInk.height());
-   Rect labelInk=inkBounds(display,label);require(clockInk.left<=time.left+12*density&&clockInk.centerX()<label.centerX()&&labelInk.height()<clockInk.height()*.6,"Clock must remain left-aligned and visually dominate its quiet header label");
+   int labelLineHeight=firstInkBandHeight(display,label);Rect labelInk=inkBounds(display,label);
+   require(clockInk.left<=time.left+12*density&&labelInk.left<=label.left+12*density&&labelLineHeight<clockInk.height()*.6,"Clock must stay left-aligned and visually dominate the readable footer label");
+   int leftGap=durationInk.left-minus.right,rightGap=plus.left-durationInk.right;
+   require(leftGap>=12*density&&rightGap>=12*density&&Math.abs(leftGap-rightGap)<=8*density,"Duration controls lack symmetric breathing room around their rendered readout: "+leftGap+" / "+rightGap);
+   require(Math.abs(minus.centerX()+plus.centerX()-panel.left-panel.right)<=3*density&&Math.abs(durationInk.centerX()-panel.centerX())<=5*density,"Adjustment circles/readout are not centered symmetrically in the popup");
   }finally{display.recycle();}
  }
  Rect centralGlyphBounds(Rect control,Bitmap display){int radius=Math.max(5,(int)(16*c.getResources().getDisplayMetrics().density));return new Rect(Math.max(0,control.centerX()-radius),Math.max(0,control.centerY()-radius),Math.min(display.getWidth(),control.centerX()+radius),Math.min(display.getHeight(),control.centerY()+radius));}
@@ -178,7 +188,8 @@ public class SessionProbe extends Instrumentation {
   try{capture("rotation-timeout-"+(landscape?"landscape":"portrait"));}catch(Throwable ignored){}
   Bundle status=new Bundle();status.putString("stream","ROTATION_DIAGNOSTICS\n"+out);sendStatus(0,status);
  }
- void rotatePopup(String id,int rotation,boolean landscape,int minutes)throws Exception{
+ void rotatePopup(String id,int rotation,boolean landscape,int minutes)throws Exception{rotatePopup(id,rotation,landscape,minutes,true,"persistent-popup");}
+ void rotatePopup(String id,int rotation,boolean landscape,int minutes,boolean shortLabel,String capturePrefix)throws Exception{
   try{
   require(getUiAutomation().setRotation(rotation),"UiAutomation could not rotate the native display");
   final Rect[] last={null};final int[] stable={0};
@@ -190,8 +201,37 @@ public class SessionProbe extends Instrumentation {
    Rect current=new Rect();node.getBoundsInScreen(current);if(current.isEmpty()||!new Rect(0,0,size.x,size.y).contains(current)){stable[0]=0;return false;}
    stable[0]=last[0]!=null&&last[0].equals(current)?stable[0]+1:0;last[0]=current;return stable[0]>=3;
   },15000,"Popup did not settle fully on the "+(landscape?"landscape":"portrait")+" native display");
-  require(active(id)&&!playing(),"Rotation resolved the alarm or resumed media");verifyPopupHierarchy(minutes);assertAdjustmentGlyphs();capture(landscape?"persistent-popup-landscape":"persistent-popup-return-portrait");
+  require(active(id)&&!playing(),"Rotation resolved the alarm or resumed media");verifyPopupHierarchy(minutes,shortLabel);assertAdjustmentGlyphs();capture(capturePrefix+(landscape?"-landscape":"-return-portrait"));
   }catch(Throwable error){rotationFailureDiagnostics(landscape);if(error instanceof Exception)throw(Exception)error;if(error instanceof Error)throw(Error)error;throw new RuntimeException(error);}
+ }
+ void assertRenderedFullLabel(String expected)throws Exception{
+  AccessibilityNodeInfo label=findPrefix(popup(),"Alarm label:");Rect labelBounds=bounds(label,"full alarm label");
+  require(label.getText()!=null&&expected.contentEquals(label.getText()),"Actual label TextView does not contain the complete saved label");
+  String key=AccessibilityNodeInfo.EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY;
+  require(label.getAvailableExtraData().contains(key),"TextView does not expose native character-layout feedback");
+  Bundle request=new Bundle();request.putInt(AccessibilityNodeInfo.EXTRA_DATA_TEXT_CHARACTER_LOCATION_ARG_START_INDEX,0);request.putInt(AccessibilityNodeInfo.EXTRA_DATA_TEXT_CHARACTER_LOCATION_ARG_LENGTH,expected.length());
+  require(label.refreshWithExtraData(key,request),"Could not obtain actual label character locations");
+  Parcelable[] locations=label.getExtras().getParcelableArray(key);require(locations!=null&&locations.length==expected.length(),"Missing character locations for the complete alarm label");
+  Bitmap display=getUiAutomation().takeScreenshot();require(display!=null,"No display for full-label glyph verification");
+  try{int background=dominantColor(display,labelBounds),visible=0;Set<Integer> lines=new HashSet<>();RectF labelArea=new RectF(labelBounds);labelArea.inset(-1,-1);RectF screen=new RectF(0,0,display.getWidth(),display.getHeight());
+   for(int i=0;i<expected.length();i++){if(Character.isWhitespace(expected.charAt(i)))continue;require(locations[i] instanceof RectF,"No rendered bounds for label character "+i);RectF box=(RectF)locations[i];
+    require(Float.isFinite(box.left)&&Float.isFinite(box.top)&&Float.isFinite(box.right)&&Float.isFinite(box.bottom)&&box.width()>0&&box.height()>0&&labelArea.contains(box)&&screen.contains(box),"Label character "+i+" is ellipsized, clipped or off-screen: "+box);
+    int ink=0;for(int y=Math.max(0,(int)Math.floor(box.top));y<Math.min(display.getHeight(),(int)Math.ceil(box.bottom));y++)for(int x=Math.max(0,(int)Math.floor(box.left));x<Math.min(display.getWidth(),(int)Math.ceil(box.right));x++)if(contrast(background,display.getPixel(x,y))>=3)ink++;
+    require(ink>0,"Label character "+i+" has layout bounds but no visible contrasting glyph pixels");visible++;lines.add(Math.round(box.centerY()));
+   }
+   require(visible>60&&lines.size()>=2,"Long alarm label did not wrap into fully rendered readable lines");
+  }finally{display.recycle();}
+ }
+ void longLabelCase()throws Exception{
+  String fullLabel="Morning run by the river with friends, then breakfast before starting the work day";
+  shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW allow");startPlayer("music");String id=fixture(fullLabel,7000);delivered(id);paused();popupVisible();foregroundPausedMusicFixture(id);
+  verifyPopupHierarchy(10,false);assertRenderedFullLabel(fullLabel);capture("long-label-portrait");
+  try{
+   rotatePopup(id,UiAutomation.ROTATION_FREEZE_90,true,10,false,"long-label");assertRenderedFullLabel(fullLabel);
+   rotatePopup(id,UiAutomation.ROTATION_FREEZE_0,false,10,false,"long-label");assertRenderedFullLabel(fullLabel);
+   clickPopup("Stop");waitFor(()->!row(id).getBoolean("enabled"),7000,"Long-label popup Stop did not commit");resumed(0);popupGone();clean(id);
+   pass("complete long label wraps without ellipsis: native character locations and hardware glyph pixels verified in portrait/landscape/portrait; Stop resumes media at "+scale+"% text");
+  }finally{getUiAutomation().setRotation(UiAutomation.ROTATION_FREEZE_0);}
  }
  void assertAdjustmentGlyphs()throws Exception{
   Bitmap display=getUiAutomation().takeScreenshot();require(display!=null,"No hardware display for glyph check");
@@ -223,7 +263,7 @@ public class SessionProbe extends Instrumentation {
   require(installed!=null && installed.getTriggerTime()==row(a).getLong("snoozeUntil"),"Actual snooze was not scheduled");
   require(row(a).getInt("snoozeMinutes")==10,"Saved snooze default changed");clean(a);pass("real foreground video resumes after notification Snooze, including explicit media Play fallback");
   startPlayer("music");shell("cmd media_session dispatch pause");waitFor(()->!playing(),8000,"Pre-paused fixture did not pause");
-  waitFor(()->!c.getSystemService(AudioManager.class).isMusicActive(),5000,"Paused stream still active");before=plays();a=fixture("Already paused",7000);delivered(a);action(a,"stop");SystemClock.sleep(1200);
+  waitFor(()->!nativeMediaActive(),5000,"A media playback configuration is still active");traceMedia("pre-paused-native-baseline");before=plays();a=fixture("Already paused",7000);delivered(a);action(a,"stop");SystemClock.sleep(1200);
   require(!playing() && plays()==before,"Alarm started previously paused media");clean(a);pass("already-paused media is never started");
  }
  void popupCases()throws Exception{
@@ -286,7 +326,7 @@ public class SessionProbe extends Instrumentation {
   require(Math.abs(c.getResources().getConfiguration().fontScale-Float.parseFloat(scale)/100f)<.04f,"Wrong actual text scale");
   require(scope.equals("all") || scope.equals("popup") || scope.equals("screen"),"Unknown test scope "+scope);
   Bundle scopeStep=new Bundle();scopeStep.putString("stream","STEP scope="+scope+" api="+Build.VERSION.SDK_INT+" text="+scale+"%\n");sendStatus(0,scopeStep);
-  if(scope.equals("all") || scope.equals("popup")){mediaCases();popupCases();}
+  if(scope.equals("all") || scope.equals("popup")){mediaCases();popupCases();longLabelCase();}
   if(scope.equals("all") || scope.equals("screen"))screenCase();
   shell("am force-stop dev.orbit.focusprobe");
   result.putString("stream","RINGING_SESSION_RESULT_PASS scope="+scope+" api="+Build.VERSION.SDK_INT+" at "+scale+"% text\n");finish(Activity.RESULT_OK,result);
