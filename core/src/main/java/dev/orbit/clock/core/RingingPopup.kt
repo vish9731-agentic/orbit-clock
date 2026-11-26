@@ -8,7 +8,6 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.PowerManager
 import android.provider.Settings
-import android.text.TextUtils
 import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.View
@@ -86,19 +85,11 @@ class RingingPopup(private val service: Context) {
         }
 
         // Time leads; the smaller duration readout stays between generous controls.
-        val header = row()
         clock = label("", if (compact) 32f else 36f, colors.onSurface).apply {
             tag = "popup_clock"; maxLines = 1; fontFeatureSettings = "tnum"; letterSpacing = -.015f
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
         }
-        header.addView(clock, LinearLayout.LayoutParams(0, -2, 1f))
-        val name = alarm.label.trim().ifBlank { "Alarm" }
-        header.addView(label(name, 11f, colors.muted).apply {
-            tag = "popup_label"; maxLines = 1; maxWidth = dp(64); ellipsize = TextUtils.TruncateAt.END
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            contentDescription = "Alarm label: " + name
-        }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8) })
-        root.addView(header, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+        root.addView(clock, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
         val durationRow = row()
         decrease = button("−", "Decrease snooze by 5 minutes", true) {
             RingControls.select(service, alarm.id, at,
@@ -118,16 +109,13 @@ class RingingPopup(private val service: Context) {
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             }
             addView(durationValue, LinearLayout.LayoutParams(-1, -2))
-            addView(label("min", 12f, colors.muted, 500).apply {
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(2) })
         }
         durationRow.addView(decrease, LinearLayout.LayoutParams(dp(target), dp(target)))
         durationRow.addView(durationGroup, LinearLayout.LayoutParams(0, -2, 1f).apply {
             marginStart = dp(8); marginEnd = dp(8)
         })
         durationRow.addView(increase, LinearLayout.LayoutParams(dp(target), dp(target)))
-        root.addView(durationRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
+        root.addView(durationRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
 
         val actions = row().apply { tag = "popup_actions" }
         snooze = button("Snooze", "", false) {
@@ -138,6 +126,12 @@ class RingingPopup(private val service: Context) {
             Scheduler.act(service, alarm.id, at, false)
         }, LinearLayout.LayoutParams(0, dp(48), 1f))
         root.addView(actions, LinearLayout.LayoutParams(-1, -2))
+        val name = alarm.label.trim().ifBlank { "Alarm" }
+        root.addView(label(name, 12f, colors.muted).apply {
+            tag = "popup_label"; gravity = Gravity.START
+            breakStrategy = android.text.Layout.BREAK_STRATEGY_HIGH_QUALITY
+            contentDescription = "Alarm label: " + name
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
         updateDuration(minutes)
         updateClock()
 
@@ -167,7 +161,8 @@ class RingingPopup(private val service: Context) {
     private fun updateDuration(minutes: Int) {
         if (minutes == shownMinutes) return
         shownMinutes = minutes
-        durationValue?.let { if (panel == null) it.text = minutes.toString() else OrbitMotion.text(it, minutes.toString()) }
+        val value = minutes.toString() + " min"
+        durationValue?.let { if (panel == null) it.text = value else OrbitMotion.text(it, value) }
         durationGroup?.contentDescription = "Snooze duration: " + minutes + " minutes"
         snooze?.contentDescription = "Snooze alarm for " + minutes + " minutes"
         decrease?.let { it.isEnabled = minutes > SnoozeDuration.MIN; it.alpha = if (it.isEnabled) 1f else .38f }
