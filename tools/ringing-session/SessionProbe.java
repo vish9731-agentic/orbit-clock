@@ -121,17 +121,50 @@ public class SessionProbe extends Instrumentation {
  AccessibilityNodeInfo findPrefix(AccessibilityNodeInfo node,String prefix){if(node==null)return null;CharSequence d=node.getContentDescription();if(d!=null&&d.toString().startsWith(prefix))return node;for(int i=0;i<node.getChildCount();i++){AccessibilityNodeInfo found=findPrefix(node.getChild(i),prefix);if(found!=null)return found;}return null;}
  Rect bounds(AccessibilityNodeInfo node,String name){require(node!=null,"Missing popup element: "+name);Rect r=new Rect();node.getBoundsInScreen(r);require(!r.isEmpty()&&node.isVisibleToUser(),"Invisible popup element: "+name);return r;}
  void assertPopupHierarchy()throws Exception{
+  verifyPopupHierarchy(10);
+  pass("popup places its largest visible clock above compact duration text, adjustment controls, actions and quiet label at "+scale+"% text");
+ }
+ void verifyPopupHierarchy(int minutes)throws Exception{
   AccessibilityNodeInfo root=popup();Rect minus=bounds(find(root,"Decrease snooze by 5 minutes"),"minus"),plus=bounds(find(root,"Increase snooze by 5 minutes"),"plus");
-  Rect duration=bounds(find(root,"Snooze duration: 10 minutes"),"duration"),time=bounds(findPrefix(root,"Alarm time:"),"clock");
+  Rect duration=bounds(find(root,"Snooze duration: "+minutes+" minutes"),"duration"),time=bounds(findPrefix(root,"Alarm time:"),"clock");
   Rect snooze=bounds(find(root,"Snooze"),"Snooze"),stop=bounds(find(root,"Stop"),"Stop"),label=bounds(findPrefix(root,"Alarm label:"),"label");
   float density=c.getResources().getDisplayMetrics().density;
   require(Math.min(minus.width(),minus.height())>=63*density&&Math.min(plus.width(),plus.height())>=63*density,"Duration controls need at least64dp touch targets");
   require(minus.height()>snooze.height()&&plus.height()>stop.height(),"Adjustment controls are not the dominant touch targets");
   require(Math.min(snooze.height(),stop.height())>=47*density,"Snooze/Stop touch targets below48dp");
   require(minus.centerY()==plus.centerY()&&duration.centerX()>minus.centerX()&&duration.centerX()<plus.centerX(),"Duration group is not centered between matching controls");
-  require(time.top>=Math.max(minus.bottom,plus.bottom)-2&&snooze.top>=time.bottom-2&&stop.top>=time.bottom-2&&label.top>=Math.max(snooze.bottom,stop.bottom)-2,"Popup hierarchy must be adjustment, time, actions, label");
-  require(time.height()>label.height(),"Alarm label competes with the clock");
-  pass("popup hierarchy prioritizes large duration controls, then clock, actions and quiet label at "+scale+"% text");
+  require(Math.min(minus.top,plus.top)>=time.bottom-2&&snooze.top>=Math.max(minus.bottom,plus.bottom)-2&&stop.top>=Math.max(minus.bottom,plus.bottom)-2&&label.top>=Math.max(snooze.bottom,stop.bottom)-2,"Popup hierarchy must be time, adjustment, actions, label");
+  require(time.height()>duration.height()&&time.height()>label.height(),"Clock must visually dominate the smaller duration and label");
+  Bitmap display=getUiAutomation().takeScreenshot();require(display!=null,"No native display for popup fit/typography");
+  try{
+   Rect screen=new Rect(0,0,display.getWidth(),display.getHeight());
+   for(Rect element:new Rect[]{bounds(root,"panel"),time,minus,duration,plus,snooze,stop,label})require(screen.contains(element),"Popup element is cut off by actual display "+screen+": "+element);
+   Rect clockInk=inkBounds(display,time),plusInk=inkBounds(display,centralGlyphBounds(plus,display));int durationNumberHeight=firstInkBandHeight(display,duration);
+   require(clockInk.height()>durationNumberHeight*1.4&&clockInk.height()>plusInk.height()*1.1,"Clock is not the largest rendered typography: clock="+clockInk.height()+" duration="+durationNumberHeight+" plus="+plusInk.height());
+  }finally{display.recycle();}
+ }
+ Rect centralGlyphBounds(Rect control,Bitmap display){int radius=Math.max(5,(int)(16*c.getResources().getDisplayMetrics().density));return new Rect(Math.max(0,control.centerX()-radius),Math.max(0,control.centerY()-radius),Math.min(display.getWidth(),control.centerX()+radius),Math.min(display.getHeight(),control.centerY()+radius));}
+ int dominantColor(Bitmap display,Rect area){Map<Integer,Integer> colors=new HashMap<>();for(int y=area.top;y<area.bottom;y++)for(int x=area.left;x<area.right;x++){int color=display.getPixel(x,y);colors.put(color,colors.getOrDefault(color,0)+1);}return Collections.max(colors.entrySet(),Map.Entry.comparingByValue()).getKey();}
+ Rect inkBounds(Bitmap display,Rect area){int background=dominantColor(display,area);Rect ink=new Rect(area.right,area.bottom,area.left,area.top);for(int y=area.top;y<area.bottom;y++)for(int x=area.left;x<area.right;x++)if(contrast(background,display.getPixel(x,y))>=3){ink.left=Math.min(ink.left,x);ink.right=Math.max(ink.right,x+1);ink.top=Math.min(ink.top,y);ink.bottom=Math.max(ink.bottom,y+1);}require(!ink.isEmpty(),"No contrasting glyph pixels in "+area);return ink;}
+ int firstInkBandHeight(Bitmap display,Rect area){
+  int background=dominantColor(display,area),first=-1,last=-1,blank=0;int gap=Math.max(2,(int)(2*c.getResources().getDisplayMetrics().density));
+  for(int y=area.top;y<area.bottom;y++){int ink=0;for(int x=area.left;x<area.right;x++)if(contrast(background,display.getPixel(x,y))>=3)ink++;
+   if(ink>=2){if(first<0)first=y;last=y;blank=0;}else if(first>=0&&++blank>=gap)break;
+  }
+  require(first>=0&&last>=first,"No duration numeral ink in "+area);return last-first+1;
+ }
+ void rotatePopup(String id,int rotation,boolean landscape,int minutes)throws Exception{
+  require(getUiAutomation().setRotation(rotation),"UiAutomation could not rotate the native display");
+  final Rect[] last={null};final int[] stable={0};
+  waitFor(()->{
+   Point size=new Point();c.getSystemService(WindowManager.class).getDefaultDisplay().getRealSize(size);
+   int wanted=landscape?android.content.res.Configuration.ORIENTATION_LANDSCAPE:android.content.res.Configuration.ORIENTATION_PORTRAIT;
+   if((size.x>size.y)!=landscape||c.getResources().getConfiguration().orientation!=wanted){stable[0]=0;return false;}
+   AccessibilityNodeInfo node=popup();if(node==null||find(node,"Snooze duration: "+minutes+" minutes")==null){stable[0]=0;return false;}
+   Rect current=new Rect();node.getBoundsInScreen(current);if(current.isEmpty()||!new Rect(0,0,size.x,size.y).contains(current)){stable[0]=0;return false;}
+   stable[0]=last[0]!=null&&last[0].equals(current)?stable[0]+1:0;last[0]=current;return stable[0]>=3;
+  },15000,"Popup did not settle fully on the "+(landscape?"landscape":"portrait")+" native display");
+  require(active(id)&&!playing(),"Rotation resolved the alarm or resumed media");verifyPopupHierarchy(minutes);assertAdjustmentGlyphs();capture(landscape?"persistent-popup-landscape":"persistent-popup-return-portrait");
  }
  void assertAdjustmentGlyphs()throws Exception{
   Bitmap display=getUiAutomation().takeScreenshot();require(display!=null,"No hardware display for glyph check");
@@ -177,6 +210,13 @@ public class SessionProbe extends Instrumentation {
   require(active(id)&&!playing(),"Plus must adjust only, without snoozing or resuming media");
   clickPopup("Decrease snooze by 5 minutes");waitFor(()->find(popup(),"Snooze duration: 10 minutes")!=null,6000,"Popup minus did not update");require(active(id)&&!playing(),"Minus must adjust only, without snoozing or resuming media");
   clickPopup("Increase snooze by 5 minutes");waitFor(()->find(popup(),"Snooze duration: 15 minutes")!=null,6000,"Popup plus did not restore selection");
+  try{
+   rotatePopup(id,UiAutomation.ROTATION_FREEZE_90,true,15);
+   clickPopup("Decrease snooze by 5 minutes");waitFor(()->find(popup(),"Snooze duration: 10 minutes")!=null,6000,"Landscape minus did not adjust selection");require(active(id)&&!playing(),"Landscape minus snoozed instead of adjusting");
+   clickPopup("Increase snooze by 5 minutes");waitFor(()->find(popup(),"Snooze duration: 15 minutes")!=null,6000,"Landscape plus did not adjust selection");require(active(id)&&!playing(),"Landscape plus snoozed instead of adjusting");
+   rotatePopup(id,UiAutomation.ROTATION_FREEZE_0,false,15);
+   pass("real portrait/landscape/portrait rotation preserves selected duration, clock-first layout, visible targets and adjustment-only behavior at "+scale+"% text");
+  }finally{getUiAutomation().setRotation(UiAutomation.ROTATION_FREEZE_0);}
   clickPopup("Snooze");final String snoozeId=id;waitFor(()->!active(snoozeId),7000,"Persistent popup Snooze did not act");resumed(0);popupGone();
   require(row(id).getInt("snoozeMinutes")==10,"Popup adjusted saved default");clean(id);pass("persistent popup plus/Snooze resumes music with occurrence-only duration");
   startPlayer("music");id=fixture("Permission revoked",7000);delivered(id);paused();popupVisible();shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW deny");popupGone();
