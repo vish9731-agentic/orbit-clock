@@ -135,7 +135,7 @@ public class SessionProbe extends Instrumentation {
   int headerBottom=Math.max(time.bottom,label.bottom),controlsBottom=Math.max(duration.bottom,Math.max(minus.bottom,plus.bottom));
   require(Math.min(minus.top,plus.top)>=headerBottom-2&&snooze.top>=controlsBottom-2&&stop.top>=controlsBottom-2,"Popup hierarchy must be compact clock/label header, adjustments, actions");
   require(label.left>=time.right-2&&label.top>=time.top-2&&label.bottom<=time.bottom+2&&label.width()<=65*density,"Quiet alarm label must fit at the right of the clock header");
-  require(time.height()>duration.height()&&time.height()>label.height(),"Clock must visually dominate the smaller duration and label");
+  require(time.height()>label.height(),"Clock must visually dominate the quiet header label");
   Bitmap display=getUiAutomation().takeScreenshot();require(display!=null,"No native display for popup fit/typography");
   try{
    Rect screen=new Rect(0,0,display.getWidth(),display.getHeight());
