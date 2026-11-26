@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+scope="${1:-all}"
 mkdir -p session-feedback
 feedback_pid=
 logcat_pid=
@@ -32,7 +33,7 @@ run_session() {
     done
   ) &
   feedback_pid=$!
-  adb shell am instrument -w -e scale "$scale" dev.orbit.clock.sessionprobe/dev.orbit.clock.sessionprobe.SessionProbe > "session-feedback/evidence-$scale.txt" || result=$?
+  adb shell am instrument -w -e scope "$scope" -e scale "$scale" dev.orbit.clock.sessionprobe/dev.orbit.clock.sessionprobe.SessionProbe > "session-feedback/evidence-$scale.txt" || result=$?
   cleanup_feedback
   timeout 8 adb exec-out screencap -p > "session-feedback/display-$scale.png" || true
   timeout 8 adb logcat -d -b crash > "session-feedback/crashes-$scale.txt" || true
