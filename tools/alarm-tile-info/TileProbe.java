@@ -86,6 +86,28 @@ public final class TileProbe extends Instrumentation {
   require(main(()->value.getLayout()!=null&&value.getLayout().getEllipsisCount(value.getLayout().getLineCount()-1)==0),"Next status is ellipsized");
  }
  void capture(String name)throws Exception{Bitmap bitmap=getUiAutomation().takeScreenshot();require(bitmap!=null,"No native display capture");File dir=new File(c.getFilesDir(),"tile-feedback");dir.mkdirs();try(FileOutputStream out=new FileOutputStream(new File(dir,name+"-"+scale+".png"))){bitmap.compress(Bitmap.CompressFormat.PNG,100,out);}bitmap.recycle();}
+ void rotateTiles(List<JSONObject> rows,int rotation,boolean landscape)throws Exception{
+  String records=c.getSharedPreferences("alarms",0).getString("records","[]");
+  Intent launch=c.getPackageManager().getLaunchIntentForPackage(c.getPackageName());require(launch!=null&&launch.getComponent()!=null,"No rotation monitor target");
+  ActivityMonitor monitor=addMonitor(launch.getComponent().getClassName(),null,false);
+  try{
+   require(getUiAutomation().setRotation(rotation),"UiAutomation could not rotate alarm tiles");
+   Activity replacement=monitor.waitForActivityWithTimeout(15000);require(replacement!=null,"MainActivity was not recreated for native orientation change");activity=replacement;
+  }finally{removeMonitor(monitor);}
+  waitFor(()->main(()->{
+   Point size=new Point();c.getSystemService(WindowManager.class).getDefaultDisplay().getRealSize(size);
+   int wanted=landscape?android.content.res.Configuration.ORIENTATION_LANDSCAPE:android.content.res.Configuration.ORIENTATION_PORTRAIT;
+   return(size.x>size.y)==landscape&&activity.getResources().getConfiguration().orientation==wanted&&activity.hasWindowFocus();
+  }),15000,"Recreated alarm screen did not settle in native orientation");
+  settledStatus(rows.get(0).getString("id"));
+  require(records.equals(c.getSharedPreferences("alarms",0).getString("records","[]")),"Rotation changed saved alarm records");
+  for(JSONObject row:rows){String id=row.getString("id");waitFor(()->status(id)!=null&&!text(id).isEmpty(),10000,"Recreated orientation lost per-tile status");
+   require(text(id).equals(format(row,Instant.now(),ZoneId.systemDefault())),"Recreated orientation displays stale next ring for "+row.getString("label"));showStatus(id);
+   View tile=tagged("item:alarm:"+id);require(tile!=null&&main(()->tile.getContentDescription().toString().contains(textUnchecked(statusUnchecked(id)))),"Recreated tile accessibility omits next ring");
+  }
+  require(main(()->containsText(activity.getWindow().getDecorView(),"NEXT ALARM")),"Rotation removed aggregate next-alarm summary");
+  showStatus(rows.get(3).getString("id"));capture(landscape?"alarm-tiles-landscape":"alarm-tiles-return-portrait");
+ }
  void open()throws Exception{
   Intent launch=c.getPackageManager().getLaunchIntentForPackage(c.getPackageName());require(launch!=null&&launch.getComponent()!=null,"No app launcher");
   if(activity==null){ActivityMonitor monitor=addMonitor(launch.getComponent().getClassName(),null,false);try{
@@ -133,6 +155,7 @@ public final class TileProbe extends Instrumentation {
   waitFor(()->text(id).equals(format(today,Instant.now(),ZoneId.systemDefault())),6000,"Original zone display did not restore");pass("12/24-hour preference and process time-zone changes refresh next-ring text in place");
   save(today.put("enabled",false));waitFor(()->"Off".equals(text(id)),10000,"Store change did not update tile to Off");
   shell("input keyevent HOME");open();waitFor(()->"Off".equals(text(id)),10000,"Foreground resume restores stale enabled deadline");pass("store updates and Home/foreground resume preserve accurate per-tile Off state");
+  try{rotateTiles(rows,UiAutomation.ROTATION_FREEZE_90,true);rotateTiles(rows,UiAutomation.ROTATION_FREEZE_0,false);pass("real landscape/portrait MainActivity recreation preserves all saved alarms, accurate unclipped per-tile statuses and aggregate summary at "+scale+"% text");}finally{getUiAutomation().setRotation(UiAutomation.ROTATION_FREEZE_0);}
  }
  TextView statusUnchecked(String id){View wrapper=activity.getWindow().getDecorView().findViewWithTag("alarm_next_status:"+id);return firstText(wrapper);}
  String textUnchecked(TextView view){return view==null?"":view.getText().toString();}
