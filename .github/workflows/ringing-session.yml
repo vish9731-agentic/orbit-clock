@@ -43,6 +43,7 @@ jobs:
       - name: Verify persistent controls and media at normal and large text
         uses: reactivecircus/android-emulator-runner@v2
         with:
+          emulator-build: '12234392' # Emulator35.1.20, supports the Android15 test image
           api-level: 35
           target: google_apis
           arch: x86_64
