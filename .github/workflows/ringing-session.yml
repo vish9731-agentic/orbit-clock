@@ -40,6 +40,11 @@ jobs:
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android/sdk/ndk
           sudo chmod 666 /dev/kvm
+          # Hosted AMD KVM reported an unsupported guest performance-counter MSR.
+          # This disposable runner tolerates unimplemented MSRs; retain kernel logs.
+          if test -e /sys/module/kvm/parameters/ignore_msrs; then
+            echo 1 | sudo tee /sys/module/kvm/parameters/ignore_msrs
+          fi
       - name: Verify persistent controls and media at normal and large text
         uses: reactivecircus/android-emulator-runner@v2
         with:
