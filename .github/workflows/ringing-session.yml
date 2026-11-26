@@ -23,7 +23,9 @@ jobs:
       matrix:
         include: >-
           ${{ fromJSON(
-            contains(github.event.head_commit.message, '[ui:tiles-only]')
+            contains(github.event.head_commit.message, '[ui:popup-large-only]')
+            && '[{"api":35,"scope":"popup-large","runner":"tools/ringing-session/run-on-device.sh popup 130"}]'
+            || contains(github.event.head_commit.message, '[ui:tiles-only]')
             && '[{"api":35,"scope":"tiles","runner":"tools/alarm-tile-info/run-on-device.sh"}]'
             || contains(github.event.head_commit.message, '[ui:popup-only]')
             && '[{"api":35,"scope":"popup","runner":"tools/ringing-session/run-on-device.sh popup"}]'
