@@ -310,7 +310,7 @@ open class ClockActivity : AppCompatActivity() {
     private fun alarms() {
         val all = Store(this).all().filterNot { it.deleted || it.timer }.sortedWith(compareBy({ it.hour }, { it.minute }))
         val next = all.mapNotNull { it.next() }.minOrNull()
-        if (!Scheduler.allowed(this) || notificationsMissing() || fullScreenMissing()) {
+        if (!Scheduler.allowed(this) || notificationsMissing() || fullScreenMissing() || (!watch && !RingingPopup.permitted(this))) {
             card(color = colors.container, padding = 20).apply {
                 addView(text("Finish alarm setup", 16f, colors.onSurface)); space(this, 6)
                 addView(text("Allow alarms and notifications to ring reliably.", 13f, colors.muted)); space(this, 12)
@@ -388,6 +388,11 @@ open class ClockActivity : AppCompatActivity() {
         if (!Scheduler.allowed(this)) layout.addView(button("Allow precise alarms") { sheet.dismiss(); startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, android.net.Uri.parse("package:$packageName"))) })
         if (notificationsMissing()) { space(layout, 8); layout.addView(button("Allow notifications") { sheet.dismiss(); requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1) }) }
         if (fullScreenMissing()) { space(layout, 8); layout.addView(button("Allow ringing screen") { sheet.dismiss(); startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, android.net.Uri.parse("package:$packageName"))) }) }
+        if (!watch && !RingingPopup.permitted(this)) {
+            space(layout, 8)
+            layout.addView(text("Keep Snooze and Stop visible over other apps while an alarm rings.", 14f, colors.muted))
+            layout.addView(button("Keep alarm controls visible") { sheet.dismiss(); startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:$packageName"))) })
+        }
         sheet.setContentView(layout); sheet.show()
     }
     private fun input(parent: LinearLayout, label: String, value: String, numeric: Boolean = false): TextInputEditText {
