@@ -7,6 +7,21 @@ import android.os.*
 
 class RingingService : Service() {
     private var tone: Ringtone? = null
+    private var resumeMediaAfterAlarm = false
+    private lateinit var popup: RingingPopup
+    private val presentationTick = object : Runnable {
+        override fun run() {
+            if (active.isEmpty()) return
+            val wasShowing = popup.isShowing
+            refreshPopup()
+            if (wasShowing != popup.isShowing) updateNotification(false)
+            handler.postDelayed(this, 1000)
+        }
+    }
+    private fun refreshPopup() {
+        val entry = active.entries.lastOrNull()
+        popup.update(entry?.let { Store(this).get(it.key) }, entry?.value ?: 0)
+    }
     private var vibrating = false
     private var alarmFocusRequest: AudioFocusRequest? = null
     private var mayPlayAlarmAudio = false
@@ -24,17 +39,25 @@ class RingingService : Service() {
                 val a = Store(c).get(id)
                 if (a == null || !Scheduler.isActive(c, a, at)) finishOccurrence(id)
             }
-            if (active.isNotEmpty()) { updateOutputs(); updateNotification(false) }
+            if (active.isNotEmpty()) {
+                updateOutputs(); refreshPopup()
+                updateNotification(i.action == Intent.ACTION_SCREEN_OFF)
+            }
         }
     }
     override fun onCreate() {
         super.onCreate()
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(changes, IntentFilter(Store.CHANGED).apply { addAction(RingControls.CHANGED) }, RECEIVER_NOT_EXPORTED)
-        else registerReceiver(changes, IntentFilter(Store.CHANGED).apply { addAction(RingControls.CHANGED) })
+        popup = RingingPopup(this)
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(changes, IntentFilter(Store.CHANGED).apply { addAction(RingControls.CHANGED); addAction(RingActivity.VISIBILITY_CHANGED); addAction(Intent.ACTION_SCREEN_OFF); addAction(Intent.ACTION_USER_PRESENT); addAction(Intent.ACTION_SCREEN_ON) }, RECEIVER_NOT_EXPORTED)
+        else registerReceiver(changes, IntentFilter(Store.CHANGED).apply { addAction(RingControls.CHANGED); addAction(RingActivity.VISIBILITY_CHANGED); addAction(Intent.ACTION_SCREEN_OFF); addAction(Intent.ACTION_USER_PRESENT); addAction(Intent.ACTION_SCREEN_ON) })
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel("ringing", "Ringing alarms", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Time-sensitive alarm controls"; setSound(null, null); enableVibration(false)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            })
+        getSystemService(NotificationManager::class.java).createNotificationChannel(
+            NotificationChannel("persistent_alarm_controls", "Persistent alarm controls", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "Alarm status while permitted controls remain over other apps"; setSound(null, null); enableVibration(false)
             })
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -59,7 +82,12 @@ class RingingService : Service() {
         }
         if (active[id] == at) return START_NOT_STICKY // Duplicate delivery cannot extend the ring timeout.
         active[id] = at
-        updateNotification(true)
+        // Promote before inflating any persistent controls on a cold process.
+        val pendingPopup = RingingPopup.canPresent(this)
+        updateNotification(true, pendingPopup)
+        refreshPopup()
+        if (pendingPopup && !popup.isShowing) updateNotification(true)
+        handler.removeCallbacks(presentationTick); handler.postDelayed(presentationTick, 1000)
         acquireAudioFocus()
         val wake = lock ?: getSystemService(PowerManager::class.java)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "orbit:alarm").also { lock = it }
@@ -78,14 +106,14 @@ class RingingService : Service() {
         handler.postDelayed(timeout, if (a.timer) 10*60_000L else 30_000L)
         return START_NOT_STICKY
     }
-    private fun updateNotification(fullScreen: Boolean) {
+    private fun updateNotification(fullScreen: Boolean, pendingPopup: Boolean = false) {
         val entry = active.entries.lastOrNull() ?: return
         val a = Store(this).get(entry.key) ?: return
         val screen = PendingIntent.getActivity(this, a.id.hashCode(), Intent(this, RingActivity::class.java)
             .setData(android.net.Uri.parse("orbit://ring/${a.id}")).putExtra("id", a.id).putExtra("at", entry.value)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val notification = Notification.Builder(this, "ringing")
+        val notification = Notification.Builder(this, if (popup.isShowing || pendingPopup) "persistent_alarm_controls" else "ringing")
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm).setContentTitle(a.label)
             .setContentText(if (active.size > 1) "${active.size} alarms ringing" else "Alarm")
             .setOnlyAlertOnce(!fullScreen)
@@ -121,13 +149,17 @@ class RingingService : Service() {
             notification.setStyle(Notification.DecoratedCustomViewStyle())
                 .setCustomContentView(controls(true)).setCustomBigContentView(controls(false)).setCustomHeadsUpContentView(controls(false))
         }
-        if (fullScreen) notification.setFullScreenIntent(screen, true)
-        startForeground(1, notification.build())
+        if (fullScreen && !popup.isShowing && !pendingPopup) notification.setFullScreenIntent(screen, true)
+        val built = notification.build()
+        built.flags = built.flags or Notification.FLAG_NO_CLEAR
+        startForeground(1, built)
     }
     private fun acquireAudioFocus() {
         if (alarmFocusRequest != null && !retryFocusOnNewAlarm) return // Shared across overlapping alarms.
-        if (alarmFocusRequest != null) releaseAudioFocus() // A new alarm may request after permanent loss.
         val manager = getSystemService(AudioManager::class.java)
+        // Remember actual playback before Orbit sends Pause; never start already-paused media.
+        resumeMediaAfterAlarm = resumeMediaAfterAlarm || manager.isMusicActive
+        if (alarmFocusRequest != null) releaseAudioFocus() // A new alarm may request after permanent loss.
         // PAUSE is idempotent; never send PLAY_PAUSE, which could start stopped media.
         runCatching {
             val down = SystemClock.uptimeMillis()
@@ -167,6 +199,20 @@ class RingingService : Service() {
         runCatching { getSystemService(AudioManager::class.java).abandonAudioFocusRequest(request) }
             .onFailure { android.util.Log.w("OrbitAudioFocus", "Audio focus cleanup unavailable", it) }
     }
+    private fun resumeInterruptedMedia() {
+        val shouldResume = resumeMediaAfterAlarm
+        resumeMediaAfterAlarm = false // Exactly once, after the last overlapping alarm.
+        if (!shouldResume) return
+        val manager = getSystemService(AudioManager::class.java)
+        if (manager.isMusicActive) return // The player may already have resumed on focus gain.
+        runCatching {
+            val down = SystemClock.uptimeMillis()
+            for (action in intArrayOf(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.ACTION_UP)) {
+                manager.dispatchMediaKeyEvent(android.view.KeyEvent(down, SystemClock.uptimeMillis(), action,
+                    android.view.KeyEvent.KEYCODE_MEDIA_PLAY, 0))
+            }
+        }.onFailure { android.util.Log.w("OrbitAudioFocus", "Media resume dispatch unavailable", it) }
+    }
     private fun updateOutputs() {
         val alarms = active.keys.mapNotNull { Store(this).get(it) }
         if (mayPlayAlarmAudio && alarms.any { it.sound }) {
@@ -201,15 +247,18 @@ class RingingService : Service() {
         active.remove(id)
         timeouts.remove(id)?.let { handler.removeCallbacks(it) }
         if (active.isEmpty()) {
+            handler.removeCallbacks(presentationTick); popup.hide()
             tone?.stop(); tone = null
             releaseAudioFocus()
             getSystemService(Vibrator::class.java).cancel(); vibrating = false
             stopForeground(STOP_FOREGROUND_REMOVE)
+            resumeInterruptedMedia()
             stopSelf()
         }
     }
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null); unregisterReceiver(changes)
+        popup.hide(); resumeMediaAfterAlarm = false
         tone?.stop(); tone = null; releaseAudioFocus(); getSystemService(Vibrator::class.java).cancel()
         if (lock?.isHeld == true) lock?.release()
         active.toMap().forEach { (id, at) -> Scheduler.act(this, id, at, false) }
