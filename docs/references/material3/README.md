@@ -12,14 +12,15 @@ Downloaded 2026-11-26 from Google's official [Material Components for Android](h
 
 ## Applied to the alarm popup
 
-- Current time leads at 45sp regular weight (40sp in short windows).
-- The smaller snooze-duration number is 18sp, with a quiet unit beneath.
-- +/- have contrasting filled targets: 72dp normally and 64dp in short windows. They only adjust the occurrence's duration; Snooze remains a separate tap.
-- Snooze/Stop use lower-emphasis tonal actions with 48dp touch targets and 14sp labels.
-- The alarm label is last, at 12sp in the on-surface-variant role; its full value remains available to accessibility.
-- Rounded dark surfaces, restrained elevation, paired Material color roles and wallpaper-derived dynamic color when Android supports it.
-- The window stays mounted during duration changes. Rotation uses current window bounds and system/cutout insets; a height-clamped scrolling viewport keeps controls reachable in short windows or with large text.
-- Preserve 5–60 minute bounds, media restoration and persistent-window behavior.
-- The official documents include newer Expressive APIs too. This app keeps Material 1.12 and uses compatible components/attributes.
+- The clock leads at 36sp regular weight (32sp in short windows).
+- The duration is a small, single-line 16sp readout such as “10 min”.
+- +/- use 48dp filled targets with a centered readout, symmetric horizontal spacing and 8dp gaps between rows.
+- Snooze/Stop use secondary-container tonal roles, 48dp touch targets and 14sp labels.
+- The 12sp alarm label occupies the full footer width and wraps without ellipses. Very long content can scroll rather than being discarded.
+- Padding is restrained: 14dp horizontally and 10dp vertically. Dark surfaces, rounded corners and paired Material color roles keep the card quiet.
+- Wallpaper-derived dynamic colors apply when supported; the clock remains the largest text.
+- The popup stays mounted during duration changes. Rotation uses current window bounds and system/cutout insets; a height-clamped viewport keeps content reachable.
+- +/- only adjust the occurrence's duration; Snooze is a separate tap. Preserve 5–60 minute bounds and persistent-window behavior.
+- The upstream documents include newer Expressive APIs. The app keeps Material 1.12 and uses compatible components/attributes.
 
-These choices apply the user's requested clock-first hierarchy. They are Orbit-specific decisions, not a claim that Google specifies this exact alarm layout. Native portrait/landscape and enlarged-text checks are recorded in verification/STATUS.md.
+These are Orbit-specific choices applying the user's compact, clock-first design and full-label readability requirements. They are not a claim that Google specifies this exact alarm layout. Actual portrait/landscape, long-label and enlarged-text results are recorded in verification/STATUS.md.
