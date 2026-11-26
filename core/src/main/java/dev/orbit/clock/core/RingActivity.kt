@@ -70,6 +70,13 @@ class RingActivity : AppCompatActivity() {
         watch = packageManager.hasSystemFeature("android.hardware.type.watch")
         setTheme(R.style.Theme_OrbitClock_Ringing)
         super.onCreate(state)
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val current = Store(this@RingActivity).get(id)
+                if (current == null || !Scheduler.isActive(this@RingActivity, current, at)) finish()
+                else window.decorView.announceForAccessibility("Choose Snooze or Stop")
+            }
+        })
         setShowWhenLocked(true); setTurnScreenOn(true)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -249,6 +256,8 @@ class RingActivity : AppCompatActivity() {
     }
     override fun onResume() {
         super.onResume()
+        visibleActivity = this
+        sendBroadcast(Intent(VISIBILITY_CHANGED).setPackage(packageName))
         // A restored task must not bring a previously snoozed occurrence back on screen.
         val alarm = Store(this).get(id)
         if (!completingAction && (alarm == null || !Scheduler.isActive(this, alarm, at))) { finish(); return }
@@ -257,6 +266,8 @@ class RingActivity : AppCompatActivity() {
         clockRunning = true; clockHandler.removeCallbacks(clockTick); clockTick.run()
     }
     override fun onPause() {
+        if (visibleActivity === this) visibleActivity = null
+        sendBroadcast(Intent(VISIBILITY_CHANGED).setPackage(packageName))
         clockRunning = false
         clockHandler.removeCallbacks(clockTick)
         volumeKey = KeyEvent.KEYCODE_UNKNOWN
@@ -295,5 +306,10 @@ class RingActivity : AppCompatActivity() {
         }
         return super.onGenericMotionEvent(event)
     }
-    override fun onDestroy() { clockRunning = false; clockHandler.removeCallbacksAndMessages(null); bezelHandler.removeCallbacks(resetBezelFeedback); unregisterReceiver(changes); super.onDestroy() }
+    companion object {
+        const val VISIBILITY_CHANGED = "dev.orbit.clock.RING_VISIBILITY"
+        private var visibleActivity: RingActivity? = null
+        val isRingingVisible: Boolean get() = visibleActivity != null
+    }
+    override fun onDestroy() { if (visibleActivity === this) visibleActivity = null; clockRunning = false; clockHandler.removeCallbacksAndMessages(null); bezelHandler.removeCallbacks(resetBezelFeedback); unregisterReceiver(changes); super.onDestroy() }
 }
