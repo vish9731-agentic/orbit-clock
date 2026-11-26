@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 scope="${1:-all}"
+scale_filter="${2:-all}"
 mkdir -p session-feedback
 feedback_pid=
 logcat_pid=
@@ -46,7 +47,7 @@ run_session() {
   python -c "from pathlib import Path; s=Path('session-feedback/evidence-$scale.txt').read_text(); assert 'RINGING_SESSION_RESULT_PASS' in s and 'RINGING_SESSION_FAILURE' not in s, s"
 }
 adb logcat -c
-run_session 100
+if [[ "$scale_filter" != 130 ]]; then run_session 100; fi
 adb shell am force-stop dev.orbit.clock
 adb shell pm clear dev.orbit.clock
 adb shell pm grant dev.orbit.clock android.permission.POST_NOTIFICATIONS
