@@ -52,12 +52,53 @@ public class WidgetProbe extends Instrumentation {
    if(preview){square.updateAppWidget(sv);wide.updateAppWidget(wv);}else{manager.updateAppWidget(squareId,sv);manager.updateAppWidget(wideId,wv);}return null;});
   waitFor(()->main(()->square.findViewById(id("widget_clock"))!=null),"Host did not inflate");SystemClock.sleep(300);
  }
+ int appColor(String getter)throws Exception {
+  Class<?> colors=Class.forName("dev.orbit.clock.core.OrbitColors",true,c.getClassLoader());
+  return (Integer)colors.getMethod(getter).invoke(colors.getField("INSTANCE").get(null));
+ }
+ void checkAppTexture(Bitmap widget,int widthDp,int heightDp,String label)throws Exception {
+  float density=Math.min(c.getResources().getDisplayMetrics().density,Math.min(1600f/Math.max(widthDp,1),900f/Math.max(heightDp,1)));
+  int w=Math.max(1,Math.min(1600,Math.round(widthDp*density))),h=Math.max(1,Math.min(900,Math.round(heightDp*density)));
+  require(widget.getWidth()==w&&widget.getHeight()==h,"Texture raster stretches the app's physical line spacing: "+label);
+  int fill=appColor("getSurfaceHigh"),amber=appColor("getAmber");
+  Class<?> type=Class.forName("dev.orbit.clock.core.OrbitHatchDrawable",true,c.getClassLoader());
+  android.graphics.drawable.Drawable source=(android.graphics.drawable.Drawable)type.getConstructor(int.class,float.class,float.class,int.class).newInstance(fill,0f,density,amber);
+  Bitmap app=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);
+  try{
+   source.setBounds(0,0,w,h);source.draw(new Canvas(app));int samples=0,mismatches=0,ink=0;
+   // Removing the widget opacity must reveal the actual app surface, including
+   // its line phase, weight, color and edge fade. Never draw a mounted Drawable.
+   for(int y=0;y<h;y+=3)for(int x=0;x<w;x+=3){int actual=widget.getPixel(x,y);if(Color.alpha(actual)<120)continue;
+    int expected=app.getPixel(x,y);samples++;
+    int error=Math.max(Math.abs(Color.red(actual)-Color.red(expected)),Math.max(Math.abs(Color.green(actual)-Color.green(expected)),Math.abs(Color.blue(actual)-Color.blue(expected))));
+    if(error>3)mismatches++;
+    if(Color.red(expected)>Color.red(fill)+5&&Color.green(expected)>Color.green(fill)+2)ink++;
+   }
+   require(samples>50&&ink>5,"No visible app hatch pixels in widget gradient: "+label);
+   require(mismatches<=Math.max(1,samples/1000),"Widget texture/color differs from actual app artwork after opacity mask: "+label+" mismatches="+mismatches+"/"+samples);
+  }finally{app.recycle();}
+ }
+ void checkTextureSizes()throws Exception {
+  Class<?> type=Class.forName("dev.orbit.clock.phone.WidgetBackdrop",true,c.getClassLoader());Object renderer=type.getField("INSTANCE").get(null);
+  Method render=type.getMethod("render",Context.class,boolean.class,int.class,int.class,boolean.class);
+  // Native-host sizes plus both width and height bitmap caps: one density must
+  // preserve the app's diagonal angle and 5dp pitch instead of stretching axes.
+  for(int[] size:new int[][]{{160,160,0,0},{250,70,1,0},{340,80,1,1},{1200,180,1,0},{300,1000,0,1}}){
+   Bitmap bitmap=(Bitmap)render.invoke(renderer,c,size[2]==1,size[0],size[1],size[3]==1);
+   try{checkAppTexture(bitmap,size[0],size[1],Arrays.toString(size));
+    require(Color.alpha(bitmap.getPixel(bitmap.getWidth()-1,bitmap.getHeight()/2))==0,"Scaled texture has a hard right edge");
+    require(Color.alpha(bitmap.getPixel(bitmap.getWidth()/2,0))==0,"Scaled texture has a hard top edge");
+   }finally{bitmap.recycle();}
+  }
+  pass("widget gradient matches actual app hatch colors/phase/opacity at square, narrow, wide and capped raster sizes without stretching");
+ }
  void checkSurface()throws Exception {
   main(()->{
    View event=wide.findViewById(id("widget_event"));require(event.getBackground()==null,"Reminder still owns a separate background");
    ImageView image=(ImageView)wide.findViewById(id("widget_backdrop"));require(image.getVisibility()==View.VISIBLE,"Missing full-widget backdrop");
    require(image.getWidth()>event.getWidth(),"Backdrop is confined to a half tile");
    Bitmap bitmap=((android.graphics.drawable.BitmapDrawable)image.getDrawable()).getBitmap();int w=bitmap.getWidth(),h=bitmap.getHeight();
+   checkAppTexture(bitmap,Math.max(100,wideDp-16),Math.max(48,wideHeightDp-16),"actual mounted wide widget");
    require(Color.alpha(bitmap.getPixel(w/20,h/2))==0,"Clock edge is not transparent");
    int center=(int)(w*.65f);require(Color.alpha(bitmap.getPixel(center,h/2))>=150,"Reminder contrast too low");
    require(Color.alpha(bitmap.getPixel(center,0))==0 && Color.alpha(bitmap.getPixel(center,h-1))==0,"Hard top/bottom perimeter");
@@ -117,6 +158,7 @@ public class WidgetProbe extends Instrumentation {
  @Override public void onCreate(Bundle args){super.onCreate(args);start();}
  @Override public void onStart(){Bundle result=new Bundle();try{
   c=getTargetContext();ClassLoader loader=c.getClassLoader();
+  checkTextureSizes();
   companion=Class.forName("dev.orbit.clock.phone.AlarmWidget",true,loader).getField("Companion").get(null);
   storeClass=Class.forName("dev.orbit.clock.core.Store",true,loader);alarmClass=Class.forName("dev.orbit.clock.core.Alarm",true,loader);
   storeCompanion=storeClass.getField("Companion").get(null);
