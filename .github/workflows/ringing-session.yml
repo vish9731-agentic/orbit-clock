@@ -73,7 +73,7 @@ jobs:
           profile: pixel_6
           ram-size: 2048M
           heap-size: 256M
-          emulator-options: -no-window -gpu swiftshader_indirect -feature -Vulkan -no-snapshot -noaudio -no-boot-anim -memory 2048
+          emulator-options: -show-kernel -no-window -gpu swiftshader_indirect -feature -Vulkan -no-snapshot -noaudio -no-boot-anim -memory 2048
           disable-animations: false
           emulator-boot-timeout: 360
           script: |
