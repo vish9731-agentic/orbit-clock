@@ -23,13 +23,15 @@ jobs:
       matrix:
         include: >-
           ${{ fromJSON(
-            contains(github.event.head_commit.message, '[ui:popup-large-only]')
+            contains(github.event.head_commit.message, '[ui:approved-card]')
+            && '[{"api":35,"scope":"popup","runner":"tools/ringing-session/run-on-device.sh popup"},{"api":35,"scope":"navigation","runner":"tools/ringing-session/run-on-device.sh navigation"}]'
+            || contains(github.event.head_commit.message, '[ui:popup-large-only]')
             && '[{"api":35,"scope":"popup-large","runner":"tools/ringing-session/run-on-device.sh popup 130"}]'
             || contains(github.event.head_commit.message, '[ui:tiles-only]')
             && '[{"api":35,"scope":"tiles","runner":"tools/alarm-tile-info/run-on-device.sh"}]'
             || contains(github.event.head_commit.message, '[ui:popup-only]')
             && '[{"api":35,"scope":"popup","runner":"tools/ringing-session/run-on-device.sh popup"}]'
-            || '[{"api":35,"scope":"popup","runner":"tools/ringing-session/run-on-device.sh popup"},{"api":35,"scope":"tiles","runner":"tools/alarm-tile-info/run-on-device.sh"}]'
+            || '[{"api":35,"scope":"popup","runner":"tools/ringing-session/run-on-device.sh popup"},{"api":35,"scope":"navigation","runner":"tools/ringing-session/run-on-device.sh navigation"},{"api":35,"scope":"tiles","runner":"tools/alarm-tile-info/run-on-device.sh"}]'
           ) }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -74,6 +76,8 @@ jobs:
           disable-animations: false
           emulator-boot-timeout: 360
           script: |
+            adb shell setprop debug.hwui.renderer skiagl
+            adb shell getprop debug.hwui.renderer
             adb shell settings put global device_provisioned 1
             adb shell settings put secure user_setup_complete 1
             adb shell pm disable-user --user 0 com.google.android.googlesdksetup || true
@@ -97,6 +101,10 @@ jobs:
         run: |
           free -m
           sudo dmesg --level=err,warn || true
+          mkdir -p session-feedback/host-diagnostics
+          cp /tmp/android-runner/emu-crash-* session-feedback/host-diagnostics/ 2>/dev/null || true
+          ps -eo pid,stat,comm,args | rg 'emulator|qemu' || true
+          uname -a
       - uses: actions/upload-artifact@v4
         if: always()
         with:
