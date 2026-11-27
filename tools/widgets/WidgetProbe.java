@@ -62,13 +62,14 @@ public class WidgetProbe extends Instrumentation {
   require(widget.getWidth()==w&&widget.getHeight()==h,"Texture raster stretches the app's physical line spacing: "+label);
   int fill=appColor("getSurfaceHigh"),amber=appColor("getAmber");
   Class<?> type=Class.forName("dev.orbit.clock.core.OrbitHatchDrawable",true,c.getClassLoader());
-  android.graphics.drawable.Drawable source=(android.graphics.drawable.Drawable)type.getConstructor(int.class,float.class,float.class,int.class).newInstance(fill,0f,density,amber);
+  android.graphics.drawable.Drawable source=(android.graphics.drawable.Drawable)type.getConstructor(int.class,float.class,float.class,int.class,float.class,Float.class).newInstance(fill,0f,density,amber,.85f,null);
   Bitmap app=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);
   try{
    source.setBounds(0,0,w,h);source.draw(new Canvas(app));int samples=0,mismatches=0,ink=0;
-   // Removing the widget opacity must reveal the actual app surface, including
-   // its line phase, weight, color and edge fade. Never draw a mounted Drawable.
-   for(int y=0;y<h;y+=3)for(int x=0;x<w;x+=3){int actual=widget.getPixel(x,y);if(Color.alpha(actual)<120)continue;
+   // Removing the widget opacity must reveal the shared app artwork with its
+   // approved wider coverage, including line phase, weight and color. Never
+   // draw a mounted Drawable or use WidgetBackdrop to produce the reference.
+   for(int y=0;y<h;y+=3)for(int x=0;x<w;x+=3){int actual=widget.getPixel(x,y);if(Color.alpha(actual)<70)continue;
     int expected=app.getPixel(x,y);samples++;
     int error=Math.max(Math.abs(Color.red(actual)-Color.red(expected)),Math.max(Math.abs(Color.green(actual)-Color.green(expected)),Math.abs(Color.blue(actual)-Color.blue(expected))));
     if(error>3)mismatches++;
@@ -76,6 +77,52 @@ public class WidgetProbe extends Instrumentation {
    }
    require(samples>50&&ink>5,"No visible app hatch pixels in widget gradient: "+label);
    require(mismatches<=Math.max(1,samples/1000),"Widget texture/color differs from actual app artwork after opacity mask: "+label+" mismatches="+mismatches+"/"+samples);
+   int leftInk=0,leftSamples=0;
+   // This whole region precedes the old 38%-wide/104dp patch. Genuine amber
+   // strokes here establish leftward extension, rather than just darker fill.
+   for(int y=h/4;y<h*3/4;y+=2)for(int x=w*3/10;x<w*11/20;x+=2){
+    int color=widget.getPixel(x,y);leftSamples++;
+    if(Color.red(color)>=Color.blue(color)+3&&Color.red(color)>Color.green(color)&&Color.green(color)>=Color.blue(color))leftInk++;
+   }
+   require(leftInk>Math.max(5,leftSamples/100),"Hatch did not extend visibly left of its old patch: "+label+" ink="+leftInk+"/"+leftSamples);
+  }finally{app.recycle();}
+ }
+ void checkApprovedOpacity(Bitmap bitmap,float density,String label){
+  int w=bitmap.getWidth(),h=bitmap.getHeight();
+  // Independently specified approval samples (0-255), not a copy of the
+  // production easing formula: a gentle spread across the complete widget.
+  float[] positions={.1f,.3f,.5f,.7f,.9f};int[] approved={80,111,140,167,192};
+  int lowStep=255,highStep=0,previousSample=-1;
+  for(int i=0;i<positions.length;i++){
+   int x=Math.round((w-1)*positions[i]),alpha=Color.alpha(bitmap.getPixel(x,h/2));
+   require(Math.abs(alpha-approved[i])<=2,"Widget transparency differs from approved even spread or was applied twice: "+label+" at="+positions[i]+" alpha="+alpha);
+   if(previousSample>=0){int step=alpha-previousSample;lowStep=Math.min(lowStep,step);highStep=Math.max(highStep,step);}previousSample=alpha;
+  }
+  require(lowStep>=22&&highStep-lowStep<=13,"Widget fade is concentrated at one side: "+label);
+  int feather=(int)Math.ceil(Math.min(10*density,h*.18f)),previous=0;
+  for(int x=0;x<w-feather;x++){
+   int alpha=Color.alpha(bitmap.getPixel(x,h/2));
+   require(alpha>=previous,"Interior scrim opacity reverses: "+label);
+   require(alpha-previous<=Math.max(6,(int)Math.ceil(110f/Math.max(1,feather))),"Hard left feather or inner seam: "+label);
+   previous=alpha;
+  }
+  for(int x=w-feather;x<w;x++){
+   int alpha=Color.alpha(bitmap.getPixel(x,h/2));
+   require(Math.abs(alpha-previous)<=Math.max(36,(int)Math.ceil(340f/Math.max(1,feather))),"Hard right feather edge: "+label);previous=alpha;
+  }
+  require(Color.alpha(bitmap.getPixel(0,h/2))==0&&Color.alpha(bitmap.getPixel(w-1,h/2))==0,"Hard side perimeter: "+label);
+  require(Color.alpha(bitmap.getPixel(w/2,0))==0&&Color.alpha(bitmap.getPixel(w/2,h-1))==0,"Hard top/bottom perimeter: "+label);
+ }
+ void checkAppDefaultCoverage()throws Exception {
+  float density=c.getResources().getDisplayMetrics().density;int w=Math.round(340*density),h=Math.round(80*density),fill=appColor("getSurfaceHigh");
+  Class<?> type=Class.forName("dev.orbit.clock.core.OrbitHatchDrawable",true,c.getClassLoader());
+  android.graphics.drawable.Drawable source=(android.graphics.drawable.Drawable)type.getConstructor(int.class,float.class,float.class,int.class).newInstance(fill,0f,density,appColor("getAmber"));
+  Bitmap app=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);
+  try{
+   source.setBounds(0,0,w,h);source.draw(new Canvas(app));int rightInk=0;
+   for(int y=h/4;y<h*3/4;y+=2)for(int x=w/20;x<w*3/5;x+=2)require(app.getPixel(x,y)==fill,"Widget-only hatch expansion leaked into default app artwork");
+   for(int y=h/4;y<h*3/4;y+=2)for(int x=w*4/5;x<w*19/20;x+=2){int ink=app.getPixel(x,y);if(Color.red(ink)>Color.blue(ink)+5)rightInk++;}
+   require(rightInk>5,"Default app edge hatch was removed");
   }finally{app.recycle();}
  }
  void checkTextureSizes()throws Exception {
@@ -86,17 +133,12 @@ public class WidgetProbe extends Instrumentation {
   for(int[] size:new int[][]{{160,160,0,0},{250,70,1,0},{340,80,1,1},{1200,180,1,0},{300,1000,0,1}}){
    Bitmap bitmap=(Bitmap)render.invoke(renderer,c,size[2]==1,size[0],size[1],size[3]==1);
    try{checkAppTexture(bitmap,size[0],size[1],Arrays.toString(size));
-    float start=size[2]==1?(size[0]<264?.15f:.23f):0f;
-    for(float position:new float[]{.33f,.5f,.75f,.9f}){
-     int x=Math.round((bitmap.getWidth()-1)*position);float t=Math.max(0f,Math.min(1f,(x/(float)(bitmap.getWidth()-1)-start)/(1f-start)));
-     int expected=(int)(212*(1-Math.pow(1-t,size[2]==1?4:5)));
-     require(Math.abs(Color.alpha(bitmap.getPixel(x,bitmap.getHeight()/2))-expected)<=1,"App texture was faded more than once or changed widget transparency: "+Arrays.toString(size));
-    }
-    require(Color.alpha(bitmap.getPixel(bitmap.getWidth()-1,bitmap.getHeight()/2))==0,"Scaled texture has a hard right edge");
-    require(Color.alpha(bitmap.getPixel(bitmap.getWidth()/2,0))==0,"Scaled texture has a hard top edge");
+    float density=Math.min(c.getResources().getDisplayMetrics().density,Math.min(1600f/size[0],900f/size[1]));
+    checkApprovedOpacity(bitmap,density,Arrays.toString(size));
    }finally{bitmap.recycle();}
   }
-  pass("widget gradient matches actual app hatch colors/phase/opacity at square, narrow, wide and capped raster sizes without stretching");
+  checkAppDefaultCoverage();
+  pass("approved evenly spread opacity and extended-left shared hatch at square, narrow, wide and capped raster sizes; default app coverage unchanged");
  }
  void checkSurface()throws Exception {
   main(()->{
@@ -105,7 +147,8 @@ public class WidgetProbe extends Instrumentation {
    require(image.getWidth()>event.getWidth(),"Backdrop is confined to a half tile");
    Bitmap bitmap=((android.graphics.drawable.BitmapDrawable)image.getDrawable()).getBitmap();int w=bitmap.getWidth(),h=bitmap.getHeight();
    checkAppTexture(bitmap,Math.max(100,wideDp-16),Math.max(48,wideHeightDp-16),"actual mounted wide widget");
-   require(Color.alpha(bitmap.getPixel(w/20,h/2))==0,"Clock edge is not transparent");
+   checkApprovedOpacity(bitmap,c.getResources().getDisplayMetrics().density,"actual mounted wide widget");
+   int left=Color.alpha(bitmap.getPixel(w/20,h/2));require(left>=60&&left<=85,"Clock side does not retain the approved light transparency");
    int center=(int)(w*.65f);require(Color.alpha(bitmap.getPixel(center,h/2))>=150,"Reminder contrast too low");
    require(Color.alpha(bitmap.getPixel(center,0))==0 && Color.alpha(bitmap.getPixel(center,h-1))==0,"Hard top/bottom perimeter");
    require(Color.alpha(bitmap.getPixel(w-1,h/2))==0,"Hard right perimeter");
@@ -118,9 +161,6 @@ public class WidgetProbe extends Instrumentation {
    }
    require(sampled>100&&hatch>5,"Actual widget bitmap lacks the shared amber hatch");
    require(neutral>sampled/3&&hatch<sampled*.65,"Hatch must remain a subtle accent over a predominantly charcoal scrim");
-   int previous=0;int feather=(int)Math.ceil(10*c.getResources().getDisplayMetrics().density);
-   for(int x=0;x<w-feather;x++){int alpha=Color.alpha(bitmap.getPixel(x,h/2));require(alpha>=previous,"Interior scrim opacity reverses");require(alpha-previous<=6,"Hard inner seam");previous=alpha;}
-   for(int x=w-feather;x<w;x++){int alpha=Color.alpha(bitmap.getPixel(x,h/2));require(Math.abs(alpha-previous)<=36,"Hard feather edge");previous=alpha;}
 
    return null;});
  }

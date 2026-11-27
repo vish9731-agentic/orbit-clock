@@ -1,5 +1,11 @@
 # Orbit Clock handoff
 
+## Approved broader widget gradient — verification pending
+
+The user approved an image preview before implementation. Widget reminder surfaces now spread the same fine amber hatch across85% of the width, beginning faintly at15%, with a smooth whole-surface25%/55%/80% left/centre/right opacity field before the existing rounded feather mask. Uniform capped raster density, a single shared textured layer followed by one DST_IN mask, transparent clock-only mode and all widget geometry/data/actions remain. Shared drawable options preserve the original app/watch coverage by default. Native verification is being updated for the approved profile and wider hatch; no completed-build or runtime pass is claimed yet.
+
+For future visual changes, show a preview image and wait for explicit user approval before implementing or building. This widget preview is already approved.
+
 ## Widgets match the app hatch surface — verified debug 0.1.158
 
 Widget reminders now rasterize the exact shared OrbitHatchDrawable on OrbitColors.surfaceHigh, then apply the existing horizontal transparency and rounded feather mask to the complete surface once. The extra RGB×0.62 darkening and separate SRC_ATOP hatch overlay are removed. This preserves the app's amber line color, spacing, angle and intrinsic edge fade beneath the widget's launcher transparency. Alarm and bedtime reminders share the same charcoal base. Clock-only visibility, settings, data, touch regions and actions are unchanged.

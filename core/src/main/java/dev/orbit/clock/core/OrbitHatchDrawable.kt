@@ -15,21 +15,24 @@ import android.graphics.drawable.Drawable
 import kotlin.math.min
 
 /**
- * Quiet diagonal detail borrowed from the watch alarm rail. The patch occupies
- * only the right edge, leaving the main text area calm. Live views retain this
- * drawable so paths and shaders are rebuilt only when its bounds change.
+ * Quiet diagonal detail borrowed from the watch alarm rail. The default patch
+ * occupies only the right edge; widgets can spread that same ink more broadly.
+ * Live views retain this drawable so paths and shaders are rebuilt only when
+ * its bounds change.
  */
-class OrbitHatchDrawable(
+class OrbitHatchDrawable @JvmOverloads constructor(
     fill: Int,
     private val cornerRadius: Float,
     density: Float,
-    hatchColor: Int = OrbitColors.amber
+    hatchColor: Int = OrbitColors.amber,
+    hatchWidthFraction: Float = .38f,
+    hatchMaxWidthDp: Float? = 104f
 ) : Drawable() {
     private val fillAlpha = Color.alpha(fill)
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = fill }
     private val outline = Path()
     private val area = RectF()
-    private val hatch = HatchInk(density, hatchColor)
+    private val hatch = HatchInk(density, hatchColor, hatchWidthFraction, hatchMaxWidthDp)
 
     override fun onBoundsChange(bounds: Rect) {
         area.set(bounds)
@@ -77,7 +80,12 @@ object OrbitHatch {
     }
 }
 
-private class HatchInk(density: Float, private val color: Int) {
+private class HatchInk(
+    density: Float,
+    private val color: Int,
+    private val widthFraction: Float = .38f,
+    private val maxWidthDp: Float? = 104f
+) {
     private val scale = density.coerceAtLeast(.1f)
     private val patch = RectF()
     private val lines = Path()
@@ -95,7 +103,10 @@ private class HatchInk(density: Float, private val color: Int) {
 
     fun setBounds(bounds: RectF) {
         patch.set(bounds)
-        patch.left = bounds.right - min(bounds.width() * .38f, 104f * scale)
+        val fractionWidth = bounds.width() * widthFraction.coerceIn(0f, 1f)
+        val patchWidth = maxWidthDp?.let { min(fractionWidth, it.coerceAtLeast(0f) * scale) }
+            ?: fractionWidth
+        patch.left = bounds.right - patchWidth
         lines.rewind()
         if (patch.isEmpty) return
         val transparent = Color.argb(0, Color.red(color), Color.green(color), Color.blue(color))
