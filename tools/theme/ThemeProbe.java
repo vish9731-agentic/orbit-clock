@@ -145,9 +145,16 @@ public class ThemeProbe extends Instrumentation {
  Activity launch(String tab)throws Exception {
   if(current!=null)main(()->{current.finish();return null;});
   String cls=module.equals("wear")?"dev.orbit.clock.wear.MainActivity":"dev.orbit.clock.phone.MainActivity";
-  current=startActivitySync(new Intent().setClassName(c.getPackageName(),cls).putExtra("orbit_tab",tab).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-  waitFor(()->main(()->current.hasWindowFocus()&&!current.isFinishing()),"Main tool failed to gain focus: "+tab);
-  waitFor(()->main(()->{List<View> mounted=new ArrayList<>();views(current.getWindow().getDecorView(),mounted);String heading=tab+(module.equals("wear")?"  ▾":"");
+  ActivityMonitor monitor=addMonitor(cls,null,false);
+  try{
+   current=startActivitySync(new Intent().setClassName(c.getPackageName(),cls).putExtra("orbit_tab",tab).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+   final Activity[] focused={null};final long[] focusedSince={0};
+   waitFor(()->main(()->{Activity latest=monitor.getLastActivity();if(latest!=null&&!latest.isFinishing()&&!latest.isDestroyed())current=latest;
+    if(!current.hasWindowFocus()||current.isFinishing()||current.isDestroyed()){focused[0]=null;focusedSince[0]=0;return false;}
+    if(focused[0]!=current){focused[0]=current;focusedSince[0]=SystemClock.uptimeMillis();return false;}
+    return SystemClock.uptimeMillis()-focusedSince[0]>=300;
+   }),"Latest native tool Activity failed to gain stable focus: "+tab);
+  waitFor(()->main(()->{Activity latest=monitor.getLastActivity();if(latest!=null&&!latest.isFinishing()&&!latest.isDestroyed())current=latest;if(!current.hasWindowFocus())return false;List<View> mounted=new ArrayList<>();views(current.getWindow().getDecorView(),mounted);String heading=tab+(module.equals("wear")?"  ▾":"");
    for(View v:mounted)if(v instanceof TextView&&v.isShown()&&heading.equals(((TextView)v).getText().toString())&&((TextView)v).getTextSize()/current.getResources().getDisplayMetrics().scaledDensity>=(module.equals("wear")?16:22)){
     TextView title=(TextView)v;android.text.Layout layout=title.getLayout();if(layout==null)return false;
     require(layout.getLineCount()==1&&layout.getEllipsisCount(0)==0,"Native tool heading is ellipsized");
@@ -159,7 +166,8 @@ public class ThemeProbe extends Instrumentation {
      for(float x:new float[]{glyphs.left,glyphs.right})for(float y:new float[]{glyphs.top,glyphs.bottom})require(Math.hypot(x-cx,y-cy)<=radius,"Native heading glyphs are clipped by the physical round display");
     }return true;
    }return false;}),"Actual tool heading did not change to "+tab);
-  SystemClock.sleep(350);return current;
+   SystemClock.sleep(350);return current;
+  }finally{removeMonitor(monitor);}
  }
  void editor()throws Exception {
   String before=c.getSharedPreferences("alarms",0).getString("records","[]");
