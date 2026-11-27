@@ -86,6 +86,12 @@ public class WidgetProbe extends Instrumentation {
   for(int[] size:new int[][]{{160,160,0,0},{250,70,1,0},{340,80,1,1},{1200,180,1,0},{300,1000,0,1}}){
    Bitmap bitmap=(Bitmap)render.invoke(renderer,c,size[2]==1,size[0],size[1],size[3]==1);
    try{checkAppTexture(bitmap,size[0],size[1],Arrays.toString(size));
+    float start=size[2]==1?(size[0]<264?.15f:.23f):0f;
+    for(float position:new float[]{.33f,.5f,.75f,.9f}){
+     int x=Math.round((bitmap.getWidth()-1)*position);float t=Math.max(0f,Math.min(1f,(x/(float)(bitmap.getWidth()-1)-start)/(1f-start)));
+     int expected=(int)(212*(1-Math.pow(1-t,size[2]==1?4:5)));
+     require(Math.abs(Color.alpha(bitmap.getPixel(x,bitmap.getHeight()/2))-expected)<=1,"App texture was faded more than once or changed widget transparency: "+Arrays.toString(size));
+    }
     require(Color.alpha(bitmap.getPixel(bitmap.getWidth()-1,bitmap.getHeight()/2))==0,"Scaled texture has a hard right edge");
     require(Color.alpha(bitmap.getPixel(bitmap.getWidth()/2,0))==0,"Scaled texture has a hard top edge");
    }finally{bitmap.recycle();}
