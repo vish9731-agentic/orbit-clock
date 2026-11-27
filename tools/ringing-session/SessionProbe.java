@@ -129,7 +129,7 @@ public class SessionProbe extends Instrumentation {
  Rect bounds(AccessibilityNodeInfo node,String name){require(node!=null,"Missing popup element: "+name);Rect r=new Rect();node.getBoundsInScreen(r);require(!r.isEmpty()&&node.isVisibleToUser(),"Invisible popup element: "+name);return r;}
  void assertPopupHierarchy()throws Exception{
   verifyPopupHierarchy(10);
-  pass("compact popup uses its largest left-aligned clock above evenly spaced48dp duration controls, actions and a readable footer label at "+scale+"% text");
+  pass("approved black popup has64dp grouped adjustment targets, large clock, balanced action columns/fallback and readable full label at "+scale+"% text");
  }
  void verifyPopupHierarchy(int minutes)throws Exception{verifyPopupHierarchy(minutes,true);}
  void verifyPopupHierarchy(int minutes,boolean shortLabel)throws Exception{
@@ -137,24 +137,31 @@ public class SessionProbe extends Instrumentation {
   Rect duration=bounds(find(root,"Snooze duration: "+minutes+" minutes"),"duration"),time=bounds(findPrefix(root,"Alarm time:"),"clock");
   Rect snooze=bounds(find(root,"Snooze"),"Snooze"),stop=bounds(find(root,"Stop"),"Stop"),label=bounds(findPrefix(root,"Alarm label:"),"label");
   float density=c.getResources().getDisplayMetrics().density;
-  require(Math.min(minus.width(),minus.height())>=47*density&&Math.min(plus.width(),plus.height())>=47*density,"Duration controls need at least48dp touch targets");
+  require(Math.min(minus.width(),minus.height())>=63*density&&Math.min(plus.width(),plus.height())>=63*density,"Duration endzones need at least64dp touch targets");
   require(Math.min(snooze.height(),stop.height())>=47*density,"Snooze/Stop touch targets below48dp");
   require(minus.centerY()==plus.centerY()&&duration.centerX()>minus.centerX()&&duration.centerX()<plus.centerX(),"Duration group is not centered between matching controls");
   int controlsBottom=Math.max(duration.bottom,Math.max(minus.bottom,plus.bottom));
-  require(Math.min(minus.top,plus.top)>=time.bottom-2&&snooze.top>=controlsBottom-2&&stop.top>=controlsBottom-2&&label.top>=Math.max(snooze.bottom,stop.bottom)-2,"Popup hierarchy must be time, adjustments, actions, full-width label");
+  boolean twoColumns=snooze.left>=plus.right+6*density&&stop.left>=plus.right+6*density;
+  boolean bottomActions=snooze.top>=controlsBottom+6*density&&stop.top>=controlsBottom+6*density;
+  require(Math.min(Math.min(minus.top,plus.top),snooze.top)>=time.bottom-2&&label.top>=Math.max(controlsBottom,Math.max(snooze.bottom,stop.bottom))-2,"Popup must place clock above controls/actions and full label below");
+  require(twoColumns||bottomActions,"Actions neither form the approved right column nor an unclipped narrow fallback");
+  if(twoColumns)require(stop.top>=snooze.bottom+6*density&&Math.abs(snooze.left-stop.left)<=2*density,"Right action column spacing/alignment is incorrect");
+  else require(Math.abs(snooze.top-stop.top)<=2*density&&stop.left>=snooze.right+6*density,"Narrow action row spacing/alignment is incorrect");
   Bitmap display=getUiAutomation().takeScreenshot();require(display!=null,"No native display for popup fit/typography");
   try{
    Rect screen=new Rect(0,0,display.getWidth(),display.getHeight());
-   Rect panel=bounds(root,"panel");float maxHeight=Float.parseFloat(scale)>110?235:205;
+   Rect panel=bounds(root,"panel");float maxHeight=Float.parseFloat(scale)>110?340:300;
    if(shortLabel)require(panel.height()<=maxHeight*density,"Short-label popup is not compact: "+panel.height()/density+"dp exceeds "+maxHeight+"dp at "+scale+"% text");
    for(Rect element:new Rect[]{panel,time,minus,duration,plus,snooze,stop,label})require(screen.contains(element),"Popup element is cut off by actual display "+screen+": "+element);
-   Rect clockInk=inkBounds(display,time),plusInk=inkBounds(display,centralGlyphBounds(plus,display)),durationInk=inkBounds(display,duration);int durationNumberHeight=firstInkBandHeight(display,duration);
+   Rect clockInk=inkBounds(display,time),plusInk=inkBounds(display,centralGlyphBounds(plus,display)),minusInk=inkBounds(display,centralGlyphBounds(minus,display)),durationInk=inkBounds(display,duration);int durationNumberHeight=firstInkBandHeight(display,duration);
    require(clockInk.height()>durationNumberHeight*1.4&&clockInk.height()>plusInk.height()*1.1,"Clock is not the largest rendered typography: clock="+clockInk.height()+" duration="+durationNumberHeight+" plus="+plusInk.height());
    int labelLineHeight=firstInkBandHeight(display,label);Rect labelInk=inkBounds(display,label);
    require(clockInk.left<=time.left+12*density&&labelInk.left<=label.left+12*density&&labelLineHeight<clockInk.height()*.6,"Clock must stay left-aligned and visually dominate the readable footer label");
-   int leftGap=durationInk.left-minus.right,rightGap=plus.left-durationInk.right;
-   require(leftGap>=12*density&&rightGap>=12*density&&Math.abs(leftGap-rightGap)<=8*density,"Duration controls lack symmetric breathing room around their rendered readout: "+leftGap+" / "+rightGap);
-   require(Math.abs(minus.centerX()+plus.centerX()-panel.left-panel.right)<=3*density&&Math.abs(durationInk.centerX()-panel.centerX())<=5*density,"Adjustment circles/readout are not centered symmetrically in the popup");
+   int leftGap=durationInk.left-minusInk.right,rightGap=plusInk.left-durationInk.right;
+   require(leftGap>=12*density&&rightGap>=12*density&&Math.abs(leftGap-rightGap)<=10*density,"Grouped glyphs lack balanced breathing room around the readout: "+leftGap+" / "+rightGap);
+   require(Math.abs(minus.width()-plus.width())<=2*density&&Math.abs(durationInk.centerX()-(minus.left+plus.right)/2)<=5*density,"Grouped endzones/readout are not symmetric");
+   int black=display.getPixel(Math.min(display.getWidth()-1,panel.left+Math.max(2,(int)(8*density))),panel.centerY());
+   require(Math.max(Color.red(black),Math.max(Color.green(black),Color.blue(black)))<35&&Math.abs(Color.red(black)-Color.blue(black))<8,"Approved popup black surface was replaced by a tinted surface");
   }finally{display.recycle();}
  }
  Rect centralGlyphBounds(Rect control,Bitmap display){int radius=Math.max(5,(int)(16*c.getResources().getDisplayMetrics().density));return new Rect(Math.max(0,control.centerX()-radius),Math.max(0,control.centerY()-radius),Math.min(display.getWidth(),control.centerX()+radius),Math.min(display.getHeight(),control.centerY()+radius));}
@@ -247,6 +254,54 @@ public class SessionProbe extends Instrumentation {
   }}finally{display.recycle();}
   pass("both adjustment glyphs are visible in actual hardware-display pixels at "+scale+"% text");
  }
+ void expectMinutes(int minutes)throws Exception{waitFor(()->find(popup(),"Snooze duration: "+minutes+" minutes")!=null,6000,"Expected occurrence duration "+minutes+" minutes");}
+ void endZoneTap(String description,int corner)throws Exception{
+  Rect target=bounds(find(popup(),description),description);float inset=3*c.getResources().getDisplayMetrics().density;
+  tap((corner&1)==0?target.left+inset:target.right-inset,(corner&2)==0?target.top+inset:target.bottom-inset);
+ }
+ void groupedTargetCases(String id)throws Exception{
+  ActivityMonitor noOpen=addMonitor("dev.orbit.clock.core.RingActivity",null,false);
+  try{
+   for(int corner=0;corner<4;corner++){endZoneTap("Increase snooze by 5 minutes",corner);expectMinutes(20);endZoneTap("Decrease snooze by 5 minutes",corner);expectMinutes(15);}
+   clickPopup("Decrease snooze by 5 minutes");expectMinutes(10);clickPopup("Decrease snooze by 5 minutes");expectMinutes(5);
+   require(!find(popup(),"Decrease snooze by 5 minutes").isEnabled(),"Minimum endpoint is not exposed as disabled");
+   for(int corner=0;corner<4;corner++)endZoneTap("Decrease snooze by 5 minutes",corner);expectMinutes(5);
+   for(int minutes=10;minutes<=60;minutes+=5){clickPopup("Increase snooze by 5 minutes");expectMinutes(minutes);}
+   require(!find(popup(),"Increase snooze by 5 minutes").isEnabled(),"Maximum endpoint is not exposed as disabled");
+   for(int corner=0;corner<4;corner++)endZoneTap("Increase snooze by 5 minutes",corner);expectMinutes(60);
+   for(int minutes=55;minutes>=15;minutes-=5){clickPopup("Decrease snooze by 5 minutes");expectMinutes(minutes);}
+   require(noOpen.getHits()==0&&active(id)&&!playing(),"An active/disabled endzone leaked to card navigation or resolved the alarm");
+   require(row(id).getInt("snoozeMinutes")==10,"Endzone adjustments changed the saved default");
+   pass("all four corners of64dp endzones adjust, disabled5/60 endpoints consume touches, and neither opens/snoozes/stops the active alarm");
+  }finally{removeMonitor(noOpen);}
+ }
+ void narrowPopupCase(String id)throws Exception{
+  String sizeState=shell("wm size");java.util.regex.Matcher original=java.util.regex.Pattern.compile("Override size: (\\d+x\\d+)").matcher(sizeState);String restore=original.find()?original.group(1):"reset";
+  Point before=new Point();c.getSystemService(WindowManager.class).getDefaultDisplay().getRealSize(before);
+  try{
+   shell("wm size 560x1244");waitFor(()->{Point size=new Point();c.getSystemService(WindowManager.class).getDefaultDisplay().getRealSize(size);return size.x==560&&size.y==1244&&popup()!=null;},15000,"Narrow portrait display did not apply");
+   expectMinutes(15);waitFor(()->{AccessibilityNodeInfo root=popup();if(root==null)return false;AccessibilityNodeInfo p=find(root,"Increase snooze by 5 minutes"),s=find(root,"Snooze");if(p==null||s==null)return false;Rect plus=new Rect(),snooze=new Rect();p.getBoundsInScreen(plus);s.getBoundsInScreen(snooze);return snooze.top>=plus.bottom+5*c.getResources().getDisplayMetrics().density;},15000,"Narrow fallback controls did not finish layout");verifyPopupHierarchy(15);assertAdjustmentGlyphs();
+   Rect plus=bounds(find(popup(),"Increase snooze by 5 minutes"),"narrow plus"),snooze=bounds(find(popup(),"Snooze"),"narrow Snooze");
+   require(snooze.top>=plus.bottom,"Narrow portrait did not use the readable bottom action fallback");
+   require(active(id)&&!playing(),"Narrow fallback resolved alarm or resumed media");capture("approved-popup-narrow");
+   pass("actual320dp portrait fallback retains64dp targets, selected duration, readable actions and active paused-media state at "+scale+"% text");
+  }catch(Throwable error){rotationFailureDiagnostics(false);if(error instanceof Exception)throw(Exception)error;if(error instanceof Error)throw(Error)error;throw new RuntimeException(error);
+  }finally{shell("wm size "+restore);waitFor(()->{Point size=new Point();c.getSystemService(WindowManager.class).getDefaultDisplay().getRealSize(size);AccessibilityNodeInfo root=popup();if(!size.equals(before)||root==null)return false;AccessibilityNodeInfo p=find(root,"Increase snooze by 5 minutes"),s=find(root,"Snooze");if(p==null||s==null)return false;Rect plus=new Rect(),snooze=new Rect();p.getBoundsInScreen(plus);s.getBoundsInScreen(snooze);return snooze.left>=plus.right+5*c.getResources().getDisplayMetrics().density;},15000,"Original two-column display layout did not restore");expectMinutes(15);}
+ }
+ void scrollingLabelCase()throws Exception{
+  StringBuilder full=new StringBuilder();for(int i=0;i<45;i++)full.append("Morning run by the river, breakfast with friends and a relaxed start to the day. ");
+  shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW allow");startPlayer("music");String id=fixture(full.toString(),7000);delivered(id);paused();popupVisible();foregroundPausedMusicFixture(id);
+  ActivityMonitor noOpen=addMonitor("dev.orbit.clock.core.RingActivity",null,false);
+  try{
+   AccessibilityNodeInfo label=findPrefix(popup(),"Alarm label:");Rect visible=bounds(label,"scrollable label"),window=new Rect();
+   for(AccessibilityWindowInfo candidate:getUiAutomation().getWindows())if(find(candidate.getRoot(),"Persistent alarm controls")!=null){candidate.getBoundsInScreen(window);break;}
+   require(!window.isEmpty()&&visible.intersect(window)&&visible.height()>50*c.getResources().getDisplayMetrics().density,"Long label lacks a visible drag area");
+   float density=c.getResources().getDisplayMetrics().density,x=visible.centerX(),start=visible.bottom-8*density,end=Math.max(visible.top+8*density,start-100*density);
+   AccessibilityEvent scrolled=getUiAutomation().executeAndWaitForEvent(()->{try{swipe(x,start,x,end);}catch(Exception error){throw new RuntimeException(error);}},event->event.getEventType()==AccessibilityEvent.TYPE_VIEW_SCROLLED&&c.getPackageName().equals(String.valueOf(event.getPackageName()))&&event.getScrollY()>0,7000);
+   require(scrolled!=null&&noOpen.getHits()==0&&active(id)&&!playing(),"Dragging the long label opened/resolved the alarm instead of scrolling");scrolled.recycle();capture("approved-popup-scrolled-label");
+   action(id,"stop");resumed(0);popupGone();clean(id);pass("real long-label drag scrolls natively without opening the card or resolving the active alarm");
+  }finally{removeMonitor(noOpen);}
+ }
 
  void tap(float x,float y)throws Exception{long now=SystemClock.uptimeMillis();for(int action:new int[]{MotionEvent.ACTION_DOWN,MotionEvent.ACTION_UP}){MotionEvent e=MotionEvent.obtain(now,SystemClock.uptimeMillis(),action,x,y,0);e.setSource(InputDevice.SOURCE_TOUCHSCREEN);getUiAutomation().injectInputEvent(e,true);e.recycle();}idle();}
  void swipe(float x,float y,float endX,float endY)throws Exception{long down=SystemClock.uptimeMillis();for(int i=0;i<=12;i++){int action=i==0?MotionEvent.ACTION_DOWN:i==12?MotionEvent.ACTION_UP:MotionEvent.ACTION_MOVE;float f=i/12f;MotionEvent e=MotionEvent.obtain(down,SystemClock.uptimeMillis(),action,x+(endX-x)*f,y+(endY-y)*f,0);e.setSource(InputDevice.SOURCE_TOUCHSCREEN);getUiAutomation().injectInputEvent(e,true);e.recycle();SystemClock.sleep(25);}idle();}
@@ -285,12 +340,42 @@ public class SessionProbe extends Instrumentation {
    rotatePopup(id,UiAutomation.ROTATION_FREEZE_0,false,15);
    pass("real portrait/landscape/portrait rotation preserves selected duration, clock-first layout, visible targets and adjustment-only behavior at "+scale+"% text");
   }finally{getUiAutomation().setRotation(UiAutomation.ROTATION_FREEZE_0);}
+  groupedTargetCases(id);narrowPopupCase(id);
   clickPopup("Snooze");final String snoozeId=id;waitFor(()->!active(snoozeId),7000,"Persistent popup Snooze did not act");resumed(0);popupGone();
   require(row(id).getInt("snoozeMinutes")==10,"Popup adjusted saved default");clean(id);pass("persistent popup plus/Snooze resumes music with occurrence-only duration");
   startPlayer("music");id=fixture("Permission revoked",7000);delivered(id);paused();popupVisible();shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW deny");popupGone();
   require(active(id) && !playing(),"Permission revocation silenced or resolved alarm");action(id,"stop");resumed(0);clean(id);pass("permission revocation safely falls back to notification; Stop resumes media");
   shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW allow");startPlayer("music");id=fixture("Popup Stop",7000);delivered(id);paused();popupVisible();traceMedia("before-popup-stop");clickPopup("Stop");
   final String stopId=id;waitFor(()->!row(stopId).getBoolean("enabled"),7000,"Popup Stop did not stop");resumed(0);popupGone();clean(id);pass("persistent popup Stop commits and resumes previous music");
+ }
+ boolean hasProductionSlider(View view){if(view.getClass().getName().equals("dev.orbit.clock.core.AlarmSlideControl"))return true;if(view instanceof ViewGroup)for(int i=0;i<((ViewGroup)view).getChildCount();i++)if(hasProductionSlider(((ViewGroup)view).getChildAt(i)))return true;return false;}
+ int fullScreenMinutes()throws Exception{return main(()->{Field field=ringing.getClass().getDeclaredField("selectedMinutes");field.setAccessible(true);return field.getInt(ringing);});}
+ void requireOpenAction(AccessibilityNodeInfo node,String name){require(node!=null&&node.isClickable(),"No clickable non-action region: "+name);boolean found=false;for(AccessibilityNodeInfo.AccessibilityAction action:node.getActionList())if(action.getId()==AccessibilityNodeInfo.ACTION_CLICK&&"Open full-screen alarm".contentEquals(action.getLabel()==null?"":action.getLabel()))found=true;require(found,"Missing accessible Open full-screen action on "+name);}
+ void openPopupRegion(String id,String region)throws Exception{
+  AccessibilityNodeInfo root=popup(),target=region.equals("card")?root:region.equals("time")?findPrefix(root,"Alarm time:"):region.equals("label")?findPrefix(root,"Alarm label:"):find(root,"Snooze duration: 15 minutes");
+  requireOpenAction(target,region);Rect rect=bounds(target,region);float x=rect.centerX(),y=rect.centerY();
+  if(region.equals("card")){float density=c.getResources().getDisplayMetrics().density;x=rect.left+8*density;y=rect.top+32*density;}
+  if(region.equals("time")){Bitmap display=getUiAutomation().takeScreenshot();require(display!=null,"No display for actual clock tap");try{Rect ink=inkBounds(display,rect);x=ink.centerX();y=ink.centerY();}finally{display.recycle();}}
+  long at=occurrence(id);ActivityMonitor monitor=addMonitor("dev.orbit.clock.core.RingActivity",null,false);
+  try{tap(x,y);ringing=monitor.waitForActivityWithTimeout(15000);require(ringing!=null,"Tapping "+region+" did not open actual RingActivity");}finally{removeMonitor(monitor);}
+  waitFor(()->main(()->ringing.hasWindowFocus()&&!ringing.isFinishing()),10000,"Opened RingActivity did not gain focus");popupGone();
+  require(main(()->ringing.getClass().getName().equals("dev.orbit.clock.core.RingActivity")&&id.equals(ringing.getIntent().getStringExtra("id"))&&ringing.getIntent().getLongExtra("at",0)==at&&hasProductionSlider(ringing.getWindow().getDecorView())),"Popup opened a substitute screen or the wrong alarm occurrence");
+  require(fullScreenMinutes()==15&&active(id)&&!playing(),"Popup opening changed duration, resolved alarm or resumed media");
+  capture("popup-open-"+region);pass("native "+region+" tap opens actual locked-screen RingActivity/slider with exact occurrence,15min selection and paused media");
+ }
+ void navigationCases()throws Exception{
+  shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW allow");startPlayer("music");String id=fixture("Open from popup",7000);delivered(id);paused();popupVisible();clickPopup("Increase snooze by 5 minutes");expectMinutes(15);
+  String[] regions={"card","time","label","duration"};long previousOpen=0;
+  for(int i=0;i<regions.length;i++){
+   long wait=previousOpen+900-SystemClock.uptimeMillis();if(wait>0)SystemClock.sleep(wait);
+   openPopupRegion(id,regions[i]);previousOpen=SystemClock.uptimeMillis();
+   sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);SystemClock.sleep(250);require(main(()->ringing.hasWindowFocus()&&!ringing.isFinishing())&&active(id),"Back dismissed the opened ringing screen");
+   if(i<regions.length-1){shell("input keyevent HOME");popupVisible();require(active(id)&&!playing(),"Home resolved alarm or resumed media");foregroundPausedMusicFixture(id);expectMinutes(15);}
+  }
+  sendKeyDownUpSync(KeyEvent.KEYCODE_VOLUME_UP);waitFor(()->!active(id),7000,"Actual ringing-screen Snooze shortcut did not resolve occurrence");resumed(0);popupGone();
+  require(row(id).getInt("snoozeMinutes")==10&&row(id).getLong("snoozeUntil")>System.currentTimeMillis()+14*60000,"Opening/Snooze lost selected15min or changed saved default");
+  AlarmManager.AlarmClockInfo next=c.getSystemService(AlarmManager.class).getNextAlarmClock();require(next!=null&&next.getTriggerTime()==row(id).getLong("snoozeUntil"),"Opened ringing-screen Snooze was not actually scheduled");clean(id);
+  pass("all non-action regions preserve Back blocking/Home handoff; actual full-screen Snooze uses selected15min and resumes interrupted media");
  }
  void screenCase()throws Exception{
   shell("appops set dev.orbit.clock SYSTEM_ALERT_WINDOW allow");startPlayer("music");
@@ -324,9 +409,10 @@ public class SessionProbe extends Instrumentation {
   storeCompanion=storeClass.getField("Companion").get(null);controls=controlsClass.getField("INSTANCE").get(null);
   AccessibilityServiceInfo info=getUiAutomation().getServiceInfo();info.flags|=AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;getUiAutomation().setServiceInfo(info);
   require(Math.abs(c.getResources().getConfiguration().fontScale-Float.parseFloat(scale)/100f)<.04f,"Wrong actual text scale");
-  require(scope.equals("all") || scope.equals("popup") || scope.equals("screen"),"Unknown test scope "+scope);
+  require(scope.equals("all") || scope.equals("popup") || scope.equals("screen") || scope.equals("navigation"),"Unknown test scope "+scope);
   Bundle scopeStep=new Bundle();scopeStep.putString("stream","STEP scope="+scope+" api="+Build.VERSION.SDK_INT+" text="+scale+"%\n");sendStatus(0,scopeStep);
-  if(scope.equals("all") || scope.equals("popup")){mediaCases();popupCases();longLabelCase();}
+  if(scope.equals("all") || scope.equals("popup")){mediaCases();popupCases();longLabelCase();scrollingLabelCase();}
+  if(scope.equals("all") || scope.equals("navigation"))navigationCases();
   if(scope.equals("all") || scope.equals("screen"))screenCase();
   shell("am force-stop dev.orbit.focusprobe");
   result.putString("stream","RINGING_SESSION_RESULT_PASS scope="+scope+" api="+Build.VERSION.SDK_INT+" at "+scale+"% text\n");finish(Activity.RESULT_OK,result);
