@@ -1,0 +1,4 @@
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false" android:color="@color/orbit_text_primary" android:alpha="0.38" />
+    <item android:color="@color/orbit_text_primary" />
+</selector>

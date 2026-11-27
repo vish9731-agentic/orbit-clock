@@ -34,8 +34,9 @@
         <item name="android:colorAccent">#FFC15A</item>
         <item name="android:colorBackground">#050505</item>
         <item name="android:windowBackground">#050505</item>
-        <item name="android:textColorPrimary">#F5F3F0</item>
-        <item name="android:textColorSecondary">#C6C4C1</item>
+        <!-- NavigationBarMenuView loads these as ColorStateList resource IDs. -->
+        <item name="android:textColorPrimary">@color/orbit_text_primary_states</item>
+        <item name="android:textColorSecondary">@color/orbit_text_secondary_states</item>
         <item name="android:statusBarColor">#050505</item>
         <item name="android:navigationBarColor">#050505</item>
         <item name="android:fontFamily">sans</item>

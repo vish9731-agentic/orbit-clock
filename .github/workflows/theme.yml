@@ -102,7 +102,7 @@ jobs:
             adb install build/widget-probe/probe.apk
             adb shell pm grant dev.orbit.clock android.permission.POST_NOTIFICATIONS
             adb shell appops set dev.orbit.clock SCHEDULE_EXACT_ALARM allow
-            adb shell appops set dev.orbit.clock USE_FULL_SCREEN_INTENT ignore
+            if [ "${{ matrix.api }}" -ge 34 ]; then adb shell appops set dev.orbit.clock USE_FULL_SCREEN_INTENT ignore; fi
             bash tools/theme/run-on-device.sh ${{ matrix.module }} ${{ matrix.font }}
       - name: Retain runner diagnostics
         if: always()

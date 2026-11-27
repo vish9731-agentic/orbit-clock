@@ -106,7 +106,10 @@ public class ThemeProbe extends Instrumentation {
   if(current!=null)main(()->{current.finish();return null;});
   String cls=module.equals("wear")?"dev.orbit.clock.wear.MainActivity":"dev.orbit.clock.phone.MainActivity";
   current=startActivitySync(new Intent().setClassName(c.getPackageName(),cls).putExtra("orbit_tab",tab).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-  waitFor(()->main(()->current.hasWindowFocus()&&!current.isFinishing()),"Main tool failed to gain focus: "+tab);SystemClock.sleep(350);return current;
+  waitFor(()->main(()->current.hasWindowFocus()&&!current.isFinishing()),"Main tool failed to gain focus: "+tab);
+  waitFor(()->main(()->{List<View> mounted=new ArrayList<>();views(current.getWindow().getDecorView(),mounted);String heading=tab+(module.equals("wear")?"  ▾":"");
+   for(View v:mounted)if(v instanceof TextView&&v.isShown()&&heading.equals(((TextView)v).getText().toString())&&((TextView)v).getTextSize()/current.getResources().getDisplayMetrics().scaledDensity>=22)return true;return false;}),"Actual tool heading did not change to "+tab);
+  SystemClock.sleep(350);return current;
  }
  void editor()throws Exception {
   View alarmCard=main(()->current.getWindow().getDecorView().findViewWithTag("item:alarm:theme-probe-alarm"));
@@ -119,44 +122,38 @@ public class ThemeProbe extends Instrumentation {
   // Inspect the actual dialog's Material color roles in the mounted window.
   List<View> roots=main(()->WindowInspector.getGlobalWindowViews());View dialog=roots.get(roots.size()-1);
   int attr=c.getResources().getIdentifier("colorSurface","attr",c.getPackageName());
-  if(attr!=0){android.util.TypedValue value=new android.util.TypedValue();require(dialog.getContext().getTheme().resolveAttribute(attr,value,true),"Dialog surface role missing");require(luminance(value.data)<.08,"Dialog has a bright surface under system "+night);}
+  if(attr!=0){android.util.TypedValue value=new android.util.TypedValue();require(dialog.getContext().getTheme().resolveAttribute(attr,value,true),"Dialog surface role missing");int surface=value.resourceId!=0?dialog.getContext().getColor(value.resourceId):value.data;require(luminance(surface)<.08,"Dialog has a bright surface under system "+night);}
   back();back();waitFor(()->main(()->current.hasWindowFocus()),"Editor did not close cleanly");pass("real alarm editor and native time picker open in dark theme");
  }
  void focus()throws Exception {
   launch("Timer");ActivityMonitor monitor=addMonitor("dev.orbit.clock.core.FocusActivity",null,false);
   try{
    click("Focus mode");Activity found=monitor.waitForActivityWithTimeout(15000);
-   if(found==null){for(View r:main(()->WindowInspector.getGlobalWindowViews())){Context context=r.getContext();while(context instanceof ContextWrapper){if(context instanceof Activity&&context.getClass().getName().equals("dev.orbit.clock.core.FocusActivity")){found=(Activity)context;break;}context=((ContextWrapper)context).getBaseContext();}if(found!=null)break;}}
    require(found!=null,"Focus mode did not open its actual activity");current=found;
   }finally{removeMonitor(monitor);}
+  waitFor(()->main(()->current.hasWindowFocus()&&!current.isFinishing()),"Actual Focus activity did not gain focus");
   screen("focus",true);click("Durations");waitFor(()->find("Focus durations")!=null,"Focus durations dialog absent");capture("focus-durations");back();
   pass("actual Focus screen and durations dialog use the shared theme");
  }
- Activity visibleActivity(String className)throws Exception {
-  return main(()->{for(View root:WindowInspector.getGlobalWindowViews())if(root.isShown()){
-   Context context=root.getContext();Set<Context> seen=Collections.newSetFromMap(new IdentityHashMap<Context,Boolean>());
-   while(context instanceof ContextWrapper&&seen.add(context)){
-    if(context instanceof Activity&&context.getClass().getName().equals(className)){
-     Activity candidate=(Activity)context;if(candidate.hasWindowFocus()&&!candidate.isFinishing()&&!candidate.isDestroyed())return candidate;
-    }
-    context=((ContextWrapper)context).getBaseContext();
-   }
-  }return null;});
+ void rotateMain(int rotation,boolean landscape)throws Exception {
+  String records=c.getSharedPreferences("alarms",0).getString("records","[]");
+  ActivityMonitor monitor=addMonitor("dev.orbit.clock.phone.MainActivity",null,false);
+  try{
+   require(getUiAutomation().setRotation(rotation),"Could not rotate native display");
+   Activity replacement=monitor.waitForActivityWithTimeout(15000);
+   require(replacement!=null,"MainActivity was not recreated for orientation change");current=replacement;
+  }finally{removeMonitor(monitor);}
+  waitFor(()->main(()->{Point size=new Point();c.getSystemService(WindowManager.class).getDefaultDisplay().getRealSize(size);
+   int wanted=landscape?android.content.res.Configuration.ORIENTATION_LANDSCAPE:android.content.res.Configuration.ORIENTATION_PORTRAIT;
+   return(size.x>size.y)==landscape&&current.getResources().getConfiguration().orientation==wanted&&current.hasWindowFocus();
+  }),"Recreated MainActivity did not settle in native orientation");
+  require(records.equals(c.getSharedPreferences("alarms",0).getString("records","[]")),"Theme rotation changed saved alarms");
  }
  void phoneRotation()throws Exception {
   if(module.equals("wear"))return;
-  launch("Alarms");getUiAutomation().setRotation(UiAutomation.ROTATION_FREEZE_90);
-  try{
-   waitFor(()->{Activity recreated=visibleActivity("dev.orbit.clock.phone.MainActivity");if(recreated==null)return false;
-    if(recreated.getResources().getConfiguration().orientation!=android.content.res.Configuration.ORIENTATION_LANDSCAPE)return false;
-    current=recreated;return true;},"Visible native landscape Activity did not recreate");
-   screen("alarms-landscape",true);
-  }finally{
-   getUiAutomation().setRotation(UiAutomation.ROTATION_FREEZE_0);
-   waitFor(()->{Activity recreated=visibleActivity("dev.orbit.clock.phone.MainActivity");if(recreated==null)return false;
-    if(recreated.getResources().getConfiguration().orientation!=android.content.res.Configuration.ORIENTATION_PORTRAIT)return false;
-    current=recreated;return true;},"Visible native portrait Activity did not restore");
-  }
+  launch("Alarms");rotateMain(UiAutomation.ROTATION_FREEZE_90,true);
+  try{screen("alarms-landscape",true);}
+  finally{rotateMain(UiAutomation.ROTATION_FREEZE_0,false);}
  }
  @Override public void onCreate(Bundle arguments){super.onCreate(arguments);module=arguments.getString("module","phone");night=arguments.getString("night","no");scale=arguments.getString("scale","1.0");start();}
  @Override public void onStart(){Bundle result=new Bundle();try{
