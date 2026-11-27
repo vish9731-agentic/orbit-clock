@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.Choreographer
 import android.view.animation.PathInterpolator
+import androidx.core.graphics.ColorUtils
 import kotlin.math.*
 
 /** Full-resolution old scene over the real watch face; only vector light expands. */
@@ -50,7 +51,7 @@ object WatchRingTransition {
         private val imagePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
         private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val matrix = Matrix()
-        private val shader = RadialGradient(0f, 0f, 1f, intArrayOf(0xaa74e8d7.toInt(), 0x5974e8d7, 0x0074e8d7), floatArrayOf(0f, .50f, 1f), Shader.TileMode.CLAMP)
+        private val shader = RadialGradient(0f, 0f, 1f, intArrayOf(0xaa, 0x59, 0x00).map { ColorUtils.setAlphaComponent(OrbitColors.amber, it) }.toIntArray(), floatArrayOf(0f, .50f, 1f), Shader.TileMode.CLAMP)
         private var revealProgress = 0f
         private var revealRadius = 0f
         private var sceneAlpha = 1f

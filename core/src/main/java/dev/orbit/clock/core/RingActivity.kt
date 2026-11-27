@@ -89,9 +89,9 @@ class RingActivity : AppCompatActivity() {
         selectedMinutes = SnoozeDuration.clamp(if (sameOccurrence) state!!.getInt("ring.minutes", alarm.snoozeMinutes) else alarm.snoozeMinutes)
         selectedMinutes = RingControls.minutes(this, alarm, at, selectedMinutes)
         val colors = OrbitPalette(this)
-        val background = colors.surface
-        val foreground = if (watch) colors.onSurface else 0xffe5ebe8.toInt()
-        val accent = if (watch) colors.primary else 0xff74e8d7.toInt()
+        val background = OrbitColors.background
+        val foreground = colors.onSurface
+        val accent = colors.primary
         val name = alarm.label.trim().ifBlank { "Alarm" }
         fun dp(n: Int) = (resources.displayMetrics.density * n).toInt()
         fun label(value: String, size: Float) = TextView(this).apply {
@@ -99,7 +99,7 @@ class RingActivity : AppCompatActivity() {
         }
         val watchWidth = resources.configuration.screenWidthDp
         val watchHeight = resources.configuration.screenHeightDp
-        val watchRoot = if (watch) FrameLayout(this).apply { setBackgroundColor(0xff090f0d.toInt()); isFocusableInTouchMode = true } else null
+        val watchRoot = if (watch) FrameLayout(this).apply { setBackgroundColor(OrbitColors.background); isFocusableInTouchMode = true } else null
         val sidePadding = if (watch) ((watchWidth - 180) / 2).coerceIn(0, 20) else 16
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
@@ -121,7 +121,7 @@ class RingActivity : AppCompatActivity() {
             watchRoot.addView(label(name, 16f).apply {
                 maxLines = 1; ellipsize = TextUtils.TruncateAt.END
                 contentDescription = "Alarm label: $name"
-                setTextColor(0xffa5bab3.toInt())
+                setTextColor(colors.muted)
                 setAutoSizeTextTypeUniformWithConfiguration(12, 16, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
             }, FrameLayout.LayoutParams(dp((watchWidth * .66f).toInt()), dp((watchHeight * .125f).toInt()), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp((watchHeight * .305f).toInt()) })
         } else {
@@ -134,14 +134,14 @@ class RingActivity : AppCompatActivity() {
                 setAutoSizeTextTypeUniformWithConfiguration(56, 144, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
             }, LinearLayout.LayoutParams(-1, dp(156)))
             body.addView(label(name, 24f).apply {
-                setTextColor(0xffb9c2bd.toInt())
+                setTextColor(colors.muted)
                 contentDescription = "Alarm label: $name"; maxLines = 2; ellipsize = TextUtils.TruncateAt.END
             }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12); bottomMargin = dp(40) })
         }
         fun control(value: String, callback: () -> Unit) = MaterialButton(this).apply {
             text = value; isAllCaps = false; textSize = 22f; typeface = Typeface.create(Typeface.create("sans-serif", Typeface.NORMAL), 400, false); minWidth = 0; minimumWidth = 0
             setPadding(0, 0, 0, 0); cornerRadius = dp(28); insetTop = 0; insetBottom = 0
-            backgroundTintList = ColorStateList.valueOf(if (watch) 0xff18332e.toInt() else android.graphics.Color.TRANSPARENT)
+            backgroundTintList = ColorStateList.valueOf(if (watch) colors.containerHigh else android.graphics.Color.TRANSPARENT)
             setTextColor(foreground); setOnClickListener { OrbitMotion.tick(this); callback() }
             OrbitMotion.bind(this)
         }
@@ -181,7 +181,7 @@ class RingActivity : AppCompatActivity() {
         }
         val scroller = ScrollView(this).apply {
             isFillViewport = true
-            if (watch) setBackgroundColor(0xff090f0d.toInt()) else {
+            if (watch) setBackgroundColor(OrbitColors.background) else {
                 val scene = RingAtmosphereDrawable(now.toSecondOfDay() / 60)
                 atmosphere = scene
                 this.background = scene

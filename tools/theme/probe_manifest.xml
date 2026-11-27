@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.orbit.clock.themeprobe">
+    <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="35" />
+    <application android:label="Orbit theme verification" android:hasCode="true" />
+    <instrumentation android:name="dev.orbit.clock.themeprobe.ThemeProbe" android:targetPackage="dev.orbit.clock" android:functionalTest="true" />
+</manifest>

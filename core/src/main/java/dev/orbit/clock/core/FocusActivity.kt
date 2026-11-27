@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.AlarmManager
 import android.content.*
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.*
 import android.os.*
@@ -11,8 +12,8 @@ import android.provider.Settings
 import android.view.*
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.color.DynamicColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.util.Locale
 
@@ -38,7 +39,7 @@ class FocusActivity : AppCompatActivity() {
     private val changes = object : BroadcastReceiver() { override fun onReceive(c: Context, i: Intent) { update() } }
     private val tick = object : Runnable { override fun run() { update(); handler.postDelayed(this, 1000) } }
     override fun onCreate(state: Bundle?) {
-        if (watch) setTheme(R.style.Theme_OrbitClock_Ringing) else DynamicColors.applyToActivityIfAvailable(this)
+        setTheme(if (watch) R.style.Theme_OrbitClock_Ringing else R.style.Theme_OrbitClock)
         super.onCreate(state); colors = OrbitPalette(this)
         val filter = IntentFilter(FocusStore.CHANGED).apply { addAction(FocusHandoff.CHANGED); addAction(FocusSync.CHANGED) }
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(changes, filter, RECEIVER_NOT_EXPORTED)
@@ -49,24 +50,36 @@ class FocusActivity : AppCompatActivity() {
             setBackgroundColor(colors.surface)
         }
         val scroll = ScrollView(this).apply { isFillViewport = true; addView(body) }; setContentView(scroll)
+        WindowCompat.getInsetsController(window, body).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
         fun text(size: Float) = TextView(this).apply { textSize = size; setTextColor(colors.onSurface); gravity = Gravity.CENTER }
         if (!watch) body.addView(text(30f).apply { text = "Focus mode" })
-        phase = text(16f); body.addView(phase)
-        face = FocusFace(this, colors).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES }
+        phase = text(16f).apply { setTextColor(colors.muted) }; body.addView(phase)
+        face = FocusFace(this, colors).apply {
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+            background = OrbitHatchDrawable(colors.container, dp(if (watch) 24 else 32).toFloat(), resources.displayMetrics.density)
+        }
         body.addView(face, LinearLayout.LayoutParams(-1, dp(if (watch) 80 else 240)))
-        sessions = text(13f); if (!watch) body.addView(sessions)
-        fun button(label: String, action: () -> Unit) = MaterialButton(this).apply {
-            text = label; isAllCaps = false; minHeight = dp(48); setOnClickListener { performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); action() }
+        sessions = text(13f).apply { setTextColor(colors.muted) }; if (!watch) body.addView(sessions)
+        fun button(label: String, primaryAction: Boolean = false, action: () -> Unit) = MaterialButton(this).apply {
+            text = label; isAllCaps = false; minHeight = dp(48); cornerRadius = dp(28)
+            val states = arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf())
+            backgroundTintList = ColorStateList(states, intArrayOf(colors.container, if (primaryAction) colors.primary else colors.secondaryContainer))
+            setTextColor(ColorStateList(states, intArrayOf(colors.muted, if (primaryAction) colors.onPrimary else colors.onSecondaryContainer)))
+            setOnClickListener { performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); action() }
+            OrbitMotion.bind(this)
             body.addView(this, LinearLayout.LayoutParams(-1, -2))
         }
         if (!watch) {
-            watchStatus = text(13f).apply { accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
+            watchStatus = text(13f).apply { setTextColor(colors.muted); accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
             body.addView(watchStatus)
         }
-        primary = button("Start focus") { control() }
+        primary = button("Start focus", primaryAction = true) { control() }
         if (!watch) openWatch = button("Open on watch") { FocusStore.push(this); FocusHandoff.open(this); update() }
         if (watch) body.addView(sessions)
-        syncStatus = text(if (watch) 12f else 13f).apply { accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
+        syncStatus = text(if (watch) 12f else 13f).apply { setTextColor(colors.muted); accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
         body.addView(syncStatus)
         retrySync = button("Sync again") { Sync.refresh(this); update() }
         end = button("End session") {

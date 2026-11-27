@@ -1,0 +1,120 @@
+name: Black amber theme and hatching verification
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['core/**', 'phone/**', 'wear/**', 'tools/theme/**', 'tools/widgets/**', '.github/workflows/theme.yml']
+permissions:
+  contents: read
+jobs:
+  theme:
+    if: ${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[ui:theme]') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - module: phone
+            apk: phone
+            api: 35
+            target: google_apis
+            profile: pixel_6
+            font: '1.0'
+          - module: phone
+            apk: phone
+            api: 35
+            target: google_apis
+            profile: pixel_6
+            font: '1.3'
+          - module: wear
+            apk: wear
+            api: 33
+            target: android-wear
+            profile: wearos_large_round
+            font: '1.0'
+          - module: wear
+            apk: wear
+            api: 33
+            target: android-wear
+            profile: wearos_large_round
+            font: '1.3'
+          - module: widgets
+            apk: phone
+            api: 35
+            target: google_apis
+            profile: pixel_6
+            font: '1.0'
+          - module: widgets
+            apk: phone
+            api: 35
+            target: google_apis
+            profile: pixel_6
+            font: '1.3'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;34.0.0'
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build native app and separate verification APKs
+        run: |
+          ./gradlew --no-daemon -Pkotlin.compiler.execution.strategy=in-process :${{ matrix.apk }}:assembleDebug
+          bash tools/theme/build-probe.sh
+          bash tools/widgets/build-probe.sh
+      - name: Prepare disposable emulator
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android/sdk/ndk
+          sudo chmod 666 /dev/kvm
+      - name: Verify actual themed screens and native widget hosts
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          emulator-build: '12234392'
+          api-level: ${{ matrix.api }}
+          target: ${{ matrix.target }}
+          arch: x86_64
+          profile: ${{ matrix.profile }}
+          ram-size: 2048M
+          heap-size: 256M
+          emulator-options: -show-kernel -no-window -gpu swiftshader_indirect -feature -Vulkan -no-snapshot -noaudio -no-boot-anim -memory 2048
+          disable-animations: false
+          emulator-boot-timeout: 600
+          script: |
+            adb shell setprop debug.hwui.renderer skiagl
+            adb shell settings put global device_provisioned 1
+            adb shell settings put secure user_setup_complete 1
+            adb shell settings put secure user_setup_pairing 1
+            adb shell pm disable-user --user 0 com.google.android.googlesdksetup || true
+            adb shell am force-stop com.google.android.apps.nexuslauncher
+            adb shell dumpsys battery unplug
+            adb shell dumpsys battery set status 3
+            adb shell settings put system screen_off_timeout 1800000
+            adb shell settings put system font_scale ${{ matrix.font }}
+            adb shell input keyevent KEYCODE_WAKEUP
+            adb shell wm dismiss-keyguard
+            adb install ${{ matrix.apk }}/build/outputs/apk/debug/${{ matrix.apk }}-debug.apk
+            adb install build/theme-probe/probe.apk
+            adb install build/widget-probe/probe.apk
+            adb shell pm grant dev.orbit.clock android.permission.POST_NOTIFICATIONS
+            adb shell appops set dev.orbit.clock SCHEDULE_EXACT_ALARM allow
+            adb shell appops set dev.orbit.clock USE_FULL_SCREEN_INTENT ignore
+            bash tools/theme/run-on-device.sh ${{ matrix.module }} ${{ matrix.font }}
+      - name: Retain runner diagnostics
+        if: always()
+        run: |
+          mkdir -p theme-results/host
+          free -m > theme-results/host/memory.txt
+          uname -a > theme-results/host/kernel.txt
+          sudo dmesg --level=err,warn > theme-results/host/kernel-warnings.txt || true
+          cp -a /tmp/android-runner/emu-crash-* theme-results/host/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: theme-${{ matrix.module }}-${{ matrix.font }}
+          retention-days: 3
+          path: theme-results/

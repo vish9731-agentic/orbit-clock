@@ -3,24 +3,36 @@ package dev.orbit.clock.core
 import android.content.Context
 import android.graphics.*
 import android.view.View
-import com.google.android.material.color.MaterialColors
 import kotlin.math.*
 
-/** Material color roles, including wallpaper colors supplied by DynamicColors. */
-class OrbitPalette(private val context: Context) {
-    private fun role(attr: Int, fallback: Long) = MaterialColors.getColor(context, attr, fallback.toInt())
-    val surface = role(com.google.android.material.R.attr.colorSurface, 0xfffffbfe)
-    val onSurface = role(com.google.android.material.R.attr.colorOnSurface, 0xff1c1b1f)
-    val primary = role(com.google.android.material.R.attr.colorPrimary, 0xff6750a4)
-    val onPrimary = role(com.google.android.material.R.attr.colorOnPrimary, 0xffffffff)
-    val primaryContainer = role(com.google.android.material.R.attr.colorPrimaryContainer, 0xffeaddff)
-    val onPrimaryContainer = role(com.google.android.material.R.attr.colorOnPrimaryContainer, 0xff21005d)
-    val secondaryContainer = role(com.google.android.material.R.attr.colorSecondaryContainer, 0xffe8def8)
-    val onSecondaryContainer = role(com.google.android.material.R.attr.colorOnSecondaryContainer, 0xff1d192b)
-    val muted = role(com.google.android.material.R.attr.colorOnSurfaceVariant, 0xff49454f)
-    val outline = role(com.google.android.material.R.attr.colorOutline, 0xff79747e)
-    val container = MaterialColors.layer(surface, primary, .055f)
-    val containerHigh = MaterialColors.layer(surface, primary, .09f)
+/** Shared black, charcoal and amber values for native views and widget artwork. */
+object OrbitColors {
+    val background = 0xff050505.toInt()
+    val surface = 0xff191919.toInt()
+    val surfaceHigh = 0xff252525.toInt()
+    val text = 0xfff5f3f0.toInt()
+    val muted = 0xffc6c4c1.toInt()
+    val amber = 0xffffc15a.toInt()
+    val onAmber = 0xff291900.toInt()
+    val amberContainer = 0xff382800.toInt()
+    val outline = 0xff66615a.toInt()
+}
+
+/** Fixed Material roles keep the approved theme consistent across system modes. */
+@Suppress("UNUSED_PARAMETER")
+class OrbitPalette(context: Context) {
+    val surface = OrbitColors.background
+    val onSurface = OrbitColors.text
+    val primary = OrbitColors.amber
+    val onPrimary = OrbitColors.onAmber
+    val primaryContainer = OrbitColors.amberContainer
+    val onPrimaryContainer = OrbitColors.amber
+    val secondaryContainer = OrbitColors.surfaceHigh
+    val onSecondaryContainer = OrbitColors.text
+    val muted = OrbitColors.muted
+    val outline = OrbitColors.outline
+    val container = OrbitColors.surface
+    val containerHigh = OrbitColors.surfaceHigh
 }
 
 /** Scalable clock artwork; no bitmap assets and no dependency on screen resolution. */
@@ -30,12 +42,22 @@ class OrbitDial(context: Context, private val colors: OrbitPalette) : View(conte
     var second = 0
     var progress = -1f
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var hatch: OrbitHatchDrawable? = null
     init { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        val radius = min(w, h) * .47f
+        hatch = OrbitHatchDrawable(Color.TRANSPARENT, radius, resources.displayMetrics.density).apply {
+            setBounds((w / 2f - radius).roundToInt(), (h / 2f - radius).roundToInt(),
+                (w / 2f + radius).roundToInt(), (h / 2f + radius).roundToInt())
+        }
+    }
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val cx = width / 2f; val cy = height / 2f; val radius = min(width, height) * .47f
         paint.style = Paint.Style.FILL; paint.color = colors.primaryContainer
         canvas.drawCircle(cx, cy, radius, paint)
+        hatch?.draw(canvas)
         for (i in 0 until 12) {
             val angle = i * PI / 6
             val outer = radius * .87f; val inner = radius * .79f

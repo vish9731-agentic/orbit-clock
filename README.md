@@ -8,7 +8,9 @@ Repository: [vish9731-agentic/orbit-clock](https://github.com/vish9731-agentic/o
 
 ## Material You design
 
-- Genuine Material 3 components with wallpaper-derived dynamic colors on supported Android 12+ devices and light/dark fallback themes.
+- Native Material 3 components in the approved black, charcoal and amber palette, consistent on phone/watch and in both system modes.
+- Fine diagonal hatching fades into selected cards, clock faces, ringing controls and widget scrims, following the watch alarm rail. Texture stays behind content; existing motion and controls remain.
+- Widgets retain their transparent clock mode, feathered reminder backgrounds, responsive sizes and dark-text setting.
 - Icon navigation, a floating add action, spacious alarm cards, large time typography and a quieter permission panel.
 - Bottom-sheet alarm editor, Material time picker, outlined fields, weekday selection and Material switches.
 - Redesigned clock, timer, stopwatch, bedtime and dark ringing screens; compact watch time controls and weekday rows.

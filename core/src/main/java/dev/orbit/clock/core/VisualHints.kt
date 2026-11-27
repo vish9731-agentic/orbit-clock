@@ -78,8 +78,8 @@ object VisualHints {
             rail.rewind()
             rail.addRoundRect(RectF(bounds), h.coerceAtMost(w) / 2, h.coerceAtMost(w) / 2, Path.Direction.CW)
             gradient = if (w > 0 && h > 0) RadialGradient(0f, 0f, 1f,
-                intArrayOf(Color.TRANSPARENT, Color.TRANSPARENT, Color.argb(18, 131, 238, 212),
-                    Color.argb(94, 224, 255, 245), Color.argb(12, 131, 238, 212), Color.TRANSPARENT),
+                intArrayOf(Color.TRANSPARENT, Color.TRANSPARENT, Color.argb(18, Color.red(OrbitColors.amber), Color.green(OrbitColors.amber), Color.blue(OrbitColors.amber)),
+                    Color.argb(94, Color.red(OrbitColors.amber), Color.green(OrbitColors.amber), Color.blue(OrbitColors.amber)), Color.argb(12, Color.red(OrbitColors.amber), Color.green(OrbitColors.amber), Color.blue(OrbitColors.amber)), Color.TRANSPARENT),
                 floatArrayOf(0f, .76f, .84f, .93f, .99f, 1f), Shader.TileMode.CLAMP) else null
         }
         override fun draw(canvas: Canvas) {

@@ -13,6 +13,7 @@ import android.os.SystemClock
 import android.text.format.DateFormat
 import android.view.View
 import android.widget.RemoteViews
+import dev.orbit.clock.core.OrbitColors
 import dev.orbit.clock.core.Alarm
 import dev.orbit.clock.core.RingingService
 import dev.orbit.clock.core.Scheduler
@@ -148,7 +149,11 @@ open class AlarmWidget : AppWidgetProvider() {
             val open = launch(c, Intent.ACTION_MAIN)
             v.setOnClickPendingIntent(R.id.widget_clock, open)
             val darkClock = c.getSharedPreferences("widget", Context.MODE_PRIVATE).getBoolean("darkClockText", false)
-            v.setTextColor(R.id.widget_clock, if (darkClock) android.graphics.Color.rgb(20, 28, 24) else android.graphics.Color.WHITE)
+            v.setTextColor(R.id.widget_clock, if (darkClock) c.getColor(R.color.widget_dark_clock) else OrbitColors.text)
+            v.setTextColor(R.id.widget_countdown, OrbitColors.text)
+            v.setTextColor(R.id.widget_title, OrbitColors.muted)
+            v.setTextColor(R.id.widget_event_time, OrbitColors.muted)
+            v.setTextColor(R.id.widget_toggle, OrbitColors.amber)
             v.setViewVisibility(R.id.widget_clock, if (wide || !event) View.VISIBLE else View.GONE)
             v.setViewVisibility(R.id.widget_event, if (event) View.VISIBLE else if (wide) View.INVISIBLE else View.GONE)
             v.setViewVisibility(R.id.widget_backdrop, if (event) View.VISIBLE else View.GONE)

@@ -35,7 +35,7 @@ class WatchRingActions(
     private val arrow = Path()
     private val arc = RectF()
     private val snoozeColor = colors.primary
-    private val dismissColor = 0xfff1b7b2.toInt()
+    private val dismissColor = colors.muted
     private var snoozeButton: ImageButton? = null
     private var dismissButton: ImageButton? = null
     private var currentProgress = 0

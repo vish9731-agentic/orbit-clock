@@ -62,6 +62,15 @@ public class WidgetProbe extends Instrumentation {
    int center=(int)(w*.65f);require(Color.alpha(bitmap.getPixel(center,h/2))>=150,"Reminder contrast too low");
    require(Color.alpha(bitmap.getPixel(center,0))==0 && Color.alpha(bitmap.getPixel(center,h-1))==0,"Hard top/bottom perimeter");
    require(Color.alpha(bitmap.getPixel(w-1,h/2))==0,"Hard right perimeter");
+   int hatch=0,neutral=0,sampled=0;
+   for(int y=h/5;y<h*4/5;y++)for(int x=w/4;x<w*19/20;x++){
+    int color=bitmap.getPixel(x,y);if(Color.alpha(color)<40)continue;sampled++;
+    int red=Color.red(color),green=Color.green(color),blue=Color.blue(color);
+    if(red>blue+8&&green>blue+5&&red>green)hatch++;
+    if(Math.max(red,Math.max(green,blue))-Math.min(red,Math.min(green,blue))<=5)neutral++;
+   }
+   require(sampled>100&&hatch>5,"Actual widget bitmap lacks the shared amber hatch");
+   require(neutral>sampled/3&&hatch<sampled*.65,"Hatch must remain a subtle accent over a predominantly charcoal scrim");
    int previous=0;int feather=(int)Math.ceil(10*c.getResources().getDisplayMetrics().density);
    for(int x=0;x<w-feather;x++){int alpha=Color.alpha(bitmap.getPixel(x,h/2));require(alpha>=previous,"Interior scrim opacity reverses");require(alpha-previous<=6,"Hard inner seam");previous=alpha;}
    for(int x=w-feather;x<w;x++){int alpha=Color.alpha(bitmap.getPixel(x,h/2));require(Math.abs(alpha-previous)<=36,"Hard feather edge");previous=alpha;}
@@ -120,7 +129,7 @@ public class WidgetProbe extends Instrumentation {
   require(manager.getAppWidgetInfo(wideId).targetCellHeight==1 && manager.getAppWidgetInfo(wideId).targetCellWidth==4,"Wide picker metadata must be 4x1");
   refresh();renderAt(System.currentTimeMillis());visible(false);capture("01-clock-dark",Color.rgb(25,32,45));
   c.getSharedPreferences("widget",0).edit().putBoolean("darkClockText",true).commit();renderAt(System.currentTimeMillis());
-  require(main(()->text(wide,"widget_clock").getCurrentTextColor()==Color.rgb(20,28,24)),"Dark clock appearance");capture("02-clock-light",Color.rgb(230,225,210));
+  require(main(()->{int ink=text(wide,"widget_clock").getCurrentTextColor();int max=Math.max(Color.red(ink),Math.max(Color.green(ink),Color.blue(ink))),min=Math.min(Color.red(ink),Math.min(Color.green(ink),Color.blue(ink)));return max<40&&max-min<=3;}),"Dark clock choice must remain readable neutral ink on light wallpaper");capture("02-clock-light",Color.rgb(230,225,210));
   c.getSharedPreferences("widget",0).edit().putBoolean("darkClockText",false).commit();renderAt(System.currentTimeMillis());
   pass("both real AppWidgetHost bindings, transparent idle clock only, stable empty right half");
   Calendar cal=Calendar.getInstance();cal.add(Calendar.MINUTE,10);

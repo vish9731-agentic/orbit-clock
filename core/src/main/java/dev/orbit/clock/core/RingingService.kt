@@ -114,7 +114,7 @@ class RingingService : Service() {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val notification = Notification.Builder(this, if (popup.isShowing || pendingPopup) "persistent_alarm_controls" else "ringing")
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm).setContentTitle(a.label)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm).setColor(OrbitColors.amber).setContentTitle(a.label)
             .setContentText(if (active.size > 1) "${active.size} alarms ringing" else "Alarm")
             .setOnlyAlertOnce(!fullScreen)
             .setCategory(Notification.CATEGORY_ALARM).setVisibility(Notification.VISIBILITY_PUBLIC)

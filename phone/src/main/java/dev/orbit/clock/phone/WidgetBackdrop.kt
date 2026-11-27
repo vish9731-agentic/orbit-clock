@@ -3,8 +3,14 @@ package dev.orbit.clock.phone
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
+import android.graphics.RectF
+import dev.orbit.clock.core.OrbitHatch
 
-/** An edge-feathered readability scrim; no opaque card or clipped capsule perimeter. */
+/** Charcoal readability scrim with a feathered amber hatch; preserves launcher transparency. */
 object WidgetBackdrop {
     private fun smooth(value: Float): Float {
         val t = value.coerceIn(0f, 1f)
@@ -38,6 +44,17 @@ object WidgetBackdrop {
                 pixels[y * width + x] = Color.argb(alpha, red, green, blue)
             }
         }
-        return Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
+        val backdrop = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply {
+            setPixels(pixels, 0, width, 0, 0, width, height)
+        }
+        val hatch = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        OrbitHatch.draw(Canvas(hatch), RectF(0f, 0f, width.toFloat(), height.toFloat()), density)
+        // Source-atop inherits the scrim alpha exactly: texture cannot create an opaque
+        // perimeter or paint into the clock-only/feathered transparent region.
+        Canvas(backdrop).drawBitmap(hatch, 0f, 0f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_ATOP)
+        })
+        hatch.recycle()
+        return backdrop
     }
 }

@@ -24,3 +24,9 @@ The user's approved black/amber reference supersedes the earlier wallpaper-color
 - +/- only adjust the occurrence's duration; Snooze remains a separate tap. Preserve 5–60-minute bounds, the granted overlay permission and 30-second auto-snooze.
 
 These are Orbit-specific choices applying the approved design, not a claim that Google specifies this exact alarm layout. Exact emulator results are recorded in verification/STATUS.md.
+
+## App-wide palette and texture
+
+The approved palette now applies to all phone/watch tools, Focus, Material editors/dialogs, ringing controls and widget variants. Shared roles live in OrbitColors/OrbitPalette and the fixed dark Material theme: black #050505, charcoal #191919/#252525, warm white #F5F3F0, muted #C6C4C1 and amber #FFC15A with #382800 tonal containers. Both system modes use these roles. The ringing time-of-day atmosphere remains a deliberate accent over black.
+
+OrbitHatchDrawable caches paths and shaders for fine diagonal hatching that fades toward a quiet edge, derived from the existing watch alarm rail. Selected cards, dials and control rails use it. Widget artwork composites the same detail through its existing scrim alpha; transparent clock-only mode, feathering and the dark-text preference remain. Retain native ripples, typography hierarchy, target sizes and existing motion. Exact build/runtime evidence belongs in verification/STATUS.md.

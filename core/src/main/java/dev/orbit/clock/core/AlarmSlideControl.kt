@@ -2,7 +2,6 @@ package dev.orbit.clock.core
 
 import android.content.Context
 import android.content.res.ColorStateList
-import android.graphics.drawable.GradientDrawable
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
@@ -71,7 +70,7 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
 
     init {
         if (compact) tag = "watch_ring_slider"
-        background = GradientDrawable().apply { setColor(0xff103a35.toInt()); cornerRadius = dp(48).toFloat() }
+        background = OrbitHatchDrawable(OrbitColors.surfaceHigh, dp(48).toFloat(), resources.displayMetrics.density)
         clipToOutline = true
         clipChildren = false; clipToPadding = false
         fun action(text: String, gravity: Int, callback: () -> Unit) {
@@ -79,7 +78,7 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
                 this.text = text; isAllCaps = false; textSize = if (compact) 11f else 22f
                 typeface = android.graphics.Typeface.create(android.graphics.Typeface.create("sans-serif",
                     android.graphics.Typeface.NORMAL), 450, false)
-                setTextColor(0xffd3e3df.toInt())
+                setTextColor(OrbitColors.text)
                 backgroundTintList = ColorStateList.valueOf(android.graphics.Color.TRANSPARENT)
                 minWidth = 0; minimumWidth = 0; setPadding(0, 0, 0, 0); insetTop = 0; insetBottom = 0
                 if (compact) {
@@ -123,7 +122,7 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
                 (thumbHeight * 1.25f).toInt(), Gravity.CENTER))
             thumbIcon = AppCompatImageView(context).apply {
                 setImageResource(R.drawable.ic_alarm)
-                imageTintList = ColorStateList.valueOf(0xff74e8d7.toInt())
+                imageTintList = ColorStateList.valueOf(OrbitColors.amber)
                 scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
                 isClickable = false; isFocusable = false
@@ -238,7 +237,7 @@ class AlarmSlideControl(context: Context, private val snooze: () -> Unit, privat
     }
     private class PillSurface(context: Context, private val baseWidth: Float,
                               private val baseHeight: Float) : View(context) {
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xff00564d.toInt() }
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = OrbitColors.amberContainer }
         private val shape = RectF()
         var stretch = 0f
             set(value) {

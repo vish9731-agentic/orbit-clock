@@ -22,7 +22,6 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.color.DynamicColors
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
@@ -61,12 +60,12 @@ class RingingPopup(private val service: Context) {
             android.text.format.DateFormat.is24HourFormat(service)).joinToString("|")
         if (panel != null && identity == key) { updateClock(); updateDuration(minutes); return }
         hide()
-        val context = DynamicColors.wrapContextIfAvailable(ContextThemeWrapper(service, R.style.Theme_OrbitClock_Ringing))
+        val context = ContextThemeWrapper(service, R.style.Theme_OrbitClock_Ringing)
         // The approved reference uses black, charcoal and a quiet amber action in both system themes.
-        val foreground = 0xfff5f3f0.toInt()
-        val muted = 0xffc6c4c1.toInt()
-        val charcoal = 0xff252525.toInt()
-        val amber = 0xffffc15a.toInt()
+        val foreground = OrbitColors.text
+        val muted = OrbitColors.muted
+        val charcoal = OrbitColors.surfaceHigh
+        val amber = OrbitColors.amber
         fun row() = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         fun column() = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         fun label(value: String, size: Float, color: Int, weight: Int = 400) = TextView(context).apply {
@@ -128,7 +127,7 @@ class RingingPopup(private val service: Context) {
         val root = column().apply {
             tag = "popup_card"
             setPadding(dp(16), dp(14), dp(16), dp(14))
-            background = GradientDrawable().apply { setColor(0xff050505.toInt()); cornerRadius = dp(32).toFloat() }
+            background = OrbitHatchDrawable(OrbitColors.background, dp(32).toFloat(), resources.displayMetrics.density)
             elevation = dp(8).toFloat()
             contentDescription = "Persistent alarm controls"
             openOnTap(this)
@@ -148,7 +147,7 @@ class RingingPopup(private val service: Context) {
             setPadding(if (adjustment) 0 else dp(12), 0, if (adjustment) 0 else dp(12), 0)
             cornerRadius = dp(32); insetTop = 0; insetBottom = 0; strokeWidth = 0
             elevation = 0f
-            backgroundTintList = ColorStateList.valueOf(when { adjustment -> android.graphics.Color.TRANSPARENT; primary -> 0xff382800.toInt(); else -> charcoal })
+            backgroundTintList = ColorStateList.valueOf(when { adjustment -> android.graphics.Color.TRANSPARENT; primary -> OrbitColors.amberContainer; else -> charcoal })
             rippleColor = ColorStateList.valueOf(0x24ffffff)
             setTextColor(if (primary) amber else foreground)
             setOnClickListener { OrbitMotion.tick(this); action() }

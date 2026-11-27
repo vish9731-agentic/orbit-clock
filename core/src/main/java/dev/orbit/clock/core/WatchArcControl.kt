@@ -4,13 +4,14 @@ import android.content.Context
 import android.graphics.*
 import android.view.*
 import android.widget.FrameLayout
+import androidx.core.graphics.ColorUtils
 import kotlin.math.*
 
 /** Bezel-first, vector-drawn short bottom arc. Motion never commits an alarm action. */
 class WatchArcControl(context: Context, private val snooze: () -> Unit, private val stop: () -> Unit) : FrameLayout(context) {
     private fun dp(value: Float) = resources.displayMetrics.density * value
-    private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xff103a35.toInt(); style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeWidth = dp(18f) }
-    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xffd3e3df.toInt(); textAlign = Paint.Align.CENTER; textSize = dp(9f) * resources.configuration.fontScale.coerceAtMost(1.3f) }
+    private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = OrbitColors.surfaceHigh; style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeWidth = dp(18f) }
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = OrbitColors.text; textAlign = Paint.Align.CENTER; textSize = dp(9f) * resources.configuration.fontScale.coerceAtMost(1.3f) }
     private val oval = RectF()
     private val railOutline = Path()
     private val railCentre = Path()
@@ -122,9 +123,9 @@ class WatchArcControl(context: Context, private val snooze: () -> Unit, private 
             floatArrayOf(0f, inside, shoulder, 1f), Shader.TileMode.CLAMP)
         val stops = floatArrayOf(0f, (90f-halfSweep)/360f, .25f, (90f+halfSweep)/360f, 1f)
         val colour = SweepGradient(w / 2f, h / 2f,
-            intArrayOf(0x0874e8d7, 0x0874e8d7, 0x2674e8d7, 0x6474e8d7, 0x0874e8d7), stops)
+            intArrayOf(0x08, 0x08, 0x26, 0x64, 0x08).map { ColorUtils.setAlphaComponent(OrbitColors.amber, it) }.toIntArray(), stops)
         val ink = SweepGradient(w / 2f, h / 2f,
-            intArrayOf(0x1874e8d7, 0x1874e8d7, 0x7174e8d7, 0xc674e8d7.toInt(), 0x1874e8d7), stops)
+            intArrayOf(0x18, 0x18, 0x71, 0xc6, 0x18).map { ColorUtils.setAlphaComponent(OrbitColors.amber, it) }.toIntArray(), stops)
         railFill.shader = ComposeShader(colour, edgeFade, PorterDuff.Mode.DST_IN)
         hatchInk.shader = ComposeShader(ink, edgeFade, PorterDuff.Mode.DST_IN)
         hatchLines.rewind()
@@ -211,9 +212,9 @@ class WatchArcControl(context: Context, private val snooze: () -> Unit, private 
         var tangent = 0f
         var stretch = 0f
         private fun dp(value: Float) = resources.displayMetrics.density * value
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xff00564d.toInt() }
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = OrbitColors.amberContainer }
         private val bounds = RectF()
-        private val glyph = requireNotNull(context.getDrawable(R.drawable.ic_alarm)).mutate().apply { setTint(0xff74e8d7.toInt()) }
+        private val glyph = requireNotNull(context.getDrawable(R.drawable.ic_alarm)).mutate().apply { setTint(OrbitColors.amber) }
         fun containsPill(x: Float, y: Float): Boolean {
             val theta = Math.toRadians(tangent.toDouble())
             val dx = x - width / 2f; val dy = y - height / 2f

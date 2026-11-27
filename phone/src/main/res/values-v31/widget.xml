@@ -1,4 +1,4 @@
 <resources>
- <color name="widget_alarm_tone">@android:color/system_accent1_800</color>
- <color name="widget_bedtime_tone">@android:color/system_accent2_800</color>
+ <color name="widget_alarm_tone">#252525</color>
+ <color name="widget_bedtime_tone">#25221D</color>
 </resources>
