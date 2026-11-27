@@ -669,9 +669,16 @@ open class ClockActivity : AppCompatActivity() {
     private fun chooseWatchTime(hour: Int, minute: Int, onPicked: (Int, Int) -> Unit) {
         val sheet = BottomSheetDialog(this)
         val body = column().apply { setPadding(dp(18), dp(20), dp(18), dp(28)) }
-        body.addView(text("Set time", 22f)); space(body, 8)
+        body.addView(text("Set time", 22f).apply {
+            gravity = Gravity.CENTER; maxLines = 1
+            setAutoSizeTextTypeUniformWithConfiguration(16, 22, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+        }); space(body, 8)
         fun picker(max: Int, value: Int, label: String) = NumberPicker(this).apply {
             minValue = 0; maxValue = max; this.value = value
+            // The platform wheel can retain Holo cyan dividers despite a Material theme.
+            // Keep its native value, touch and accessibility behavior with a quiet surface.
+            selectionDividerHeight = 0
+            setTextColor(colors.onSurface)
             setFormatter { String.format(Locale.getDefault(), "%02d", it) }
             contentDescription = label; descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
         }

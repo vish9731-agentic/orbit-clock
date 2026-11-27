@@ -202,13 +202,42 @@ public class ThemeProbe extends Instrumentation {
    return null;
   });SystemClock.sleep(450);
  }
+ void assertExpandedWatchPicker()throws Exception {
+  if(!module.equals("wear"))return;
+  JSONArray records=new JSONArray(c.getSharedPreferences("alarms",0).getString("records","[]"));JSONObject saved=null;
+  for(int i=0;i<records.length();i++)if("theme-probe-alarm".equals(records.getJSONObject(i).getString("id")))saved=records.getJSONObject(i);
+  require(saved!=null,"No saved alarm for native picker value checks");final int expectedHour=saved.getInt("hour"),expectedMinute=saved.getInt("minute");
+  final List<Rect> wheels=new ArrayList<>();final RectF titleInk=new RectF();final int[] titleColor={0};
+  main(()->{View focused=null;for(View root:WindowInspector.getGlobalWindowViews())if(root.isShown()&&root.hasWindowFocus())focused=root;require(focused!=null,"Expanded picker has no focused native window");
+   List<View> mounted=new ArrayList<>();views(focused,mounted);TextView title=null;NumberPicker hour=null,minute=null;
+   for(View v:mounted){if(v instanceof TextView&&!(v instanceof Button)&&"Set time".equals(((TextView)v).getText().toString()))title=(TextView)v;
+    if(v instanceof NumberPicker){if("Hour, 24-hour time".equals(String.valueOf(v.getContentDescription())))hour=(NumberPicker)v;if("Minute".equals(String.valueOf(v.getContentDescription())))minute=(NumberPicker)v;}}
+   require(title!=null&&hour!=null&&minute!=null,"Expanded native picker title/wheels missing");require(hour.getValue()==expectedHour&&minute.getValue()==expectedMinute,"Themed native picker changed hour/minute values");
+   android.text.Layout layout=title.getLayout();require(layout!=null&&layout.getLineCount()==1&&layout.getEllipsisCount(0)==0,"Native picker heading is not a complete single line");
+   int[] location=new int[2];title.getLocationOnScreen(location);Path glyphs=new Path();String value=title.getText().toString();
+   title.getPaint().getTextPath(value,0,value.length(),location[0]+title.getTotalPaddingLeft()+layout.getLineLeft(0),location[1]+title.getTotalPaddingTop()+layout.getLineBaseline(0),glyphs);glyphs.computeBounds(titleInk,true);titleColor[0]=title.getCurrentTextColor();
+   Rect visible=new Rect();require(title.getGlobalVisibleRect(visible)&&new RectF(visible.left-1,visible.top-1,visible.right+1,visible.bottom+1).contains(titleInk),"Native picker title glyphs clip in their window");
+   Point display=new Point();c.getSystemService(WindowManager.class).getDefaultDisplay().getRealSize(display);float cx=display.x/2f,cy=display.y/2f,radius=Math.min(display.x,display.y)/2f+1;
+   for(float x:new float[]{titleInk.left,titleInk.right})for(float y:new float[]{titleInk.top,titleInk.bottom})require(Math.hypot(x-cx,y-cy)<=radius,"Native picker title glyphs clip at physical round edge");
+   for(NumberPicker wheel:new NumberPicker[]{hour,minute}){Rect bounds=new Rect();require(wheel.getGlobalVisibleRect(bounds)&&!bounds.isEmpty(),"Native picker wheel is not visible");wheels.add(bounds);}return null;
+  });
+  committedFrame();Bitmap display=getUiAutomation().takeScreenshot();require(display!=null,"No actual expanded-picker display");
+  try{int glyphPixels=0;for(int y=Math.max(0,(int)Math.floor(titleInk.top));y<Math.min(display.getHeight(),(int)Math.ceil(titleInk.bottom));y++)for(int x=Math.max(0,(int)Math.floor(titleInk.left));x<Math.min(display.getWidth(),(int)Math.ceil(titleInk.right));x++){
+    int pixel=display.getPixel(x,y),foreground=titleColor[0];if(Math.abs(Color.red(pixel)-Color.red(foreground))<=38&&Math.abs(Color.green(pixel)-Color.green(foreground))<=38&&Math.abs(Color.blue(pixel)-Color.blue(foreground))<=38)glyphPixels++;}
+   require(glyphPixels>=3,"Native centered picker title has no actual glyph pixels");
+   int cyan=0;for(Rect wheel:wheels)for(int y=Math.max(0,wheel.top);y<Math.min(display.getHeight(),wheel.bottom);y++)for(int x=Math.max(0,wheel.left);x<Math.min(display.getWidth(),wheel.right);x++){
+    int pixel=display.getPixel(x,y),red=Color.red(pixel),green=Color.green(pixel),blue=Color.blue(pixel);if(green>red+20&&blue>red+20)cyan++;}
+   require(cyan==0,"Native NumberPicker still paints cyan outside the approved theme: pixels="+cyan);
+  }finally{display.recycle();}
+  pass("expanded native watch picker preserves hour/minute, has full round-safe title glyphs and no cyan wheel pixels");
+ }
  void editor()throws Exception {
   String before=c.getSharedPreferences("alarms",0).getString("records","[]");
   activate(()->current.getWindow().getDecorView().findViewWithTag("item:alarm:theme-probe-alarm"),"seeded alarm tile");
   dialogTitle("Edit alarm");capture("alarm-editor");
   View time=find("Set alarm time");require(time!=null,"No time picker control");click("Set alarm time");
   String expectedTitle=module.equals("wear")?"Set time":"Set alarm time";
-  dialogTitle(expectedTitle);if(module.equals("wear"))expandFocusedSheet();capture("alarm-time-picker");
+  dialogTitle(expectedTitle);if(module.equals("wear"))expandFocusedSheet();assertExpandedWatchPicker();capture("alarm-time-picker");
   // Inspect the actual dialog's Material color roles in the mounted window.
   List<View> roots=main(()->WindowInspector.getGlobalWindowViews());View dialog=roots.get(roots.size()-1);
   int attr=c.getResources().getIdentifier("colorSurface","attr",c.getPackageName());
