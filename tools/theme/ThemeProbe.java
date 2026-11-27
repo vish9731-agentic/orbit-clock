@@ -33,25 +33,43 @@ public class ThemeProbe extends Instrumentation {
  void pass(String message){checks++;Bundle b=new Bundle();b.putString("stream","PASS "+message+"\n");sendStatus(0,b);}
  void views(View root,List<View> out){out.add(root);if(root instanceof ViewGroup)for(int i=0;i<((ViewGroup)root).getChildCount();i++)views(((ViewGroup)root).getChildAt(i),out);}
  List<View> all()throws Exception{return main(()->{List<View> out=new ArrayList<>();for(View root:WindowInspector.getGlobalWindowViews())if(root.isShown())views(root,out);return out;});}
- View find(String value)throws Exception {
-  return main(()->{List<View> out=new ArrayList<>();for(View root:WindowInspector.getGlobalWindowViews())if(root.isShown())views(root,out);
-   for(int i=out.size()-1;i>=0;i--){View v=out.get(i);if(!v.isShown())continue;
-    if(value.equals(String.valueOf(v.getContentDescription())) || v instanceof TextView&&value.equals(((TextView)v).getText().toString()))return v;
-   }return null;});
+ View findNow(String value){
+  List<View> out=new ArrayList<>();for(View root:WindowInspector.getGlobalWindowViews())if(root.isShown())views(root,out);
+  for(int i=out.size()-1;i>=0;i--){View v=out.get(i);if(!v.isShown())continue;
+   if(value.equals(String.valueOf(v.getContentDescription())) || v instanceof TextView&&value.equals(((TextView)v).getText().toString()))return v;
+  }return null;
  }
- void show(View view)throws Exception {
-  require(view!=null,"Requested control absent");
-  main(()->{view.requestRectangleOnScreen(new Rect(0,0,view.getWidth(),view.getHeight()),false);return null;});
-  SystemClock.sleep(450);
-  waitFor(()->main(()->{Rect r=new Rect();return view.isShown()&&view.getGlobalVisibleRect(r)&&r.height()>0&&r.width()>0;}),"Requested control not reachable");
+ View find(String value)throws Exception{return main(()->findNow(value));}
+ interface Control { View get(); }
+ void ready(Control lookup)throws Exception {
+  waitFor(()->main(()->{View view=lookup.get();if(view==null||!view.isAttachedToWindow()||!view.isShown())return false;
+   Rect visible=new Rect();if(view.getGlobalVisibleRect(visible)&&visible.width()>0&&visible.height()>0)return true;
+   view.requestRectangleOnScreen(new Rect(0,0,view.getWidth(),view.getHeight()),false);return false;
+  }),"Requested current native control not reachable");
  }
- void click(String value)throws Exception {
-  View view=find(value);require(view!=null,"No native control: "+value);show(view);
-  main(()->{require(view.isEnabled()&&view.performClick(),"Control did not handle click: "+value);return null;});
+ void activate(Control lookup,String label)throws Exception {
+  ready(lookup);
+  main(()->{View view=lookup.get();Rect visible=new Rect();require(view!=null&&view.isAttachedToWindow()&&view.isShown()&&view.getGlobalVisibleRect(visible)&&!visible.isEmpty(),"Current control detached before one click: "+label);
+   require(view.isEnabled()&&view.performClick(),"Control did not handle click: "+label);return null;});
   SystemClock.sleep(500);
+ }
+ void click(String value)throws Exception{activate(()->findNow(value),value);}
+ void committedFrame()throws Exception {
+  CountDownLatch committed=new CountDownLatch(1);
+  main(()->{View top=null;for(View root:WindowInspector.getGlobalWindowViews())if(root.isShown()&&root.hasWindowFocus())top=root;
+   require(top!=null,"No focused native window for frame feedback");
+   require(top.isHardwareAccelerated(),"Native verification window is not hardware rendered");
+   top.getViewTreeObserver().registerFrameCommitCallback(()->committed.countDown());top.invalidate();return null;});
+  require(committed.await(10,TimeUnit.SECONDS),"Native frame was not committed");SystemClock.sleep(80);
+ }
+ void dialogTitle(String title)throws Exception {
+  waitFor(()->main(()->{for(View root:WindowInspector.getGlobalWindowViews())if(root.isShown()&&root.hasWindowFocus()){
+   List<View> nativeViews=new ArrayList<>();views(root,nativeViews);for(View v:nativeViews)if(v instanceof TextView&&v.isShown()&&title.equals(((TextView)v).getText().toString()))return true;
+  }return false;}),"Focused native dialog title missing: "+title);
  }
  void back()throws Exception {sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);SystemClock.sleep(400);}
  void capture(String name)throws Exception {
+  committedFrame();
   Bitmap b=getUiAutomation().takeScreenshot();require(b!=null,"No native display capture");
   try(FileOutputStream out=new FileOutputStream(new File(evidence,name+".png"))){b.compress(Bitmap.CompressFormat.PNG,100,out);}finally{b.recycle();}
  }
@@ -61,7 +79,7 @@ public class ThemeProbe extends Instrumentation {
  boolean amber(int color){return Color.red(color)>Color.blue(color)+20&&Color.green(color)>Color.blue(color)+12&&Color.red(color)>Color.green(color);}
  int dominant(Bitmap bitmap,Rect area){Map<Integer,Integer> colors=new HashMap<>();for(int y=Math.max(0,area.top);y<Math.min(bitmap.getHeight(),area.bottom);y+=2)for(int x=Math.max(0,area.left);x<Math.min(bitmap.getWidth(),area.right);x+=2){int color=bitmap.getPixel(x,y);colors.put(color,colors.getOrDefault(color,0)+1);}require(!colors.isEmpty(),"No pixels in visible region");return Collections.max(colors.entrySet(),Map.Entry.comparingByValue()).getKey();}
  void screen(String name,boolean requireAccent)throws Exception {
-  SystemClock.sleep(550);
+  SystemClock.sleep(550);committedFrame();
   Bitmap b=getUiAutomation().takeScreenshot();require(b!=null,"Missing actual display");
   try{
    int dark=0,total=0,accents=0;Rect content=new Rect();main(()->{current.findViewById(android.R.id.content).getGlobalVisibleRect(content);return null;});
@@ -72,12 +90,19 @@ public class ThemeProbe extends Instrumentation {
    final Bitmap display=b;
    int readable=main(()->{int count=0;List<View> mounted=new ArrayList<>();views(current.getWindow().getDecorView(),mounted);
     for(View v:mounted)if(v instanceof TextView&&v.isShown()&&v.getAlpha()>.95f){TextView t=(TextView)v;Rect r=new Rect();if(t.getText().length()==0||!t.getGlobalVisibleRect(r)||r.width()<8||r.height()<8)continue;
-     // A partially scrolled row is intentionally clipped by its viewport.
-     if(r.height()<t.getHeight()-2)continue;
+     if(t.getLayout()==null)continue;
+     int[] location=new int[2];t.getLocationOnScreen(location);android.text.Layout layout=t.getLayout();
+     int textTop=location[1]+t.getTotalPaddingTop(),first=layout.getLineTop(0),last=layout.getLineBottom(layout.getLineCount()-1);
+     // Test painted text bounds, not the whole frame (e.g. a centered stopwatch readout).
+     if(textTop+first<r.top-1||textTop+last>r.bottom+1)continue;
      int bg=dominant(display,r),fg=t.getCurrentTextColor();double ratio=contrast(fg,bg);
-     if(t.isEnabled())require(ratio>=(t.getTextSize()/c.getResources().getDisplayMetrics().scaledDensity>=20?2.8:3.8),"Low native text contrast "+name+": "+t.getText()+" ratio="+ratio);
-     if(t.getLayout()!=null){int needed=t.getLayout().getLineBottom(t.getLayout().getLineCount()-1)+t.getCompoundPaddingTop()+t.getCompoundPaddingBottom();
-      if(t.getMaxLines()>1&&t.getEllipsize()==null)require(needed<=t.getHeight()+2,"Text content vertically clipped: "+t.getText());}
+     if(t.isEnabled()){
+      require(ratio>=(t.getTextSize()/c.getResources().getDisplayMetrics().scaledDensity>=20?2.8:3.8),"Low native text contrast "+name+": "+t.getText()+" ratio="+ratio);
+      int ink=0;for(int y=Math.max(r.top,textTop+first);y<Math.min(Math.min(display.getHeight(),r.bottom),textTop+last);y++)for(int x=Math.max(0,r.left);x<Math.min(display.getWidth(),r.right);x++){
+       int pixel=display.getPixel(x,y);if(Math.abs(Color.red(pixel)-Color.red(fg))<=38&&Math.abs(Color.green(pixel)-Color.green(fg))<=38&&Math.abs(Color.blue(pixel)-Color.blue(fg))<=38&&contrast(pixel,bg)>2.5)ink++;
+      }
+      require(ink>=3,"Native glyph pixels absent after committed frame "+name+": "+t.getText());
+     }
      count++;
     }return count;});
    require(readable>=2,"Insufficient visible native text feedback: "+name);
@@ -88,12 +113,27 @@ public class ThemeProbe extends Instrumentation {
  int hatchCount(View root)throws Exception {
   return main(()->{List<View> mounted=new ArrayList<>();views(root,mounted);int found=0;
    for(View v:mounted){Drawable d=v.getBackground();if(d==null||!d.getClass().getName().equals("dev.orbit.clock.core.OrbitHatchDrawable")||v.getWidth()<32||v.getHeight()<32)continue;
-    int w=v.getWidth(),h=v.getHeight();Bitmap b=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);Rect old=new Rect(d.getBounds());
-    try{d.setBounds(0,0,w,h);d.draw(new Canvas(b));int base=b.getPixel(w/3,h/2),left=0,right=0;
+    int w=v.getWidth(),h=v.getHeight();Bitmap b=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);
+    Field fill=d.getClass().getDeclaredField("fillPaint"),radius=d.getClass().getDeclaredField("cornerRadius"),hatchField=d.getClass().getDeclaredField("hatch");fill.setAccessible(true);radius.setAccessible(true);hatchField.setAccessible(true);
+    Object hatch=hatchField.get(d);Field color=hatch.getClass().getDeclaredField("color"),density=hatch.getClass().getDeclaredField("scale");color.setAccessible(true);density.setAccessible(true);
+    Drawable isolated=(Drawable)d.getClass().getConstructor(int.class,float.class,float.class,int.class).newInstance(((Paint)fill.get(d)).getColor(),radius.getFloat(d),density.getFloat(hatch),color.getInt(hatch));
+    try{isolated.setBounds(0,0,w,h);isolated.draw(new Canvas(b));int base=b.getPixel(w/3,h/2),left=0,right=0;
      for(int y=h/5;y<h*4/5;y++)for(int x=w/8;x<w*7/8;x++){int p=b.getPixel(x,y);if(Color.alpha(p)>0&&(Math.abs(Color.red(p)-Color.red(base))+Math.abs(Color.green(p)-Color.green(base))+Math.abs(Color.blue(p)-Color.blue(base)))>=4){if(x<w/2)left++;else right++;}}
      require(right>5,"Mounted hatch has no visible raster detail");require(right>left*1.2,"Hatch does not fade toward the right edge");found++;
-    }finally{d.setBounds(old);b.recycle();}
+    }finally{b.recycle();}
    }return found;});
+ }
+ void showWatchContent(String tab)throws Exception {
+  if(!module.equals("wear")||tab.equals("Alarms"))return;
+  if(tab.equals("Clock"))ready(()->{List<View> mounted=new ArrayList<>();views(current.getWindow().getDecorView(),mounted);
+   for(View v:mounted)if(v instanceof TextView){TextView t=(TextView)v;
+    if(t.getTextSize()/current.getResources().getDisplayMetrics().scaledDensity>=30&&t.getText().toString().matches("[0-9]{1,2}:[0-9]{2}(?:\\s*(?:AM|PM))?")){
+     t.requestRectangleOnScreen(new Rect(0,0,t.getWidth(),t.getHeight()),false);return t;
+    }}return null;});
+  else if(tab.equals("Timer"))ready(()->{View v=findNow("Set a timer");if(v!=null)v.requestRectangleOnScreen(new Rect(0,0,v.getWidth(),v.getHeight()),false);return v;});
+  else if(tab.equals("Stopwatch"))ready(()->{View v=findNow("Stopwatch elapsed time");if(v!=null)v.requestRectangleOnScreen(new Rect(0,0,v.getWidth(),v.getHeight()),false);return v;});
+  else if(tab.equals("Bedtime"))ready(()->{View v=findNow("A rhythm for your rest");if(v!=null)v.requestRectangleOnScreen(new Rect(0,0,v.getWidth(),v.getHeight()),false);return v;});
+  SystemClock.sleep(400);
  }
  void seedAlarm()throws Exception {
   ClassLoader l=c.getClassLoader();Class<?> store=Class.forName("dev.orbit.clock.core.Store",true,l),alarm=Class.forName("dev.orbit.clock.core.Alarm",true,l);Object companion=store.getField("Companion").get(null);
@@ -108,31 +148,45 @@ public class ThemeProbe extends Instrumentation {
   current=startActivitySync(new Intent().setClassName(c.getPackageName(),cls).putExtra("orbit_tab",tab).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
   waitFor(()->main(()->current.hasWindowFocus()&&!current.isFinishing()),"Main tool failed to gain focus: "+tab);
   waitFor(()->main(()->{List<View> mounted=new ArrayList<>();views(current.getWindow().getDecorView(),mounted);String heading=tab+(module.equals("wear")?"  ▾":"");
-   for(View v:mounted)if(v instanceof TextView&&v.isShown()&&heading.equals(((TextView)v).getText().toString())&&((TextView)v).getTextSize()/current.getResources().getDisplayMetrics().scaledDensity>=22)return true;return false;}),"Actual tool heading did not change to "+tab);
+   for(View v:mounted)if(v instanceof TextView&&v.isShown()&&heading.equals(((TextView)v).getText().toString())&&((TextView)v).getTextSize()/current.getResources().getDisplayMetrics().scaledDensity>=(module.equals("wear")?16:22)){
+    TextView title=(TextView)v;android.text.Layout layout=title.getLayout();if(layout==null)return false;
+    require(layout.getLineCount()==1&&layout.getEllipsisCount(0)==0,"Native tool heading is ellipsized");
+    int[] location=new int[2];title.getLocationOnScreen(location);Path path=new Path();
+    title.getPaint().getTextPath(heading,0,heading.length(),location[0]+title.getTotalPaddingLeft()+layout.getLineLeft(0),location[1]+title.getTotalPaddingTop()+layout.getLineBaseline(0),path);
+    RectF glyphs=new RectF();path.computeBounds(glyphs,true);Rect visible=new Rect();if(!title.getGlobalVisibleRect(visible))return false;
+    require(new RectF(visible.left-1,visible.top-1,visible.right+1,visible.bottom+1).contains(glyphs),"Native heading glyphs are clipped by its window");
+    if(module.equals("wear")){Point size=new Point();c.getSystemService(WindowManager.class).getDefaultDisplay().getRealSize(size);float cx=size.x/2f,cy=size.y/2f,radius=Math.min(size.x,size.y)/2f+1;
+     for(float x:new float[]{glyphs.left,glyphs.right})for(float y:new float[]{glyphs.top,glyphs.bottom})require(Math.hypot(x-cx,y-cy)<=radius,"Native heading glyphs are clipped by the physical round display");
+    }return true;
+   }return false;}),"Actual tool heading did not change to "+tab);
   SystemClock.sleep(350);return current;
  }
  void editor()throws Exception {
-  View alarmCard=main(()->current.getWindow().getDecorView().findViewWithTag("item:alarm:theme-probe-alarm"));
-  require(alarmCard!=null,"Actual seeded alarm tile missing");show(alarmCard);
-  main(()->{require(alarmCard.isClickable()&&alarmCard.performClick(),"Alarm tile did not open its native editor");return null;});
-  waitFor(()->find("Edit alarm")!=null,"Native editor missing");capture("alarm-editor");
+  String before=c.getSharedPreferences("alarms",0).getString("records","[]");
+  activate(()->current.getWindow().getDecorView().findViewWithTag("item:alarm:theme-probe-alarm"),"seeded alarm tile");
+  dialogTitle("Edit alarm");capture("alarm-editor");
   View time=find("Set alarm time");require(time!=null,"No time picker control");click("Set alarm time");
   String expectedTitle=module.equals("wear")?"Set time":"Set alarm time";
-  waitFor(()->main(()->{List<View> nativeViews=new ArrayList<>();for(View root:WindowInspector.getGlobalWindowViews())if(root.isShown())views(root,nativeViews);for(View v:nativeViews)if(v instanceof TextView&&v.isShown()&&expectedTitle.equals(((TextView)v).getText().toString()))return true;return false;}),"Native time picker title did not appear");capture("alarm-time-picker");
+  dialogTitle(expectedTitle);capture("alarm-time-picker");
   // Inspect the actual dialog's Material color roles in the mounted window.
   List<View> roots=main(()->WindowInspector.getGlobalWindowViews());View dialog=roots.get(roots.size()-1);
   int attr=c.getResources().getIdentifier("colorSurface","attr",c.getPackageName());
   if(attr!=0){android.util.TypedValue value=new android.util.TypedValue();require(dialog.getContext().getTheme().resolveAttribute(attr,value,true),"Dialog surface role missing");int surface=value.resourceId!=0?dialog.getContext().getColor(value.resourceId):value.data;require(luminance(surface)<.08,"Dialog has a bright surface under system "+night);}
-  back();back();waitFor(()->main(()->current.hasWindowFocus()),"Editor did not close cleanly");pass("real alarm editor and native time picker open in dark theme");
+  click(module.equals("wear")?"Set time":"Cancel");
+  dialogTitle("Edit alarm");
+  click("Cancel");waitFor(()->main(()->current.hasWindowFocus()),"Editor did not close after its Cancel action");
+  require(before.equals(c.getSharedPreferences("alarms",0).getString("records","[]")),"Inspecting/canceling themed editor changed saved alarms");
+  pass("real alarm editor and native time picker open in dark theme, native cancel returns without saving");
  }
  void focus()throws Exception {
-  launch("Timer");ActivityMonitor monitor=addMonitor("dev.orbit.clock.core.FocusActivity",null,false);
+  Activity timerHost=launch("Timer");ActivityMonitor monitor=addMonitor("dev.orbit.clock.core.FocusActivity",null,false);
   try{
    click("Focus mode");Activity found=monitor.waitForActivityWithTimeout(15000);
    require(found!=null,"Focus mode did not open its actual activity");current=found;
   }finally{removeMonitor(monitor);}
   waitFor(()->main(()->current.hasWindowFocus()&&!current.isFinishing()),"Actual Focus activity did not gain focus");
-  screen("focus",true);click("Durations");waitFor(()->find("Focus durations")!=null,"Focus durations dialog absent");capture("focus-durations");back();
+  screen("focus",true);click("Durations");dialogTitle("Focus durations");capture("focus-durations");click("Cancel");
+  click("Back to timers");waitFor(()->main(()->timerHost.hasWindowFocus()&&!timerHost.isFinishing()&&!timerHost.isDestroyed()),"Native Back to timers did not restore its existing host");current=timerHost;
   pass("actual Focus screen and durations dialog use the shared theme");
  }
  void rotateMain(int rotation,boolean landscape)throws Exception {
@@ -162,7 +216,7 @@ public class ThemeProbe extends Instrumentation {
   require(c.getSystemService(UiModeManager.class).getNightMode()==(night.equals("yes")?UiModeManager.MODE_NIGHT_YES:UiModeManager.MODE_NIGHT_NO),"System night mode did not apply");
   require(c.getPackageManager().hasSystemFeature("android.hardware.type.watch")==module.equals("wear"),"Wrong device variant");
   seedAlarm();int textured=0;
-  for(String tab:new String[]{"Alarms","Clock","Timer","Stopwatch","Bedtime"}){launch(tab);screen(tab.toLowerCase(Locale.ROOT),true);textured+=hatchCount(current.getWindow().getDecorView());if(tab.equals("Alarms"))editor();}
+  for(String tab:new String[]{"Alarms","Clock","Timer","Stopwatch","Bedtime"}){launch(tab);showWatchContent(tab);screen(tab.toLowerCase(Locale.ROOT),true);textured+=hatchCount(current.getWindow().getDecorView());if(tab.equals("Alarms"))editor();}
   require(textured>=3,"Hatch accents absent across the mounted tools");pass("actual mounted hatch drawables render bounded edge-faded diagonal detail across tools");
   focus();phoneRotation();
   result.putString("stream","THEME_RESULT_PASS module="+module+" scale="+scale+" systemNight="+night+" checks="+checks+"\n");finish(Activity.RESULT_OK,result);

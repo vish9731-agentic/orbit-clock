@@ -174,9 +174,19 @@ open class ClockActivity : AppCompatActivity() {
             isAppearanceLightStatusBars = false
             isAppearanceLightNavigationBars = false
         }
-        val header = row().apply { setPadding(dp(if (watch) 26 else 24), dp(if (watch) 16 else 22), dp(if (watch) 26 else 16), dp(20)) }
+        // Keep the entire first text row inside a round screen's chord at its top edge.
+        val watchHeaderInset = if (watch) {
+            val radius = resources.configuration.screenWidthDp / 2f
+            val safeWidth = 2f * kotlin.math.sqrt((2f * radius * 24f - 24f * 24f).coerceAtLeast(1f))
+            kotlin.math.ceil((radius * 2f - safeWidth) / 2f).toInt().coerceAtLeast(32)
+        } else 0
+        val header = row().apply { setPadding(dp(if (watch) watchHeaderInset else 24), dp(if (watch) 24 else 22), dp(if (watch) watchHeaderInset else 16), dp(20)) }
         titleView = text(currentTitle(), if (watch) 23f else 36f).apply {
-            if (watch) { contentDescription = "Choose clock tool"; setOnClickListener { chooseWatchTool(this) } }
+            if (watch) {
+                gravity = Gravity.CENTER; maxLines = 1
+                setAutoSizeTextTypeUniformWithConfiguration(16, 23, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+                contentDescription = "Choose clock tool"; setOnClickListener { chooseWatchTool(this) }
+            }
         }
         header.addView(titleView, LinearLayout.LayoutParams(0, -2, 1f))
         if (!watch) {
