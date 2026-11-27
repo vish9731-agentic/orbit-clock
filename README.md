@@ -18,9 +18,11 @@ Repository: [vish9731-agentic/orbit-clock](https://github.com/vish9731-agentic/o
 
 Every alarm tile shows its own next local date/time and remaining duration. Snoozed alarms and temporary skips show the actual snooze/resume occurrence; disabled alarms show Off. The aggregate next-alarm banner remains. Status text refreshes with time, format, zone, Store and foreground changes.
 
-## Compact Material3 popup
+## Compact alarm popup
 
-A large clock leads, followed by the small duration readout, evenly spaced 48dp +/- targets, quieter Snooze/Stop actions and a full-width wrapping label. Long labels remain readable, and the layout adapts to portrait, landscape and enlarged text. +/- adjust only; Snooze is separate. Official Google Markdown snapshots and their applied design mapping are saved in [Material3 references](docs/references/material3/README.md).
+The approved black-and-amber card puts a large time above a charcoal duration capsule, with **64dp +/− touch zones** and Snooze/Stop beside it. Actions move below when available width or enlarged text needs more room. The full-width label wraps, and long content can scroll. +/− adjust only; Snooze remains separate.
+
+Tap the time, label, duration center or card padding to open the existing **full-screen alarm screen**, retaining the active alarm and selected duration. Buttons keep their own actions; disabled +/− and scrolling do not open it. Taps outside the card still reach the app underneath. Official Google Markdown references and the current project mapping are in [Material3 references](docs/references/material3/README.md).
 
 ## Persistent ringing controls and media restoration
 
