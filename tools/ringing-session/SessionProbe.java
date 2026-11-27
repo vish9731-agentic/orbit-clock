@@ -143,9 +143,13 @@ public class SessionProbe extends Instrumentation {
   int controlsBottom=Math.max(duration.bottom,Math.max(minus.bottom,plus.bottom));
   boolean twoColumns=snooze.left>=plus.right+6*density&&stop.left>=plus.right+6*density;
   boolean bottomActions=snooze.top>=controlsBottom+6*density&&stop.top>=controlsBottom+6*density;
-  require(Math.min(Math.min(minus.top,plus.top),snooze.top)>=time.bottom-2&&label.top>=Math.max(controlsBottom,Math.max(snooze.bottom,stop.bottom))-2,"Popup must place clock above controls/actions and full label below");
+  require(Math.min(minus.top,plus.top)>=time.bottom+6*density&&label.top>=Math.max(controlsBottom,Math.max(snooze.bottom,stop.bottom))-2,"Popup must place the capsule below its clock and the full label below both columns");
   require(twoColumns||bottomActions,"Actions neither form the approved right column nor an unclipped narrow fallback");
-  if(twoColumns)require(stop.top>=snooze.bottom+6*density&&Math.abs(snooze.left-stop.left)<=2*density,"Right action column spacing/alignment is incorrect");
+  if(twoColumns){
+   require(stop.top>=snooze.bottom+6*density&&Math.abs(snooze.left-stop.left)<=2*density,"Right action column spacing/alignment is incorrect");
+   require(Math.abs(snooze.top-time.top)<=2*density&&Math.abs(snooze.bottom-time.bottom)<=2*density&&time.right+6*density<=snooze.left,"Snooze must align beside the clock in the approved first row");
+   require(Math.abs(stop.top-minus.top)<=2*density&&Math.abs(stop.bottom-controlsBottom)<=2*density,"Stop must align beside the64dp capsule in the approved second row");
+  }
   else require(Math.abs(snooze.top-stop.top)<=2*density&&stop.left>=snooze.right+6*density,"Narrow action row spacing/alignment is incorrect");
   Bitmap display=getUiAutomation().takeScreenshot();require(display!=null,"No native display for popup fit/typography");
   try{
