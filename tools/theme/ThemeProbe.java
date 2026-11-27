@@ -17,7 +17,7 @@ import org.json.*;
 
 /** Native mounted-screen verification, signed separately. Never ships in Orbit. */
 public class ThemeProbe extends Instrumentation {
- Context c; Activity current; String module,night,scale; File evidence; int checks;
+ Context c; Activity current,latestObserved; String module,night,scale; File evidence; int checks;
  interface Check { boolean ok() throws Exception; }
  <T>T main(Callable<T> action)throws Exception {
   FutureTask<T> f=new FutureTask<>(action);
@@ -25,10 +25,31 @@ public class ThemeProbe extends Instrumentation {
   return f.get(15,TimeUnit.SECONDS);
  }
  void require(boolean value,String message){if(!value)throw new AssertionError(message);}
- void waitFor(Check action,String message)throws Exception {
-  long deadline=SystemClock.uptimeMillis()+15000;
+ void waitFor(Check action,String message)throws Exception{waitFor(action,15000,message);}
+ void waitFor(Check action,long limit,String message)throws Exception {
+  long deadline=SystemClock.uptimeMillis()+limit;
   while(SystemClock.uptimeMillis()<deadline){if(action.ok())return;SystemClock.sleep(100);}
   throw new AssertionError(message);
+ }
+ String shell(String command)throws Exception {
+  try(ParcelFileDescriptor fd=getUiAutomation().executeShellCommand(command);InputStream in=new ParcelFileDescriptor.AutoCloseInputStream(fd);ByteArrayOutputStream out=new ByteArrayOutputStream()){
+   byte[] buffer=new byte[8192];int read;while((read=in.read(buffer))!=-1)out.write(buffer,0,read);return out.toString("UTF-8");
+  }
+ }
+ String activityIdentity(Activity activity){
+  if(activity==null)return "null";View decor=activity.getWindow().getDecorView();
+  return activity.getClass().getName()+"@"+Integer.toHexString(System.identityHashCode(activity))+" finishing="+activity.isFinishing()+" destroyed="+activity.isDestroyed()+" activityWindowFocus="+activity.hasWindowFocus()+" decorWindowFocus="+decor.hasWindowFocus()+" decor="+decor.getClass().getName()+"@"+Integer.toHexString(System.identityHashCode(decor))+" token="+decor.getWindowToken();
+ }
+ void failureDiagnostics(Throwable error){
+  StringBuilder out=new StringBuilder("Failure ").append(android.util.Log.getStackTraceString(error)).append("\nUTC-ms ").append(System.currentTimeMillis()).append("\n");
+  try{out.append(main(()->{StringBuilder nativeState=new StringBuilder();nativeState.append("CURRENT ").append(activityIdentity(current)).append("\nLATEST_MONITORED ").append(activityIdentity(latestObserved)).append('\n');
+   for(View root:WindowInspector.getGlobalWindowViews()){
+    nativeState.append("ROOT ").append(root.getClass().getName()).append('@').append(Integer.toHexString(System.identityHashCode(root))).append(" context=").append(root.getContext().getClass().getName()).append(" shown=").append(root.isShown()).append(" attached=").append(root.isAttachedToWindow()).append(" windowFocus=").append(root.hasWindowFocus()).append(" viewFocus=").append(root.hasFocus()).append(" alpha=").append(root.getAlpha()).append(" token=").append(root.getWindowToken());
+    ViewGroup.LayoutParams params=root.getLayoutParams();if(params instanceof WindowManager.LayoutParams){WindowManager.LayoutParams window=(WindowManager.LayoutParams)params;nativeState.append(" title=").append(window.getTitle()).append(" type=").append(window.type).append(" flags=0x").append(Integer.toHexString(window.flags));}nativeState.append('\n');
+   }return nativeState.toString();}));}catch(Throwable issue){out.append("NATIVE_STATE_ERROR ").append(issue).append('\n');}
+  for(String command:new String[]{"dumpsys window windows","dumpsys activity activities","dumpsys power","dumpsys battery"})try{out.append("\nCOMMAND ").append(command).append('\n').append(shell(command));}catch(Throwable issue){out.append("DUMP_ERROR ").append(issue).append('\n');}
+  try(FileOutputStream file=new FileOutputStream(new File(evidence,"failure-diagnostics.txt"))){file.write(out.toString().getBytes("UTF-8"));}catch(Throwable ignored){}
+  try{Bitmap display=getUiAutomation().takeScreenshot();if(display!=null){try(FileOutputStream file=new FileOutputStream(new File(evidence,"failure-raw.png"))){display.compress(Bitmap.CompressFormat.PNG,100,file);}finally{display.recycle();}}}catch(Throwable ignored){}
  }
  void pass(String message){checks++;Bundle b=new Bundle();b.putString("stream","PASS "+message+"\n");sendStatus(0,b);}
  void views(View root,List<View> out){out.add(root);if(root instanceof ViewGroup)for(int i=0;i<((ViewGroup)root).getChildCount();i++)views(((ViewGroup)root).getChildAt(i),out);}
@@ -147,14 +168,16 @@ public class ThemeProbe extends Instrumentation {
   String cls=module.equals("wear")?"dev.orbit.clock.wear.MainActivity":"dev.orbit.clock.phone.MainActivity";
   ActivityMonitor monitor=addMonitor(cls,null,false);
   try{
+   if(module.equals("wear"))shell("input keyevent KEYCODE_WAKEUP");
+   latestObserved=null;
    current=startActivitySync(new Intent().setClassName(c.getPackageName(),cls).putExtra("orbit_tab",tab).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
    final Activity[] focused={null};final long[] focusedSince={0};
-   waitFor(()->main(()->{Activity latest=monitor.getLastActivity();if(latest!=null&&!latest.isFinishing()&&!latest.isDestroyed())current=latest;
+   waitFor(()->main(()->{Activity latest=monitor.getLastActivity();if(latest!=null)latestObserved=latest;if(latest!=null&&!latest.isFinishing()&&!latest.isDestroyed())current=latest;
     if(!current.hasWindowFocus()||current.isFinishing()||current.isDestroyed()){focused[0]=null;focusedSince[0]=0;return false;}
     if(focused[0]!=current){focused[0]=current;focusedSince[0]=SystemClock.uptimeMillis();return false;}
     return SystemClock.uptimeMillis()-focusedSince[0]>=300;
-   }),"Latest native tool Activity failed to gain stable focus: "+tab);
-  waitFor(()->main(()->{Activity latest=monitor.getLastActivity();if(latest!=null&&!latest.isFinishing()&&!latest.isDestroyed())current=latest;if(!current.hasWindowFocus())return false;List<View> mounted=new ArrayList<>();views(current.getWindow().getDecorView(),mounted);String heading=tab+(module.equals("wear")?"  ▾":"");
+   }),module.equals("wear")?45000:15000,"Latest native tool Activity failed to gain stable focus: "+tab);
+  waitFor(()->main(()->{Activity latest=monitor.getLastActivity();if(latest!=null)latestObserved=latest;if(latest!=null&&!latest.isFinishing()&&!latest.isDestroyed())current=latest;if(!current.hasWindowFocus())return false;List<View> mounted=new ArrayList<>();views(current.getWindow().getDecorView(),mounted);String heading=tab+(module.equals("wear")?"  ▾":"");
    for(View v:mounted)if(v instanceof TextView&&v.isShown()&&heading.equals(((TextView)v).getText().toString())&&((TextView)v).getTextSize()/current.getResources().getDisplayMetrics().scaledDensity>=(module.equals("wear")?16:22)){
     TextView title=(TextView)v;android.text.Layout layout=title.getLayout();if(layout==null)return false;
     require(layout.getLineCount()==1&&layout.getEllipsisCount(0)==0,"Native tool heading is ellipsized");
@@ -169,13 +192,23 @@ public class ThemeProbe extends Instrumentation {
    SystemClock.sleep(350);return current;
   }finally{removeMonitor(monitor);}
  }
+ void expandFocusedSheet()throws Exception {
+  main(()->{int id=c.getResources().getIdentifier("design_bottom_sheet","id",c.getPackageName());require(id!=0,"Material bottom-sheet resource absent");View sheet=null;
+   for(View root:WindowInspector.getGlobalWindowViews())if(root.isShown()&&root.hasWindowFocus()){View candidate=root.findViewById(id);if(candidate!=null)sheet=candidate;}
+   require(sheet!=null,"No focused native Material bottom sheet");android.view.accessibility.AccessibilityNodeInfo node=sheet.createAccessibilityNodeInfo();boolean expands=false,collapses=false;
+   try{for(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction action:node.getActionList()){if(action.getId()==android.view.accessibility.AccessibilityNodeInfo.ACTION_EXPAND)expands=true;if(action.getId()==android.view.accessibility.AccessibilityNodeInfo.ACTION_COLLAPSE)collapses=true;}}finally{node.recycle();}
+   if(expands)require(sheet.performAccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_EXPAND,null),"Native bottom sheet rejected its supported Expand action");
+   else require(collapses,"Native bottom sheet exposes neither Expand nor an expanded Collapse action");
+   return null;
+  });SystemClock.sleep(450);
+ }
  void editor()throws Exception {
   String before=c.getSharedPreferences("alarms",0).getString("records","[]");
   activate(()->current.getWindow().getDecorView().findViewWithTag("item:alarm:theme-probe-alarm"),"seeded alarm tile");
   dialogTitle("Edit alarm");capture("alarm-editor");
   View time=find("Set alarm time");require(time!=null,"No time picker control");click("Set alarm time");
   String expectedTitle=module.equals("wear")?"Set time":"Set alarm time";
-  dialogTitle(expectedTitle);capture("alarm-time-picker");
+  dialogTitle(expectedTitle);if(module.equals("wear"))expandFocusedSheet();capture("alarm-time-picker");
   // Inspect the actual dialog's Material color roles in the mounted window.
   List<View> roots=main(()->WindowInspector.getGlobalWindowViews());View dialog=roots.get(roots.size()-1);
   int attr=c.getResources().getIdentifier("colorSurface","attr",c.getPackageName());
@@ -224,10 +257,10 @@ public class ThemeProbe extends Instrumentation {
   require(c.getSystemService(UiModeManager.class).getNightMode()==(night.equals("yes")?UiModeManager.MODE_NIGHT_YES:UiModeManager.MODE_NIGHT_NO),"System night mode did not apply");
   require(c.getPackageManager().hasSystemFeature("android.hardware.type.watch")==module.equals("wear"),"Wrong device variant");
   seedAlarm();int textured=0;
-  for(String tab:new String[]{"Alarms","Clock","Timer","Stopwatch","Bedtime"}){launch(tab);showWatchContent(tab);screen(tab.toLowerCase(Locale.ROOT),true);textured+=hatchCount(current.getWindow().getDecorView());if(tab.equals("Alarms"))editor();}
+  for(String tab:new String[]{"Alarms","Clock","Timer","Stopwatch","Bedtime"}){launch(tab);showWatchContent(tab);screen(tab.toLowerCase(Locale.ROOT),true);textured+=hatchCount(current.getWindow().getDecorView());}
   require(textured>=3,"Hatch accents absent across the mounted tools");pass("actual mounted hatch drawables render bounded edge-faded diagonal detail across tools");
-  focus();phoneRotation();
+  focus();launch("Alarms");editor();phoneRotation();
   result.putString("stream","THEME_RESULT_PASS module="+module+" scale="+scale+" systemNight="+night+" checks="+checks+"\n");finish(Activity.RESULT_OK,result);
- }catch(Throwable error){try{capture("failure");}catch(Throwable ignored){}result.putString("stream","THEME_FAILURE module="+module+": "+android.util.Log.getStackTraceString(error));finish(Activity.RESULT_CANCELED,result);}
+ }catch(Throwable error){failureDiagnostics(error);try{capture("failure");}catch(Throwable ignored){}result.putString("stream","THEME_FAILURE module="+module+": "+android.util.Log.getStackTraceString(error));finish(Activity.RESULT_CANCELED,result);}
  finally{try{getUiAutomation().setRotation(UiAutomation.ROTATION_UNFREEZE);}catch(Throwable ignored){}}}
 }
